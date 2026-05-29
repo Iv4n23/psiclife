@@ -23,8 +23,8 @@ export function Confirm({ titulo, descripcion, onConfirm, onCancel, cargando }) 
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onCancel()}>
       <div className="modal">
-        <div className="modal-icon" style={{ background: '#fef2f2' }}>
-          <AlertTriangle size={20} color="#ef4444" />
+        <div className="modal-icon modal-icon-danger">
+          <AlertTriangle size={20} />
         </div>
         <div className="modal-title">{titulo}</div>
         <div className="modal-desc">{descripcion}</div>
@@ -59,15 +59,8 @@ export function EmptyState({ titulo = 'Sin registros', descripcion = 'No hay dat
 // src/components/ui/Spinner.jsx
 export function Spinner() {
   return (
-    <div style={{ display:'flex', justifyContent:'center', padding: 40 }}>
-      <div style={{
-        width: 28, height: 28,
-        border: '2.5px solid #e2e8f0',
-        borderTopColor: '#3b9ede',
-        borderRadius: '50%',
-        animation: 'spin 0.7s linear infinite',
-      }} />
-      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+    <div className="spinner">
+      <div className="spinner-ring" />
     </div>
   )
 }

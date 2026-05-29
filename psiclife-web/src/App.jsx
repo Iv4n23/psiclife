@@ -11,7 +11,7 @@ import MiPerfil            from './pages/MiPerfil'
 import Usuarios            from './pages/Usuarios'
 import Roles               from './pages/Roles'
 import Categorias          from './pages/Categorias'
-import Productos           from './pages/Productos'
+import Servicios           from './pages/Servicios'
 import WebMedica           from './pages/WebMedica'
 import Pacientes           from './pages/Pacientes'
 import Psicologos          from './pages/Psicologos'
@@ -21,6 +21,7 @@ import Diagnosticos        from './pages/Diagnosticos'
 import Evaluaciones        from './pages/Evaluaciones'
 import Actividades         from './pages/Actividades'
 import Facturacion         from './pages/Facturacion'
+import Sesiones            from './pages/Sesiones'
 
 function PrivadaRoute({ children }) {
   const { usuario, cargando } = useAuth()
@@ -51,12 +52,13 @@ function AppRoutes() {
         <Route path="/usuarios"       element={<Usuarios />} />
         <Route path="/roles"          element={<Roles />} />
         <Route path="/categorias"     element={<Categorias />} />
-        <Route path="/productos"      element={<Productos />} />
+        <Route path="/servicios"      element={<Servicios />} />
         <Route path="/web-medica"     element={<WebMedica />} />
         <Route path="/pacientes"      element={<Pacientes />} />
         <Route path="/psicologos"     element={<Psicologos />} />
         <Route path="/disponibilidad" element={<Disponibilidad />} />
         <Route path="/citas"          element={<Citas />} />
+        <Route path="/sesiones"       element={<Sesiones />} />
         <Route path="/diagnosticos"   element={<Diagnosticos />} />
         <Route path="/evaluaciones"   element={<Evaluaciones />} />
         <Route path="/actividades"    element={<Actividades />} />

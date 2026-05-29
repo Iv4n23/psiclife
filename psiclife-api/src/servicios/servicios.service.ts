@@ -1,52 +1,52 @@
-// src/productos/productos.service.ts
+// src/servicios/servicios.service.ts
 import {
   Injectable, NotFoundException, BadRequestException,
 } from '@nestjs/common'
 import { PrismaService } from 'src/common/prisma/prisma.service'
-import { CrearProductoDto, ActualizarProductoDto, PresentacionDto } from './dto/productos.dto'
+import { CrearServicioDto, ActualizarServicioDto, PresentacionDto } from './dto/servicios.dto'
 import * as fs   from 'fs'
 import * as path from 'path'
 
 @Injectable()
-export class ProductosService {
+export class ServiciosService {
   constructor(private readonly prisma: PrismaService) {}
 
   async listar(categoriaId?: string) {
-    return this.prisma.productos.findMany({
+    return this.prisma.servicios.findMany({
       where: {
         ...(categoriaId ? { categoria_id: categoriaId } : {}),
       },
       include: {
         categoria:     { select: { id: true, nombre: true } },
-        productos_fotos: { orderBy: { orden: 'asc' } },
-        productos_presentaciones: { orderBy: { orden: 'asc' } },
+        servicios_fotos: { orderBy: { orden: 'asc' } },
+        servicios_presentaciones: { orderBy: { orden: 'asc' } },
       },
       orderBy: { creado_en: 'desc' },
     })
   }
 
   async buscarPorId(id: string) {
-    const p = await this.prisma.productos.findUnique({
+    const p = await this.prisma.servicios.findUnique({
       where: { id },
       include: {
         categoria:      { select: { id: true, nombre: true } },
-        productos_fotos:  { orderBy: { orden: 'asc' } },
-        productos_presentaciones: { orderBy: { orden: 'asc' } },
+        servicios_fotos:  { orderBy: { orden: 'asc' } },
+        servicios_presentaciones: { orderBy: { orden: 'asc' } },
       },
     })
-    if (!p) throw new NotFoundException(`Producto ${id} no encontrado`)
+    if (!p) throw new NotFoundException(`Servicio ${id} no encontrado`)
     return p
   }
 
-  async crear(dto: CrearProductoDto) {
+  async crear(dto: CrearServicioDto) {
     await this.verificarCategoria(dto.categoria_id)
-    return this.prisma.productos.create({
+    return this.prisma.servicios.create({
       data: {
         nombre:       dto.nombre,
         descripcion:  dto.descripcion,
         precio:       dto.precio,
         categoria_id: dto.categoria_id,
-        productos_presentaciones: {
+        servicios_presentaciones: {
           create: (dto.presentaciones ?? []).map((p, i) => ({
             titulo:    p.titulo,
             contenido: p.contenido,
@@ -56,16 +56,16 @@ export class ProductosService {
       },
       include: {
         categoria:      { select: { id: true, nombre: true } },
-        productos_presentaciones: { orderBy: { orden: 'asc' } },
+        servicios_presentaciones: { orderBy: { orden: 'asc' } },
       },
     })
   }
 
-  async actualizar(id: string, dto: ActualizarProductoDto) {
+  async actualizar(id: string, dto: ActualizarServicioDto) {
     await this.buscarPorId(id)
     if (dto.categoria_id) await this.verificarCategoria(dto.categoria_id)
 
-    return this.prisma.productos.update({
+    return this.prisma.servicios.update({
       where: { id },
       data: {
         nombre:       dto.nombre,
@@ -75,26 +75,26 @@ export class ProductosService {
       },
       include: {
         categoria:      { select: { id: true, nombre: true } },
-        productos_fotos:  { orderBy: { orden: 'asc' } },
-        productos_presentaciones: { orderBy: { orden: 'asc' } },
+        servicios_fotos:  { orderBy: { orden: 'asc' } },
+        servicios_presentaciones: { orderBy: { orden: 'asc' } },
       },
     })
   }
 
   async eliminar(id: string) {
-    const producto = await this.buscarPorId(id)
+    const servicio = await this.buscarPorId(id)
     // Eliminar archivos físicos
-    this.borrarArchivo(producto.foto_principal)
-    for (const f of producto.productos_fotos) this.borrarArchivo(f.url)
+    this.borrarArchivo(servicio.foto_principal)
+    for (const f of servicio.servicios_fotos) this.borrarArchivo(f.url)
 
-    await this.prisma.productos.delete({ where: { id } })
-    return { mensaje: 'Producto eliminado correctamente' }
+    await this.prisma.servicios.delete({ where: { id } })
+    return { mensaje: 'Servicio eliminado correctamente' }
   }
 
   async subirFotoPrincipal(id: string, rutaPublica: string) {
-    const producto = await this.buscarPorId(id)
-    this.borrarArchivo(producto.foto_principal)
-    return this.prisma.productos.update({
+    const servicio = await this.buscarPorId(id)
+    this.borrarArchivo(servicio.foto_principal)
+    return this.prisma.servicios.update({
       where: { id },
       data:  { foto_principal: rutaPublica },
       select: { id: true, foto_principal: true },
@@ -103,34 +103,34 @@ export class ProductosService {
 
   async subirFotoSecundaria(id: string, rutaPublica: string, orden: number) {
     await this.buscarPorId(id)
-    return this.prisma.productos_fotos.create({
-      data: { producto_id: id, url: rutaPublica, orden },
+    return this.prisma.servicios_fotos.create({
+      data: { servicio_id: id, url: rutaPublica, orden },
     })
   }
 
-  async eliminarFoto(productoId: string, fotoId: string) {
-    const foto = await this.prisma.productos_fotos.findFirst({
-      where: { id: fotoId, producto_id: productoId },
+  async eliminarFoto(servicioId: string, fotoId: string) {
+    const foto = await this.prisma.servicios_fotos.findFirst({
+      where: { id: fotoId, servicio_id: servicioId },
     })
     if (!foto) throw new NotFoundException('Foto no encontrada')
     this.borrarArchivo(foto.url)
-    await this.prisma.productos_fotos.delete({ where: { id: fotoId } })
+    await this.prisma.servicios_fotos.delete({ where: { id: fotoId } })
     return { mensaje: 'Foto eliminada correctamente' }
   }
 
   async agregarPresentacion(id: string, dto: PresentacionDto) {
     await this.buscarPorId(id)
-    return this.prisma.productos_presentaciones.create({
-      data: { producto_id: id, titulo: dto.titulo, contenido: dto.contenido, orden: dto.orden ?? 0 },
+    return this.prisma.servicios_presentaciones.create({
+      data: { servicio_id: id, titulo: dto.titulo, contenido: dto.contenido, orden: dto.orden ?? 0 },
     })
   }
 
-  async eliminarPresentacion(productoId: string, presId: string) {
-    const pres = await this.prisma.productos_presentaciones.findFirst({
-      where: { id: presId, producto_id: productoId },
+  async eliminarPresentacion(servicioId: string, presId: string) {
+    const pres = await this.prisma.servicios_presentaciones.findFirst({
+      where: { id: presId, servicio_id: servicioId },
     })
     if (!pres) throw new NotFoundException('Presentación no encontrada')
-    await this.prisma.productos_presentaciones.delete({ where: { id: presId } })
+    await this.prisma.servicios_presentaciones.delete({ where: { id: presId } })
     return { mensaje: 'Presentación eliminada correctamente' }
   }
 

@@ -6,10 +6,10 @@ export class DashboardService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getStats() {
-    const [usuarios, roles, productos, categorias, citasHoy, pacientes] = await Promise.all([
+    const [usuarios, roles, servicios, categorias, citasHoy, pacientes] = await Promise.all([
       this.prisma.usuarios.count({ where: { esta_activo: true } }),
       this.prisma.roles.count({ where: { esta_activo: true } }),
-      this.prisma.productos.count({ where: { esta_activo: true } }),
+      this.prisma.servicios.count({ where: { esta_activo: true } }),
       this.prisma.categorias.count({ where: { esta_activa: true } }),
       this.prisma.citas.count({
         where: {
@@ -25,7 +25,7 @@ export class DashboardService {
     return {
       usuarios,
       roles,
-      productos,
+      servicios,
       categorias,
       citasHoy,
       pacientes,

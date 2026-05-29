@@ -1,6 +1,6 @@
-// src/pages/Productos.jsx
+// src/pages/Servicios.jsx
 import { useState, useEffect, useRef } from 'react'
-import { productosApi, categoriasApi } from '../services/api'
+import { serviciosApi, categoriasApi } from '../services/api'
 import { Confirm, EmptyState, Spinner } from '../components/ui/index.jsx'
 import toast from 'react-hot-toast'
 import { Plus, Pencil, Trash2, ArrowLeft, ImagePlus, X, GripVertical } from 'lucide-react'
@@ -10,9 +10,9 @@ import { cleanPayload } from '../utils/payload'
 
 const FORM_VACIO = { nombre: '', descripcion: '', precio: '', categoria_id: '' }
 
-export default function Productos() {
+export default function Servicios() {
   const [vista,        setVista]        = useState('lista')
-  const [productos,    setProductos]    = useState([])
+  const [servicios,    setServicios]    = useState([])
   const [categorias,   setCategorias]   = useState([])
   const [cargando,     setCargando]     = useState(true)
   const [guardando,    setGuardando]    = useState(false)
@@ -32,8 +32,8 @@ export default function Productos() {
   const cargar = async () => {
     setCargando(true)
     try {
-      const [p, c] = await Promise.all([productosApi.listar(), categoriasApi.listar()])
-      setProductos(p.data.datos)
+      const [p, c] = await Promise.all([serviciosApi.listar(), categoriasApi.listar()])
+      setServicios(p.data.datos)
       setCategorias(c.data.datos.filter(c => c.esta_activa))
     } catch {} finally { setCargando(false) }
   }
@@ -50,8 +50,8 @@ export default function Productos() {
     setForm({ nombre: p.nombre, descripcion: p.descripcion ?? '', precio: p.precio, categoria_id: p.categoria_id })
     setFotoPrincipal(null)
     setFotoPrevPpal(p.foto_principal ?? null)
-    setFotosSecundarias((p.productos_fotos ?? []).map(f => ({ id: f.id, preview: f.url, file: null })))
-    setPresentaciones((p.productos_presentaciones ?? []).map(pr => ({ id: pr.id, titulo: pr.titulo, contenido: pr.contenido })))
+    setFotosSecundarias((p.servicios_fotos ?? []).map(f => ({ id: f.id, preview: f.url, file: null })))
+    setPresentaciones((p.servicios_presentaciones ?? []).map(pr => ({ id: pr.id, titulo: pr.titulo, contenido: pr.contenido })))
     setErrores({})
     setVista('editar')
   }
@@ -84,31 +84,31 @@ export default function Productos() {
           .map((p, i) => ({ titulo: p.titulo, contenido: p.contenido, orden: i }))
       })
 
-      let productoId = editando?.id
+      let servicioId = editando?.id
       if (vista === 'nuevo') {
-        const { data } = await productosApi.crear(payload)
-        productoId = data.datos.id
-        toast.success('Producto creado')
+        const { data } = await serviciosApi.crear(payload)
+        servicioId = data.datos.id
+        toast.success('Servicio creado')
       } else {
-        await productosApi.actualizar(productoId, cleanPayload({
+        await serviciosApi.actualizar(servicioId, cleanPayload({
           nombre:       form.nombre,
           descripcion:  form.descripcion,
           precio:       Number(form.precio),
           categoria_id: form.categoria_id,
         }))
-        toast.success('Producto actualizado')
+        toast.success('Servicio actualizado')
       }
 
       // Subir foto principal si se seleccionó
       if (fotoPrincipal) {
         const fd = new FormData(); fd.append('archivo', fotoPrincipal)
-        await productosApi.subirFotoPrincipal(productoId, fd)
+        await serviciosApi.subirFotoPrincipal(servicioId, fd)
       }
 
       // Subir fotos secundarias nuevas
       for (const f of fotosSecundarias.filter(f => f.file)) {
         const fd = new FormData(); fd.append('archivo', f.file)
-        await productosApi.subirFotoSecundaria(productoId, fd)
+        await serviciosApi.subirFotoSecundaria(servicioId, fd)
       }
 
       await cargar(); irALista()
@@ -117,7 +117,7 @@ export default function Productos() {
 
   const eliminar = async () => {
     setGuardando(true)
-    try { await productosApi.eliminar(confirmar.id); toast.success('Producto eliminado'); setConfirmar(null); await cargar() }
+    try { await serviciosApi.eliminar(confirmar.id); toast.success('Servicio eliminado'); setConfirmar(null); await cargar() }
     catch {} finally { setGuardando(false) }
   }
 
@@ -152,8 +152,8 @@ export default function Productos() {
       <div className="page-enter">
         <div className="section-header">
           <div>
-            <button className="btn btn-ghost btn-sm" onClick={irALista} style={{ marginBottom: 8 }}><ArrowLeft size={14} /> Volver a productos</button>
-            <div className="section-title">{esNuevo ? 'Nuevo producto' : 'Editar producto'}</div>
+            <button className="btn btn-ghost btn-sm" onClick={irALista} style={{ marginBottom: 8 }}><ArrowLeft size={14} /> Volver a servicios</button>
+            <div className="section-title">{esNuevo ? 'Nuevo servicio' : 'Editar servicio'}</div>
           </div>
         </div>
 
@@ -165,7 +165,7 @@ export default function Productos() {
               <div className="form-grid form-grid-2" style={{ gap: 18 }}>
                 <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                   <label className="form-label">Nombre <span className="required">*</span></label>
-                  <input className={`form-control ${errores.nombre ? 'error' : ''}`} value={form.nombre} onChange={set('nombre')} placeholder="Nombre del producto o servicio" />
+                  <input className={`form-control ${errores.nombre ? 'error' : ''}`} value={form.nombre} onChange={set('nombre')} placeholder="Nombre del servicio o servicio" />
                   {errores.nombre && <span className="form-error">{errores.nombre}</span>}
                 </div>
                 <div className="form-group">
@@ -275,7 +275,7 @@ export default function Productos() {
           <div className="form-footer">
             <button type="button" className="btn btn-ghost" onClick={irALista} disabled={guardando}>Cancelar</button>
             <button type="submit" className="btn btn-primary" disabled={guardando}>
-              {guardando ? 'Guardando...' : esNuevo ? 'Crear producto' : 'Guardar cambios'}
+              {guardando ? 'Guardando...' : esNuevo ? 'Crear servicio' : 'Guardar cambios'}
             </button>
           </div>
         </form>
@@ -287,16 +287,16 @@ export default function Productos() {
   return (
     <div className="page-enter">
       <div className="section-header">
-        <div><div className="section-title">Productos</div><div className="section-subtitle">{productos.length} producto(s)</div></div>
-        <button className="btn btn-primary" onClick={irANuevo}><Plus size={15} /> Nuevo producto</button>
+        <div><div className="section-title">Servicios</div><div className="section-subtitle">{servicios.length} servicio(s)</div></div>
+        <button className="btn btn-primary" onClick={irANuevo}><Plus size={15} /> Nuevo servicio</button>
       </div>
       <div className="card">
-        {cargando ? <Spinner /> : productos.length === 0 ? <EmptyState titulo="Sin productos" /> : (
+        {cargando ? <Spinner /> : servicios.length === 0 ? <EmptyState titulo="Sin servicios" /> : (
           <div className="table-wrap">
             <table>
               <thead><tr><th>Foto</th><th>Nombre</th><th>Categoría</th><th>Precio</th><th>Estado</th><th>Acciones</th></tr></thead>
               <tbody>
-                {productos.map(p => (
+                {servicios.map(p => (
                   <tr key={p.id}>
                     <td>
                       {p.foto_principal
@@ -321,7 +321,7 @@ export default function Productos() {
           </div>
         )}
       </div>
-      {confirmar && <Confirm titulo="¿Eliminar producto?" descripcion={`¿Eliminar "${confirmar.nombre}"? Se eliminarán también sus fotos y presentaciones.`} onConfirm={eliminar} onCancel={() => setConfirmar(null)} cargando={guardando} />}
+      {confirmar && <Confirm titulo="¿Eliminar servicio?" descripcion={`¿Eliminar "${confirmar.nombre}"? Se eliminarán también sus fotos y presentaciones.`} onConfirm={eliminar} onCancel={() => setConfirmar(null)} cargando={guardando} />}
     </div>
   )
 }

@@ -22,7 +22,7 @@ import { DiagnosticosModule }   from './diagnosticos/diagnosticos.module'
 import { EvaluacionesModule }   from './evaluaciones/evaluaciones.module'
 import { ActividadesModule }    from './actividades/actividades.module'
 import { CategoriasModule }     from './categorias/categorias.module'
-import { ProductosModule }      from './productos/productos.module'
+import { ServiciosModule }      from './servicios/servicios.module'
 import { FacturacionModule }    from './facturacion/facturacion.module'
 import { WebMedicaModule }      from './web-medica/web-medica.module'
 import { DashboardModule }      from './dashboard/dashboard.module'
@@ -63,7 +63,7 @@ import { ConfiguracionModule }  from './configuracion/configuracion.module'
     EvaluacionesModule,
     ActividadesModule,
     CategoriasModule,
-    ProductosModule,
+    ServiciosModule,
     FacturacionModule,
     WebMedicaModule,
     DashboardModule,

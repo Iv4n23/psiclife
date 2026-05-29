@@ -585,7 +585,7 @@ export default function WebMedica() {
                   setEspecialidadesList(s => ([...s, { 
                     nombre, 
                     descripcion, 
-                    imagen: espImageFile ? URL.createObjectURL(espImageFile) : '', 
+                    imagen: newEspLocalPreview || '',
                     file: espImageFile 
                   }]))
                   
@@ -622,7 +622,9 @@ export default function WebMedica() {
                       <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 10, background: isEditing ? 'var(--surface-2)' : 'transparent' }}>
                         <div style={{ position: 'relative', flexShrink: 0 }}>
                           <img
-                            src={esp.imagen ? getImageUrl(esp.imagen) : ''}
+                            src={esp.imagen
+                              ? (esp.imagen.startsWith('blob:') ? esp.imagen : getImageUrl(esp.imagen))
+                              : ''}
                             alt={esp.nombre}
                             style={{ width: 72, height: 56, objectFit: 'cover', borderRadius: 6, background: 'var(--surface-2)', display: 'block' }}
                             onError={e => { e.currentTarget.style.background = 'var(--surface-2)'; e.currentTarget.style.opacity = '0' }}

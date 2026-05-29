@@ -1,4 +1,4 @@
-// src/productos/productos.controller.ts
+// src/servicios/servicios.controller.ts
 import {
   Controller, Get, Post, Patch, Delete,
   Body, Param, Query, ParseUUIDPipe, UseGuards,
@@ -10,8 +10,8 @@ import { diskStorage }     from 'multer'
 import { extname }         from 'path'
 import { v4 as uuid }      from 'uuid'
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiParam, ApiConsumes, ApiQuery } from '@nestjs/swagger'
-import { ProductosService } from './productos.service'
-import { CrearProductoDto, ActualizarProductoDto, PresentacionDto } from './dto/productos.dto'
+import { ServiciosService } from './servicios.service'
+import { CrearServicioDto, ActualizarServicioDto, PresentacionDto } from './dto/servicios.dto'
 import { JwtAuthGuard }  from 'src/auth/guards/jwt-auth.guard'
 import { PermisosGuard } from 'src/auth/guards/permisos.guard'
 import { Permisos }      from 'src/common/decorators/permisos.decorator'
@@ -39,63 +39,63 @@ const validarImagen = new ParseFilePipe({
   ],
 })
 
-@ApiTags('Productos')
+@ApiTags('Servicios')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermisosGuard)
-@Controller('productos')
-export class ProductosController {
-  constructor(private readonly productosService: ProductosService) {}
+@Controller('servicios')
+export class ServiciosController {
+  constructor(private readonly serviciosService: ServiciosService) {}
 
   @Public()
   @Get()
-  @Permisos('productos.ver')
-  @ApiOperation({ summary: 'Listar productos' })
+  @Permisos('servicios.ver')
+  @ApiOperation({ summary: 'Listar servicios' })
   @ApiQuery({ name: 'categoriaId', required: false })
   async listar(@Query('categoriaId') categoriaId?: string) {
-    const datos = await this.productosService.listar(categoriaId)
-    return { mensaje: 'Productos obtenidos correctamente', datos }
+    const datos = await this.serviciosService.listar(categoriaId)
+    return { mensaje: 'Servicios obtenidos correctamente', datos }
   }
 
   @Get(':id')
-  @Permisos('productos.ver')
-  @ApiOperation({ summary: 'Obtener producto por ID' })
+  @Permisos('servicios.ver')
+  @ApiOperation({ summary: 'Obtener servicio por ID' })
   @ApiParam({ name: 'id', format: 'uuid' })
   async buscarPorId(@Param('id', ParseUUIDPipe) id: string) {
-    const datos = await this.productosService.buscarPorId(id)
-    return { mensaje: 'Producto obtenido correctamente', datos }
+    const datos = await this.serviciosService.buscarPorId(id)
+    return { mensaje: 'Servicio obtenido correctamente', datos }
   }
 
   @Post()
-  @Permisos('productos.crear')
-  @ApiOperation({ summary: 'Crear producto' })
-  async crear(@Body() dto: CrearProductoDto) {
-    const datos = await this.productosService.crear(dto)
-    return { mensaje: 'Producto creado correctamente', datos }
+  @Permisos('servicios.crear')
+  @ApiOperation({ summary: 'Crear servicio' })
+  async crear(@Body() dto: CrearServicioDto) {
+    const datos = await this.serviciosService.crear(dto)
+    return { mensaje: 'Servicio creado correctamente', datos }
   }
 
   @Patch(':id')
-  @Permisos('productos.editar')
-  @ApiOperation({ summary: 'Actualizar producto' })
+  @Permisos('servicios.editar')
+  @ApiOperation({ summary: 'Actualizar servicio' })
   @ApiParam({ name: 'id', format: 'uuid' })
   async actualizar(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: ActualizarProductoDto,
+    @Body() dto: ActualizarServicioDto,
   ) {
-    const datos = await this.productosService.actualizar(id, dto)
-    return { mensaje: 'Producto actualizado correctamente', datos }
+    const datos = await this.serviciosService.actualizar(id, dto)
+    return { mensaje: 'Servicio actualizado correctamente', datos }
   }
 
   @Delete(':id')
-  @Permisos('productos.eliminar')
+  @Permisos('servicios.eliminar')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Eliminar producto' })
+  @ApiOperation({ summary: 'Eliminar servicio' })
   @ApiParam({ name: 'id', format: 'uuid' })
   async eliminar(@Param('id', ParseUUIDPipe) id: string) {
-    return this.productosService.eliminar(id)
+    return this.serviciosService.eliminar(id)
   }
 
   @Post(':id/foto-principal')
-  @Permisos('productos.editar')
+  @Permisos('servicios.editar')
   @ApiOperation({ summary: 'Subir foto principal' })
   @ApiConsumes('multipart/form-data')
   @ApiParam({ name: 'id', format: 'uuid' })
@@ -106,7 +106,7 @@ export class ProductosController {
   ) {
     if (!archivo) throw new BadRequestException('No se recibió archivo')
     const rutaPublica = `/uploads/${archivo.filename}`
-    const datos = await this.productosService.subirFotoPrincipal(id, rutaPublica)
+    const datos = await this.serviciosService.subirFotoPrincipal(id, rutaPublica)
     return { 
       mensaje: 'Foto principal actualizada', 
       datos,
@@ -120,7 +120,7 @@ export class ProductosController {
   }
 
   @Post(':id/fotos')
-  @Permisos('productos.editar')
+  @Permisos('servicios.editar')
   @ApiOperation({ summary: 'Agregar foto al slider' })
   @ApiConsumes('multipart/form-data')
   @ApiParam({ name: 'id', format: 'uuid' })
@@ -133,7 +133,7 @@ export class ProductosController {
   ) {
     if (!archivo) throw new BadRequestException('No se recibió archivo')
     const rutaPublica = `/uploads/${archivo.filename}`
-    const datos = await this.productosService.subirFotoSecundaria(id, rutaPublica, orden)
+    const datos = await this.serviciosService.subirFotoSecundaria(id, rutaPublica, orden)
     return { 
       mensaje: 'Foto añadida al slider', 
       datos,
@@ -147,7 +147,7 @@ export class ProductosController {
   }
 
   @Delete(':id/fotos/:fotoId')
-  @Permisos('productos.editar')
+  @Permisos('servicios.editar')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Eliminar foto del slider' })
   @ApiParam({ name: 'id',     format: 'uuid' })
@@ -156,23 +156,23 @@ export class ProductosController {
     @Param('id',     ParseUUIDPipe) id:     string,
     @Param('fotoId', ParseUUIDPipe) fotoId: string,
   ) {
-    return this.productosService.eliminarFoto(id, fotoId)
+    return this.serviciosService.eliminarFoto(id, fotoId)
   }
 
   @Post(':id/presentaciones')
-  @Permisos('productos.editar')
-  @ApiOperation({ summary: 'Agregar presentación al producto' })
+  @Permisos('servicios.editar')
+  @ApiOperation({ summary: 'Agregar presentación al servicio' })
   @ApiParam({ name: 'id', format: 'uuid' })
   async agregarPresentacion(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: PresentacionDto,
   ) {
-    const datos = await this.productosService.agregarPresentacion(id, dto)
+    const datos = await this.serviciosService.agregarPresentacion(id, dto)
     return { mensaje: 'Presentación agregada correctamente', datos }
   }
 
   @Delete(':id/presentaciones/:presId')
-  @Permisos('productos.editar')
+  @Permisos('servicios.editar')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Eliminar presentación' })
   @ApiParam({ name: 'id',     format: 'uuid' })
@@ -181,6 +181,6 @@ export class ProductosController {
     @Param('id',     ParseUUIDPipe) id:     string,
     @Param('presId', ParseUUIDPipe) presId: string,
   ) {
-    return this.productosService.eliminarPresentacion(id, presId)
+    return this.serviciosService.eliminarPresentacion(id, presId)
   }
 }

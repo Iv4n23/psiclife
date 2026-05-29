@@ -76,17 +76,17 @@ export const categoriasApi = {
   eliminar:  (id)    => api.delete(`/categorias/${id}`),
 }
 
-export const productosApi = {
-  listar:              ()          => api.get('/productos'),
-  obtener:             (id)        => api.get(`/productos/${id}`),
-  crear:               (data)      => api.post('/productos', data),
-  actualizar:          (id, d)     => api.patch(`/productos/${id}`, d),
-  eliminar:            (id)        => api.delete(`/productos/${id}`),
-  subirFotoPrincipal:  (id, form)  => api.post(`/productos/${id}/foto-principal`, form),
-  subirFotoSecundaria: (id, form)  => api.post(`/productos/${id}/fotos`, form),
-  eliminarFoto:        (id, fid)   => api.delete(`/productos/${id}/fotos/${fid}`),
-  agregarPresentacion: (id, data)  => api.post(`/productos/${id}/presentaciones`, data),
-  eliminarPresentacion:(id, pid)   => api.delete(`/productos/${id}/presentaciones/${pid}`),
+export const serviciosApi = {
+  listar:              ()          => api.get('/servicios'),
+  obtener:             (id)        => api.get(`/servicios/${id}`),
+  crear:               (data)      => api.post('/servicios', data),
+  actualizar:          (id, d)     => api.patch(`/servicios/${id}`, d),
+  eliminar:            (id)        => api.delete(`/servicios/${id}`),
+  subirFotoPrincipal:  (id, form)  => api.post(`/servicios/${id}/foto-principal`, form),
+  subirFotoSecundaria: (id, form)  => api.post(`/servicios/${id}/fotos`, form),
+  eliminarFoto:        (id, fid)   => api.delete(`/servicios/${id}/fotos/${fid}`),
+  agregarPresentacion: (id, data)  => api.post(`/servicios/${id}/presentaciones`, data),
+  eliminarPresentacion:(id, pid)   => api.delete(`/servicios/${id}/presentaciones/${pid}`),
 }
 
 export const webMedicaApi = {
@@ -182,6 +182,7 @@ export const evaluacionesApi = {
   completar:          (id, d)  => api.patch(`/evaluaciones/aplicaciones/${id}/completar`, d),
   completarPaciente:  (id, d)  => api.post(`/evaluaciones/aplicaciones/${id}/completar-paciente`, d),
   anularAplicacion:   (id)     => api.patch(`/evaluaciones/aplicaciones/${id}/anular`),
+  eliminarAplicacion: (id)     => api.delete(`/evaluaciones/aplicaciones/${id}`),
 }
 
 export const actividadesApi = {
@@ -194,7 +195,9 @@ export const actividadesApi = {
   asignar:            (data)    => api.post('/actividades/asignaciones', data),
   actualizarAsignacion:(id, d)  => api.patch(`/actividades/asignaciones/${id}`, d),
   eliminarAsignacion: (id)      => api.delete(`/actividades/asignaciones/${id}`),
-  responder:          (id, d)   => api.post(`/actividades/asignaciones/${id}/responder`, d),
+  responder:          (id, d)   => api.post(`/actividades/asignaciones/${id}/responder`, d, {
+    headers: d instanceof FormData ? { 'Content-Type': 'multipart/form-data' } : undefined
+  }),
   retroalimentar:     (id, d)   => api.patch(`/actividades/asignaciones/${id}/retroalimentacion`, d),
   reporte:            (pid)     => api.get(`/actividades/reporte/${pid}`),
 }
@@ -207,6 +210,7 @@ export const facturacionApi = {
   crear:                 (data)    => api.post('/facturacion', data),
   registrarPago:         (id, d)   => api.post(`/facturacion/${id}/pagos`, d),
   anular:                (id, d)   => api.patch(`/facturacion/${id}/anular`, d),
+  eliminar:              (id)      => api.delete(`/facturacion/${id}`),
   subirComprobanteYape:  (id, form)  => api.post(`/facturacion/${id}/yape-comprobante`, form, { headers: { 'Content-Type': 'multipart/form-data' } }),
   confirmarPago:         (pagoId)  => api.patch(`/facturacion/pagos/${pagoId}/confirmar`),
 }

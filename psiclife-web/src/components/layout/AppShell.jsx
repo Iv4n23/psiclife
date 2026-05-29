@@ -1,11 +1,13 @@
 // src/components/layout/AppShell.jsx
+import { useState, useEffect } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth }  from '../../context/AuthContext'
 import { useTheme } from '../../hooks/useTheme'
+import { webMedicaApi } from '../../services/api'
 import {
   LayoutDashboard, Users, Shield, Tag, Package, Globe,
   Calendar, UserCheck, Brain, ClipboardList, Activity,
-  FileText, LogOut, Sun, Moon, User, HeartHandshake,
+  FileText, LogOut, Sun, Moon, User, HeartHandshake, ClipboardSignature
 } from 'lucide-react'
 
 // Navegación completa (personal administrativo / psicólogos / admin)
@@ -17,7 +19,7 @@ const NAV_STAFF = [
     { label: 'Usuarios',       path: '/usuarios',       icon: Users,        permiso: 'usuarios.ver' },
     { label: 'Roles',          path: '/roles',          icon: Shield,       permiso: 'roles.ver' },
     { label: 'Categorías',     path: '/categorias',     icon: Tag,          permiso: 'categorias.ver' },
-    { label: 'Productos',      path: '/productos',      icon: Package,      permiso: 'productos.ver' },
+    { label: 'Servicios',      path: '/servicios',      icon: Package,      permiso: 'productos.ver' },
     { label: 'Web Médica',     path: '/web-medica',     icon: Globe,        permiso: 'web_medica.ver' },
   ]},
   { seccion: 'Clínico', items: [
@@ -25,6 +27,7 @@ const NAV_STAFF = [
     { label: 'Psicólogos',     path: '/psicologos',     icon: UserCheck,    permiso: 'usuarios.ver' },
     { label: 'Disponibilidad', path: '/disponibilidad', icon: Calendar,     permiso: 'disponibilidad.ver' },
     { label: 'Citas',          path: '/citas',          icon: Calendar,     permiso: 'citas.ver' },
+    { label: 'Sesiones',       path: '/sesiones',       icon: ClipboardSignature, permiso: 'citas.ver' },
     { label: 'Diagnósticos',   path: '/diagnosticos',   icon: Brain,        permiso: 'diagnosticos.ver' },
     { label: 'Evaluaciones',   path: '/evaluaciones',   icon: ClipboardList,permiso: 'evaluaciones.ver' },
     { label: 'Actividades',    path: '/actividades',    icon: Activity,     permiso: 'actividades.ver' },
@@ -34,8 +37,12 @@ const NAV_STAFF = [
 
 // Navegación simplificada para pacientes
 const NAV_PACIENTE = [
-  { seccion: 'Mi Espacio', items: [
-    { label: 'Mi Portal',  path: '/dashboard', icon: HeartHandshake, permiso: null },
+  { seccion: 'Mi Portal', items: [
+    { label: 'Inicio',         path: '/dashboard?tab=inicio',       icon: LayoutDashboard, permiso: null },
+    { label: 'Citas',          path: '/dashboard?tab=citas',        icon: Calendar,        permiso: null },
+    { label: 'Pagos',          path: '/dashboard?tab=pagos',        icon: FileText,        permiso: null },
+    { label: 'Evaluaciones',   path: '/dashboard?tab=evaluaciones', icon: ClipboardList,   permiso: null },
+    { label: 'Actividades',    path: '/dashboard?tab=actividades',  icon: Activity,        permiso: null },
   ]},
 ]
 
@@ -44,12 +51,13 @@ const TITULOS = {
   '/usuarios':       'Usuarios',
   '/roles':          'Roles y Permisos',
   '/categorias':     'Categorías',
-  '/productos':      'Productos',
+  '/servicios':      'Servicios',
   '/web-medica':     'Web Médica',
   '/pacientes':      'Pacientes',
   '/psicologos':     'Psicólogos',
   '/disponibilidad': 'Disponibilidad',
   '/citas':          'Citas',
+  '/sesiones':       'Control de Sesiones',
   '/diagnosticos':   'Diagnósticos',
   '/evaluaciones':   'Evaluaciones',
   '/actividades':    'Actividades',
@@ -61,7 +69,21 @@ export default function AppShell() {
   const { usuario, logout, puedo } = useAuth()
   const { tema, toggleTema } = useTheme()
   const navigate     = useNavigate()
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
+  const currentTab = new URLSearchParams(search).get('tab') || 'inicio'
+
+  const [logoUrl, setLogoUrl] = useState(null)
+
+  useEffect(() => {
+    webMedicaApi.obtener()
+      .then(res => {
+        if (res.data?.datos?.logo_url) {
+          const apiBase = import.meta.env.VITE_API_URL.replace('/api/v1', '')
+          setLogoUrl(`${apiBase}${res.data.datos.logo_url}`)
+        }
+      })
+      .catch(console.error)
+  }, [])
 
   const esPaciente = usuario?.rol === 'Paciente'
   const nav = esPaciente ? NAV_PACIENTE : NAV_STAFF
@@ -75,11 +97,23 @@ export default function AppShell() {
     window.location.href = import.meta.env.VITE_LANDING_URL || 'http://localhost:5174'
   }
 
+  const isActive = (pathToCheck) => {
+    const [pPath, pSearch] = pathToCheck.split('?')
+    if (pathname !== pPath) return false
+    if (!pSearch) return true
+    const checkTab = new URLSearchParams(pSearch).get('tab')
+    return checkTab === currentTab
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <div className="sidebar-logo">
-          <div className="sidebar-logo-mark" style={esPaciente ? { background: 'linear-gradient(135deg, hsl(262,80%,58%), hsl(220,80%,58%))' } : {}}>P</div>
+          {logoUrl ? (
+            <img src={logoUrl} alt="Logo" style={{ width: 34, height: 34, objectFit: 'contain' }} />
+          ) : (
+            <div className="sidebar-logo-mark" style={esPaciente ? { background: 'linear-gradient(135deg, hsl(262,80%,58%), hsl(220,80%,58%))' } : {}}>P</div>
+          )}
           <div>
             <div className="sidebar-logo-name">PsicLife</div>
             <div className="sidebar-logo-sub">{esPaciente ? 'Portal del Paciente' : 'Sistema de Gestión'}</div>
@@ -110,7 +144,7 @@ export default function AppShell() {
               <div className="sidebar-section-label">{seccion}</div>
               {itemsVisibles.map(({ label, path, icon: Icon }) => (
                 <button key={path}
-                  className={`sidebar-nav-item ${pathname === path ? 'active' : ''}`}
+                  className={`sidebar-nav-item ${isActive(path) ? 'active' : ''}`}
                   onClick={() => navigate(path)}>
                   <Icon className="nav-icon" />
                   {label}
@@ -121,11 +155,9 @@ export default function AppShell() {
         })}
 
         <div className="sidebar-footer">
-          {!esPaciente && (
-            <button className="sidebar-nav-item" onClick={goLanding} style={{ marginBottom: 4, color: 'var(--celeste)' }}>
-              <Globe size={14} className="nav-icon" /> Volver a la web
-            </button>
-          )}
+          <button className="sidebar-nav-item" onClick={goLanding} style={{ marginBottom: 4, color: 'var(--celeste)' }}>
+            <Globe size={14} className="nav-icon" /> Volver a la web
+          </button>
           <button className="sidebar-nav-item" onClick={() => navigate('/mi-perfil')}
             style={{ marginBottom: 4 }}>
             <User size={14} className="nav-icon" /> Mi perfil

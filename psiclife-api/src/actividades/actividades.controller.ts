@@ -3,8 +3,13 @@ import {
   Controller, Get, Post, Patch, Delete,
   Body, Param, Query, ParseUUIDPipe,
   UseGuards, HttpCode, HttpStatus,
+  UseInterceptors, UploadedFile, ParseFilePipe, MaxFileSizeValidator, BadRequestException
 } from '@nestjs/common'
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger'
+import { FileInterceptor } from '@nestjs/platform-express'
+import { diskStorage } from 'multer'
+import { v4 as uuid } from 'uuid'
+import { extname } from 'path'
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiParam, ApiQuery, ApiConsumes } from '@nestjs/swagger'
 import { ActividadesService } from './actividades.service'
 import {
   CrearBibliotecaDto, ActualizarBibliotecaDto,
@@ -135,12 +140,40 @@ export class ActividadesController {
   @Permisos('actividades.editar')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Responder / avanzar en una actividad asignada' })
+  @ApiConsumes('multipart/form-data')
   @ApiParam({ name: 'id', format: 'uuid' })
+  @UseInterceptors(FileInterceptor('archivo', {
+    storage: diskStorage({
+      destination: './uploads',
+      filename: (_req, file, cb) => cb(null, `actividad-${uuid()}${extname(file.originalname)}`),
+    }),
+    fileFilter: (_req, file, cb) => {
+      // Permitir imágenes y documentos
+      const permitidos = [
+        'image/jpeg', 'image/png', 'image/webp',
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      ]
+      if (permitidos.includes(file.mimetype)) {
+        cb(null, true)
+      } else {
+        cb(new BadRequestException('Formato de archivo no válido. Se permiten imágenes, PDF y Word.'), false)
+      }
+    },
+  }))
   async responder(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ResponderActividadDto,
+    @UploadedFile(new ParseFilePipe({
+      validators: [
+        new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 }),
+      ],
+      fileIsRequired: false,
+    })) archivo?: Express.Multer.File,
   ) {
-    const datos = await this.actividadesService.responder(id, dto)
+    const rutaPublica = archivo ? `/uploads/${archivo.filename}` : undefined
+    const datos = await this.actividadesService.responder(id, dto, rutaPublica)
     return { mensaje: 'Respuesta registrada correctamente', datos }
   }
 

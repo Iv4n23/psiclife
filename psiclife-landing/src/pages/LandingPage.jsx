@@ -67,7 +67,7 @@ export default function LandingPage() {
         const [resWeb, resPsi, resProd, resConfig] = await Promise.all([
           landingApi.getWebMedica(),
           landingApi.getPsicologos(),
-          landingApi.getProductos(),
+          landingApi.getServicios(),
           landingApi.getPagosConfig()
         ])
         setInfo(resWeb.data.datos)

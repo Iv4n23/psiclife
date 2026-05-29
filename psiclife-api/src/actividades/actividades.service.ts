@@ -168,7 +168,7 @@ export class ActividadesService {
     })
   }
 
-  async responder(asignacionId: string, dto: ResponderActividadDto) {
+  async responder(asignacionId: string, dto: ResponderActividadDto, rutaArchivo?: string) {
     const asig = await this.buscarAsignacion(asignacionId)
 
     if (asig.estado === 'completada')
@@ -179,7 +179,8 @@ export class ActividadesService {
       data: {
         asignacion_id:    asignacionId,
         contenido:        dto.contenido         ?? null,
-        porcentaje_avance: dto.porcentaje_avance ?? 0,
+        archivos_adjuntos: rutaArchivo ? [rutaArchivo] : null,
+        porcentaje_avance: typeof dto.porcentaje_avance === 'string' ? Number(dto.porcentaje_avance) : (dto.porcentaje_avance ?? 0),
       },
     })
 

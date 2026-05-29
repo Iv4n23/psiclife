@@ -9,7 +9,7 @@ export class CategoriasService {
 
   async listar() {
     return this.prisma.categorias.findMany({
-      include: { _count: { select: { productos: true } } },
+      include: { _count: { select: { servicios: true } } },
       orderBy: { nombre: 'asc' },
     })
   }
@@ -17,7 +17,7 @@ export class CategoriasService {
   async buscarPorId(id: string) {
     const cat = await this.prisma.categorias.findUnique({
       where:   { id },
-      include: { _count: { select: { productos: true } } },
+      include: { _count: { select: { servicios: true } } },
     })
     if (!cat) throw new NotFoundException(`Categoría ${id} no encontrada`)
     return cat
@@ -40,8 +40,8 @@ export class CategoriasService {
 
   async eliminar(id: string) {
     const cat = await this.buscarPorId(id)
-    if (cat._count.productos > 0)
-      throw new ConflictException(`No se puede eliminar: tiene ${cat._count.productos} producto(s) asociado(s)`)
+    if (cat._count.servicios > 0)
+      throw new ConflictException(`No se puede eliminar: tiene ${cat._count.servicios} servicio(s) asociado(s)`)
     await this.prisma.categorias.delete({ where: { id } })
     return { mensaje: 'Categoría eliminada correctamente' }
   }

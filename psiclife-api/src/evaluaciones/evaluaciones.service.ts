@@ -351,5 +351,15 @@ export class EvaluacionesService {
       data:  { estado: 'anulado' as eva_aplicaciones_estado },
     })
   }
-}
 
+  // ── Eliminar aplicación (hard delete) ────────────────────
+
+  async eliminarAplicacion(id: string) {
+    const ap = await this.prisma.eva_aplicaciones.findUnique({ where: { id } })
+    if (!ap) throw new NotFoundException(`Aplicación ${id} no encontrada`)
+    // Eliminar respuestas primero (FK constraint)
+    await this.prisma.eva_respuestas.deleteMany({ where: { aplicacion_id: id } })
+    await this.prisma.eva_aplicaciones.delete({ where: { id } })
+    return { id }
+  }
+}

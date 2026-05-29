@@ -1,6 +1,6 @@
 // src/pages/Citas.jsx
 import { useState, useEffect, useMemo } from 'react'
-import { citasApi, pacientesApi, psicologosApi, facturacionApi, configuracionApi } from '../services/api'
+import { citasApi, pacientesApi, psicologosApi, facturacionApi, configuracionApi, disponibilidadApi } from '../services/api'
 import { Spinner, CalendarioSemanal } from '../components/ui/index.jsx'
 import toast from 'react-hot-toast'
 import {
@@ -26,8 +26,8 @@ const ESTADO_BADGE = {
 
 const FORM_VACIO = {
   paciente_id: '', psicologo_id: '',
-  programada_para: '', duracion_minutos: 60,
-  modalidad: 'presencial', enlace_reunion: '',
+  fecha: '', hora: '', duracion_minutos: 60,
+  modalidad: 'presencial', plataforma_virtual: 'zoom', enlace_reunion: '',
   agendado_por: 'recepcionista',
   metodo_pago: 'efectivo', codigo_referencia: '', comprobanteFile: null,
 }
@@ -93,6 +93,8 @@ export default function Citas() {
   const [form,        setForm]        = useState(FORM_VACIO)
   const [errores,     setErrores]     = useState({})
   const [config,      setConfig]      = useState({})
+  const [slotsDisponibles, setSlotsDisponibles] = useState([])
+  const [cargandoSlots, setCargandoSlots] = useState(false)
 
   // Calendario
   const [mesActual,   setMesActual]   = useState(hoy.getMonth())
@@ -105,10 +107,67 @@ export default function Citas() {
   const [modalAsistencia, setModalAsistencia] = useState(null)
   const [asistencia,      setAsistencia]      = useState({ asistio: true, hora_llegada: '', minutos_tardanza: 0 })
   const [modalEliminar,   setModalEliminar]   = useState(null)
+  const [modalReprogramar, setModalReprogramar] = useState(null)
+  const [formReprogramar, setFormReprogramar] = useState({ programada_para: '', modalidad: 'presencial', plataforma_virtual: 'zoom', enlace_reunion: '' })
 
   const { puedo } = useAuth()
 
   useEffect(() => { cargar() }, [mesActual, añoActual])
+
+  // Cargar slots disponibles al cambiar fecha o psicólogo
+  useEffect(() => {
+    if (vista !== 'form' || !form.psicologo_id || !form.fecha) return
+    const cargarSlots = async () => {
+      setCargandoSlots(true)
+      try {
+        const d = new Date(form.fecha + 'T00:00:00')
+        const { data } = await disponibilidadApi.semana(form.psicologo_id, form.fecha)
+        const { horarios, bloqueos, citas } = data.datos || data
+
+        const JS_DIAS = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado']
+        const diaSemana = JS_DIAS[d.getDay()]
+        const hs = horarios.filter(h => h.dia_semana === diaSemana)
+
+        let slots = []
+        hs.forEach(h => {
+           let horaAct = new Date(`${form.fecha}T${h.hora_inicio}:00`)
+           const horaFin = new Date(`${form.fecha}T${h.hora_fin}:00`)
+           while (horaAct < horaFin) {
+              slots.push(horaAct.toTimeString().slice(0,5))
+              horaAct.setMinutes(horaAct.getMinutes() + 60) // intervalos de 1h
+           }
+        })
+
+        const bloqDia = bloqueos.filter(b => b.fecha_bloqueo.startsWith(form.fecha))
+        const citasDia = citas.filter(c => c.programada_para.startsWith(form.fecha))
+
+        slots = slots.filter(slot => {
+           const sh = new Date(`${form.fecha}T${slot}:00`)
+           const sf = new Date(sh); sf.setMinutes(sf.getMinutes() + 60)
+           const chocaCita = citasDia.some(c => {
+             const ci = new Date(c.programada_para)
+             const cf = new Date(ci); cf.setMinutes(cf.getMinutes() + c.duracion_minutos)
+             return (sh < cf && sf > ci)
+           })
+           if (chocaCita) return false
+           const chocaBloqueo = bloqDia.some(b => {
+             if (!b.hora_inicio) return true
+             const bi = new Date(`${form.fecha}T${b.hora_inicio}:00`)
+             const bf = new Date(`${form.fecha}T${b.hora_fin}:00`)
+             return (sh < bf && sf > bi)
+           })
+           if (chocaBloqueo) return false
+           return true
+        })
+        setSlotsDisponibles(slots)
+      } catch(e) {
+        setSlotsDisponibles([])
+      } finally {
+        setCargandoSlots(false)
+      }
+    }
+    cargarSlots()
+  }, [form.psicologo_id, form.fecha, vista])
 
   const cargar = async () => {
     setCargando(true)
@@ -207,13 +266,13 @@ export default function Citas() {
     const e = {}
     if (!form.paciente_id)    e.paciente_id    = 'Requerido'
     if (!form.psicologo_id)   e.psicologo_id   = 'Requerido'
-    if (!form.programada_para) e.programada_para = 'Requerido'
+    if (!form.fecha || !form.hora) e.fecha = 'Fecha y hora requeridos'
     else {
-      const fecha = new Date(form.programada_para)
+      const fechaCita = new Date(`${form.fecha}T${form.hora}:00`)
       const ahora = new Date()
       const maxFecha = new Date(); maxFecha.setMonth(maxFecha.getMonth() + 1)
-      if (fecha < ahora)       e.programada_para = 'No puedes reservar en fechas pasadas'
-      if (fecha > maxFecha)    e.programada_para = 'No puedes reservar con más de 1 mes de anticipación'
+      if (fechaCita < ahora)    e.fecha = 'No puedes reservar en fechas pasadas'
+      if (fechaCita > maxFecha) e.fecha = 'No puedes reservar con más de 1 mes de anticipación'
     }
     if (form.metodo_pago !== 'efectivo') {
       if (!form.codigo_referencia) e.codigo_referencia = 'Requerido'
@@ -228,8 +287,17 @@ export default function Citas() {
     if (!validar()) return
     setGuardando(true)
     try {
-      const { metodo_pago, codigo_referencia, comprobanteFile, ...citaPayload } = form
-      const payload = cleanPayload({ ...citaPayload, duracion_minutos: Number(form.duracion_minutos) })
+      const { metodo_pago, codigo_referencia, comprobanteFile, plataforma_virtual, fecha, hora, ...citaPayload } = form
+      
+      if (citaPayload.modalidad === 'virtual' && citaPayload.enlace_reunion) {
+        citaPayload.enlace_reunion = `${plataforma_virtual}::${citaPayload.enlace_reunion}`
+      }
+
+      const payload = cleanPayload({ 
+        ...citaPayload, 
+        programada_para: `${fecha}T${hora}:00`,
+        duracion_minutos: Number(form.duracion_minutos) 
+      })
       
       const resCita = await citasApi.crear(payload)
       const citaId = resCita.data.datos.id
@@ -258,6 +326,32 @@ export default function Citas() {
       await cargar()
     } catch (err) {
       toast.error(err.response?.data?.message || 'Error al guardar cita')
+    } finally { setGuardando(false) }
+  }
+
+  const agendarParaDiaSelec = () => {
+    const d = new Date(añoActual, mesActual, diaSelec)
+    const localISO = d.toLocaleDateString('en-CA')
+    setForm({ ...FORM_VACIO, fecha: localISO, hora: '' })
+    setVista('form')
+  }
+
+  const reprogramar = async (ev) => {
+    ev.preventDefault()
+    setGuardando(true)
+    try {
+      const payload = { ...formReprogramar }
+      if (payload.modalidad === 'virtual' && payload.enlace_reunion) {
+        payload.enlace_reunion = `${payload.plataforma_virtual}::${payload.enlace_reunion}`
+      }
+      delete payload.plataforma_virtual
+
+      await citasApi.reprogramar(modalReprogramar.id, payload)
+      toast.success('Cita reprogramada con éxito')
+      setModalReprogramar(null)
+      await cargar()
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Error al reprogramar cita')
     } finally { setGuardando(false) }
   }
 
@@ -334,14 +428,28 @@ export default function Citas() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Fecha y hora <span className="required">*</span></label>
-                <input type="datetime-local"
-                  className={`form-control ${errores.programada_para ? 'error' : ''}`}
-                  value={form.programada_para} onChange={set('programada_para')}
-                  min={new Date().toISOString().slice(0, 16)}
-                  max={(() => { const d = new Date(); d.setMonth(d.getMonth()+1); return d.toISOString().slice(0,16) })()}
+                <label className="form-label">Fecha de Cita <span className="required">*</span></label>
+                <input type="date"
+                  className={`form-control ${errores.fecha ? 'error' : ''}`}
+                  value={form.fecha} onChange={e => { setForm(f => ({...f, fecha: e.target.value, hora: ''})); setErrores(er => ({...er, fecha: ''})) }}
+                  min={new Date().toLocaleDateString('en-CA')}
                 />
-                {errores.programada_para && <span className="form-error">{errores.programada_para}</span>}
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Hora <span className="required">*</span></label>
+                <select 
+                  className={`form-control ${errores.fecha && !form.hora ? 'error' : ''}`} 
+                  value={form.hora} 
+                  onChange={set('hora')}
+                  disabled={!form.fecha || !form.psicologo_id || cargandoSlots}
+                >
+                  <option value="">{cargandoSlots ? 'Cargando horarios...' : 'Selecciona una hora...'}</option>
+                  {slotsDisponibles.map(h => (
+                    <option key={h} value={h}>{h}</option>
+                  ))}
+                </select>
+                {errores.fecha && <span className="form-error">{errores.fecha}</span>}
               </div>
 
               <div className="form-group">
@@ -358,10 +466,22 @@ export default function Citas() {
               </div>
 
               {form.modalidad === 'virtual' && (
-                <div className="form-group" style={{ gridColumn: '1/-1' }}>
-                  <label className="form-label">Enlace de reunión</label>
-                  <input className="form-control" value={form.enlace_reunion} onChange={set('enlace_reunion')} placeholder="https://meet.google.com/..." />
-                </div>
+                <>
+                  <div className="form-group">
+                    <label className="form-label">Plataforma</label>
+                    <select className="form-control" value={form.plataforma_virtual} onChange={set('plataforma_virtual')}>
+                      <option value="zoom">Zoom</option>
+                      <option value="meet">Google Meet</option>
+                      <option value="whatsapp">WhatsApp</option>
+                      <option value="otro">Otro</option>
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ gridColumn: '1/-1' }}>
+                    <label className="form-label">{form.plataforma_virtual === 'whatsapp' ? 'Número de WhatsApp' : 'Enlace de reunión'}</label>
+                    <input className="form-control" value={form.enlace_reunion} onChange={set('enlace_reunion')} 
+                           placeholder={form.plataforma_virtual === 'whatsapp' ? "+51 999 999 999" : "https://..."} />
+                  </div>
+                </>
               )}
             </div>
             
@@ -406,7 +526,13 @@ export default function Citas() {
                   <label className="form-label">Comprobante (Imagen) <span className="required">*</span></label>
                   <input type="file" className={`form-control ${errores.comprobanteFile ? 'error' : ''}`} accept="image/*"
                     onChange={e => {
-                      setForm(f => ({ ...f, comprobanteFile: e.target.files[0] }))
+                      const file = e.target.files[0]
+                      if (file && !file.type.startsWith('image/')) {
+                        toast.error('Solo se aceptan imágenes')
+                        e.target.value = ''
+                        return
+                      }
+                      setForm(f => ({ ...f, comprobanteFile: file }))
                       setErrores(er => ({ ...er, comprobanteFile: '' }))
                     }} 
                   />
@@ -476,7 +602,7 @@ export default function Citas() {
             onHoy={irAHoy}
             onClickCelda={({ fecha, hora }) => {
               // Prellenar fecha y hora para nueva cita
-              setForm(f => ({ ...f, programada_para: `${fecha}T${hora}` }))
+              setForm(f => ({ ...FORM_VACIO, fecha, hora }))
               setVista('form')
             }}
           />
@@ -638,6 +764,9 @@ export default function Citas() {
                 <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 4 }}>
                   Puedes agendar una nueva cita
                 </div>
+                <button className="btn btn-primary btn-sm" style={{ marginTop: 12 }} onClick={agendarParaDiaSelec}>
+                  <Plus size={14} /> Agendar para el {diaSelec} de {MESES[mesActual]}
+                </button>
               </div>
             ) : (
               [...citasDelDiaSelec]
@@ -696,6 +825,25 @@ export default function Citas() {
 
                         {/* Acciones */}
                         <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+                          {(c.estado === 'confirmada' || c.estado === 'pendiente') && (
+                            <>
+                              <button
+                                className="btn btn-warning btn-sm"
+                                style={{ fontSize: 11, padding: '4px 10px', background: 'var(--warning-bg)', border: '1px solid var(--warning)', color: 'var(--text-primary)' }}
+                                onClick={() => {
+                                  setModalReprogramar(c)
+                                  setFormReprogramar({
+                                    programada_para: new Date(c.programada_para).toLocaleString('sv').replace(' ', 'T').slice(0,16),
+                                    modalidad: c.modalidad || 'presencial',
+                                    plataforma_virtual: c.enlace_reunion?.includes('::') ? c.enlace_reunion.split('::')[0] : 'zoom',
+                                    enlace_reunion: c.enlace_reunion?.includes('::') ? c.enlace_reunion.split('::')[1] : (c.enlace_reunion || ''),
+                                  })
+                                }}
+                              >
+                                <Calendar size={12} color="var(--warning)" /> Reprogramar
+                              </button>
+                            </>
+                          )}
                           {c.estado === 'confirmada' && (
                             <>
                               <button
@@ -739,6 +887,57 @@ export default function Citas() {
           </div>
         </div>
       </div>
+
+      {/* ── Modal reprogramar ── */}
+      {modalReprogramar && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ maxWidth: 450 }}>
+            <div className="modal-title">Reprogramar cita</div>
+            <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', marginBottom: 16 }}>
+              Paciente: <b>{modalReprogramar.paciente?.nombres} {modalReprogramar.paciente?.apellidos}</b>
+            </p>
+            <form onSubmit={reprogramar}>
+              <div className="form-group" style={{ marginBottom: 14 }}>
+                <label className="form-label">Nueva Fecha y hora <span className="required">*</span></label>
+                <input type="datetime-local"
+                  className="form-control"
+                  required
+                  value={formReprogramar.programada_para}
+                  onChange={e => setFormReprogramar(f => ({ ...f, programada_para: e.target.value }))}
+                  min={new Date().toLocaleString('sv').replace(' ', 'T').slice(0, 16)}
+                />
+              </div>
+              <div className="form-group" style={{ marginBottom: 14 }}>
+                <label className="form-label">Modalidad</label>
+                <select className="form-control" value={formReprogramar.modalidad} onChange={e => setFormReprogramar(f => ({ ...f, modalidad: e.target.value }))}>
+                  <option value="presencial">Presencial</option>
+                  <option value="virtual">Virtual</option>
+                </select>
+              </div>
+              {formReprogramar.modalidad === 'virtual' && (
+                <div className="form-group" style={{ marginBottom: 14 }}>
+                  <label className="form-label">Plataforma</label>
+                  <select className="form-control" value={formReprogramar.plataforma_virtual} onChange={e => setFormReprogramar(f => ({ ...f, plataforma_virtual: e.target.value }))} style={{ marginBottom: 8 }}>
+                    <option value="zoom">Zoom</option>
+                    <option value="meet">Google Meet</option>
+                    <option value="whatsapp">WhatsApp</option>
+                    <option value="otro">Otro</option>
+                  </select>
+                  <label className="form-label">{formReprogramar.plataforma_virtual === 'whatsapp' ? 'Número de WhatsApp' : 'Enlace de reunión'}</label>
+                  <input className="form-control" value={formReprogramar.enlace_reunion} onChange={e => setFormReprogramar(f => ({ ...f, enlace_reunion: e.target.value }))}
+                         placeholder={formReprogramar.plataforma_virtual === 'whatsapp' ? "+51 999 999 999" : "https://..."} />
+                </div>
+              )}
+              <div className="modal-actions" style={{ marginTop: 20 }}>
+                <button type="button" className="btn btn-ghost" onClick={() => setModalReprogramar(null)}>Cancelar</button>
+                <button type="submit" className="btn btn-warning" disabled={guardando}>
+                  {guardando ? 'Guardando...' : 'Confirmar reprogramación'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* ── Modal cancelar ── */}
       {modalCancelar && (

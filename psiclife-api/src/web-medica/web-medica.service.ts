@@ -11,13 +11,13 @@ export class WebMedicaService {
     const web = await this.prisma.web_medica.findFirst()
     if (!web) return null
 
-    // Si se especificaron productos en `servicios_sub` (ids separados por coma), traerlos
+    // Si se especificaron servicios en `servicios_sub` (ids separados por coma), traerlos
     if (web.servicios_sub && web.servicios_sub.trim() !== '') {
       try {
         const ids = web.servicios_sub.split(',').map(s => s.trim()).filter(Boolean)
-        const servicios = await this.prisma.productos.findMany({
+        const servicios = await this.prisma.servicios.findMany({
           where: { id: { in: ids }, esta_activo: true },
-          include: { productos_fotos: { orderBy: { orden: 'asc' } } },
+          include: { servicios_fotos: { orderBy: { orden: 'asc' } } },
         })
         return { ...web, servicios_destacados: servicios }
       } catch (e) {

@@ -211,14 +211,19 @@ export default function Evaluaciones() {
       if (confirmar.tipo === 'instrumento') {
         await evaluacionesApi.eliminarInstrumento(confirmar.id)
         toast.success('Instrumento eliminado')
-      } else if (confirmar.tipo === 'aplicacion') {
+      } else if (confirmar.tipo === 'aplicacion_anular') {
         await evaluacionesApi.anularAplicacion(confirmar.id)
         toast.success('Aplicación anulada')
+      } else if (confirmar.tipo === 'aplicacion_eliminar') {
+        await evaluacionesApi.eliminarAplicacion(confirmar.id)
+        toast.success('Aplicación eliminada permanentemente')
       }
       setConfirmar(null)
       if (vista === 'detalle') setVista('lista')
       await cargar()
-    } catch {} finally { setGuardando(false) }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Error al procesar')
+    } finally { setGuardando(false) }
   }
 
   const setAp = (k) => (e) => { setFormAp(f => ({ ...f, [k]: e.target.value })); setErrores(er => ({ ...er, [k]: '' })) }
@@ -563,10 +568,16 @@ export default function Evaluaciones() {
                             </button>
                             {a.estado !== 'completado' && a.estado !== 'anulado' && (
                               <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--danger)' }} 
-                                onClick={() => setConfirmar({ id: a.id, tipo: 'aplicacion', desc: `la aplicación de ${a.instrumento?.nombre} a ${a.paciente?.nombres}` })}>
+                                title="Anular evaluación"
+                                onClick={() => setConfirmar({ id: a.id, tipo: 'aplicacion_anular', desc: `la aplicación de ${a.instrumento?.nombre} a ${a.paciente?.nombres}` })}>
                                 <Ban size={13} />
                               </button>
                             )}
+                            <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--danger)' }}
+                              title="Eliminar definitivamente"
+                              onClick={() => setConfirmar({ id: a.id, tipo: 'aplicacion_eliminar', desc: `la evaluación ${a.instrumento?.nombre} de ${a.paciente?.nombres} ${a.paciente?.apellidos}` })}>
+                              <Trash2 size={13} />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -609,8 +620,16 @@ export default function Evaluaciones() {
 
       {confirmar && (
         <Confirm
-          titulo={confirmar.tipo === 'instrumento' ? 'Eliminar instrumento' : 'Anular aplicación'}
-          descripcion={`¿Estás seguro de ${confirmar.tipo === 'instrumento' ? 'eliminar' : 'anular'} ${confirmar.desc}? Esta acción no se puede deshacer.`}
+          titulo={
+            confirmar.tipo === 'instrumento' ? 'Eliminar instrumento' 
+            : confirmar.tipo === 'aplicacion_anular' ? 'Anular aplicación'
+            : 'Eliminar aplicación definitivamente'
+          }
+          descripcion={`¿Estás seguro de ${
+            confirmar.tipo === 'instrumento' ? 'eliminar' 
+            : confirmar.tipo === 'aplicacion_anular' ? 'anular' 
+            : 'eliminar permanentemente'
+          } ${confirmar.desc}? Esta acción no se puede deshacer.`}
           onConfirm={eliminar}
           onCancel={() => setConfirmar(null)}
           cargando={guardando}

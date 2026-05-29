@@ -159,6 +159,31 @@ export class CitasService {
       throw new BadRequestException('No se puede reservar una cita con más de 1 mes de anticipación a futuro.')
     }
 
+    // Validar máximo 2 citas por semana si es agendado por paciente
+    if (dto.agendado_por === 'paciente') {
+      const startOfWeek = new Date(programada)
+      const day = startOfWeek.getDay()
+      const diffToMonday = day === 0 ? -6 : 1 - day
+      startOfWeek.setDate(startOfWeek.getDate() + diffToMonday)
+      startOfWeek.setHours(0, 0, 0, 0)
+      
+      const endOfWeek = new Date(startOfWeek)
+      endOfWeek.setDate(endOfWeek.getDate() + 6)
+      endOfWeek.setHours(23, 59, 59, 999)
+
+      const citasSemana = await this.prisma.citas.count({
+        where: {
+          paciente_id: dto.paciente_id,
+          estado: { in: ['pendiente', 'confirmada'] },
+          programada_para: { gte: startOfWeek, lte: endOfWeek },
+        }
+      })
+
+      if (citasSemana >= 2) {
+        throw new BadRequestException('Has alcanzado el límite máximo de 2 citas permitidas en esta semana.')
+      }
+    }
+
     const duracion = dto.duracion_minutos ?? psicologo.duracion_sesion_min
     await this.validarSolapamiento(dto.psicologo_id, programada, duracion)
 

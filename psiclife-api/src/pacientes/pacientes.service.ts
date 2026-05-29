@@ -28,6 +28,7 @@ export class PacientesService {
         telefono: true, whatsapp: true, correo_personal: true,
         empresa_u_organizacion: true, cargo: true,
         estado_paciente: true, canal_primer_contacto: true,
+        usuario_id: true,
         creado_en: true,
       },
     })

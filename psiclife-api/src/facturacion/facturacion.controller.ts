@@ -1,6 +1,6 @@
 // src/facturacion/facturacion.controller.ts
 import {
-  Controller, Get, Post, Patch,
+  Controller, Get, Post, Patch, Delete,
   Body, Param, Query, ParseUUIDPipe,
   UseGuards, HttpCode, HttpStatus,
   UseInterceptors, UploadedFile, ParseFilePipe,
@@ -104,6 +104,15 @@ export class FacturacionController {
   ) {
     const datos = await this.facturacionService.anular(id, dto, usuarioId)
     return { mensaje: 'Factura anulada correctamente', datos }
+  }
+
+  @Delete(':id')
+  @Permisos('facturacion.eliminar')
+  @ApiOperation({ summary: 'Eliminar factura' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  async eliminar(@Param('id', ParseUUIDPipe) id: string) {
+    const datos = await this.facturacionService.eliminar(id)
+    return { mensaje: 'Factura eliminada correctamente', datos }
   }
 
   @Post(':id/yape-comprobante')

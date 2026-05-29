@@ -199,6 +199,23 @@ export class FacturacionService {
     return anulada
   }
 
+  // ── Eliminar factura (solo admin) ──────────────────────────
+  async eliminar(id: string) {
+    const factura = await this.buscarPorId(id)
+
+    // Eliminar pagos asociados primero
+    await this.prisma.pagos.deleteMany({
+      where: { factura_id: id }
+    })
+
+    // Eliminar la factura
+    await this.prisma.facturas.delete({
+      where: { id }
+    })
+
+    return { id, mensaje: 'Factura eliminada permanentemente' }
+  }
+
   // ── Reporte financiero ─────────────────────────────────────
   async reporte(periodo?: string) {
     const where: any = {}

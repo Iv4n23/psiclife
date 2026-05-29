@@ -1,6 +1,6 @@
 // src/pages/Actividades.jsx
 import { useState, useEffect } from 'react'
-import { actividadesApi, pacientesApi, psicologosApi } from '../services/api'
+import { actividadesApi, pacientesApi, psicologosApi, citasApi } from '../services/api'
 import { EmptyState, Spinner } from '../components/ui/index.jsx'
 import toast from 'react-hot-toast'
 import { Plus, X, Save, Eye, BookOpen, ClipboardList, Edit2, Trash2 } from 'lucide-react'
@@ -27,10 +27,12 @@ export default function Actividades() {
   const [retro,        setRetro]        = useState('')
 
   const [formAsig, setFormAsig] = useState({
-    paciente_id: '', psicologo_id: '', actividad_id: '',
+    paciente_id: '', psicologo_id: '', actividad_id: '', cita_id: '',
     instrucciones: '', fecha_asignacion: new Date().toISOString().slice(0,10),
     fecha_limite: '',
   })
+
+  const [citasPaciente, setCitasPaciente] = useState([])
 
   const [modoEdit, setModoEdit] = useState(false)
   const [idEdit, setIdEdit] = useState(null)
@@ -42,6 +44,14 @@ export default function Actividades() {
   const [vistaForm, setVistaForm] = useState('asignacion') // 'asignacion' | 'biblioteca'
 
   useEffect(() => { cargar() }, [])
+
+  // Cargar citas del paciente seleccionado para vincular al asignar
+  useEffect(() => {
+    if (!formAsig.paciente_id) { setCitasPaciente([]); return }
+    citasApi.listar({ pacienteId: formAsig.paciente_id })
+      .then(res => setCitasPaciente(res.data.datos ?? []))
+      .catch(() => setCitasPaciente([]))
+  }, [formAsig.paciente_id])
 
   const cargar = async () => {
     setCargando(true)
@@ -90,9 +100,11 @@ export default function Actividades() {
         toast.success('Actividad asignada correctamente')
       }
       setVista('lista')
+      setTab('asignaciones')
       setModoEdit(false)
       setIdEdit(null)
-      setFormAsig({ paciente_id:'', psicologo_id:'', actividad_id:'', instrucciones:'', fecha_asignacion: new Date().toISOString().slice(0,10), fecha_limite:'' })
+      setFormAsig({ paciente_id:'', psicologo_id:'', actividad_id:'', cita_id:'', instrucciones:'', fecha_asignacion: new Date().toISOString().slice(0,10), fecha_limite:'' })
+      setCitasPaciente([])
       await cargar()
     } catch {} finally { setGuardando(false) }
   }
@@ -120,6 +132,7 @@ export default function Actividades() {
   const abrirEditarAsignacion = (a) => {
     setFormAsig({
       paciente_id: a.paciente_id, psicologo_id: a.psicologo_id, actividad_id: a.actividad_id,
+      cita_id: a.cita_id || '',
       instrucciones: a.instrucciones || '',
       fecha_asignacion: a.fecha_asignacion ? new Date(a.fecha_asignacion).toISOString().slice(0,10) : '',
       fecha_limite: a.fecha_limite ? new Date(a.fecha_limite).toISOString().slice(0,10) : '',
@@ -303,6 +316,18 @@ export default function Actividades() {
                   {errores.actividad_id && <span className="form-error">{errores.actividad_id}</span>}
                 </div>
                 <div className="form-group">
+                  <label className="form-label">Vincular a sesión / cita <span className="form-hint">(opcional)</span></label>
+                  <select className="form-control" value={formAsig.cita_id} onChange={setA('cita_id')} disabled={!formAsig.paciente_id}>
+                    <option value="">Sin vincular</option>
+                    {citasPaciente.map(c => (
+                      <option key={c.id} value={c.id}>
+                        Sesión #{c.numero_sesion ?? '—'} · {new Date(c.programada_para).toLocaleDateString('es-PE')} · {c.estado}
+                      </option>
+                    ))}
+                  </select>
+                  {!formAsig.paciente_id && <span className="form-hint" style={{ fontSize: 11, color: 'var(--text-muted)' }}>Selecciona un paciente primero</span>}
+                </div>
+                <div className="form-group">
                   <label className="form-label">Fecha asignación</label>
                   <input type="date" className="form-control" value={formAsig.fecha_asignacion} onChange={setA('fecha_asignacion')} />
                 </div>
@@ -446,6 +471,17 @@ export default function Actividades() {
                         <td>{a._count?.act_asignaciones ?? 0}</td>
                         <td>
                           <div style={{ display: 'flex', gap: 4 }}>
+                            <button className="btn btn-ghost btn-icon btn-sm text-primary" onClick={() => {
+                              setFormAsig({
+                                paciente_id: '', psicologo_id: '', actividad_id: a.id,
+                                cita_id: '', instrucciones: '', fecha_asignacion: new Date().toISOString().slice(0,10), fecha_limite: ''
+                              })
+                              setCitasPaciente([])
+                              setVistaForm('asignacion')
+                              setVista('form')
+                            }} title="Asignar actividad">
+                              <Plus size={13}/>
+                            </button>
                             <button className="btn btn-ghost btn-icon btn-sm" onClick={() => verDetalleBiblioteca(a)} title="Ver detalles">
                               <Eye size={13}/>
                             </button>

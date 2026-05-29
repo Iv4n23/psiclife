@@ -156,10 +156,10 @@ export default function Usuarios() {
           </div>
         </div>
 
-        <div className="card" style={{ maxWidth: 580 }}>
+        <div className="card users-form-card">
           <div className="card-body">
             <form onSubmit={guardar} noValidate>
-              <div className="form-grid" style={{ gap: 20 }}>
+              <div className="form-grid users-form-grid">
 
                 {/* Correo */}
                 <div className="form-group">
@@ -178,19 +178,17 @@ export default function Usuarios() {
                 <div className="form-group">
                   <label className="form-label">
                     Contraseña {esNuevo && <span className="required">*</span>}
-                    {!esNuevo && <span className="form-hint" style={{ fontWeight: 400, marginLeft: 6 }}>(dejar vacío para no cambiar)</span>}
+                    {!esNuevo && <span className="form-hint users-form-hint">(dejar vacío para no cambiar)</span>}
                   </label>
-                  <div style={{ position: 'relative' }}>
+                  <div className="password-field">
                     <input
                       type={verPass ? 'text' : 'password'}
                       className={`form-control ${errores.contrasena ? 'error' : ''}`}
                       placeholder={esNuevo ? 'Mínimo 8 caracteres' : '••••••••'}
                       value={form.contrasena}
                       onChange={set('contrasena')}
-                      style={{ paddingRight: 40 }}
                     />
-                    <button type="button" onClick={() => setVerPass(v => !v)}
-                      style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', color:'#8ea5be', cursor:'pointer' }}>
+                    <button type="button" className="password-toggle" onClick={() => setVerPass(v => !v)}>
                       {verPass ? <EyeOff size={15} /> : <Eye size={15} />}
                     </button>
                   </div>
@@ -287,24 +285,23 @@ export default function Usuarios() {
                         {u.esta_activo ? 'Activo' : 'Inactivo'}
                       </span>
                     </td>
-                    <td style={{ color: 'var(--text-muted)', fontSize: 12.5 }}>
+                    <td className="table-cell-muted">
                       {u.ultimo_acceso ? new Date(u.ultimo_acceso).toLocaleString('es-PE') : '—'}
                     </td>
                     <td>
                       <div className="td-actions">
-                        <button className="btn btn-ghost btn-icon btn-sm" onClick={() => irAEditar(u)} title="Editar">
+                        <button className="btn btn-ghost btn-icon btn-sm btn-action-edit" onClick={() => irAEditar(u)} title="Editar">
                           <Pencil size={14} />
                         </button>
                         <button
-                          className="btn btn-ghost btn-icon btn-sm"
+                          className={`btn btn-ghost btn-icon btn-sm btn-action-toggle ${u.esta_activo ? 'is-active' : 'is-inactive'}`}
                           onClick={() => toggleEstado(u)}
                           title={u.esta_activo ? 'Desactivar' : 'Activar'}
-                          style={{ color: u.esta_activo ? 'var(--warning)' : 'var(--success)' }}
                         >
                           {u.esta_activo ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
                         </button>
                         <button
-                          className="btn btn-danger btn-icon btn-sm"
+                          className="btn btn-danger btn-icon btn-sm btn-action-delete"
                           onClick={() => setConfirmar({ id: u.id, correo: u.correo })}
                           title="Eliminar"
                         >

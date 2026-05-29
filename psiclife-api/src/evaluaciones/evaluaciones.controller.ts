@@ -154,4 +154,13 @@ export class EvaluacionesController {
     const datos = await this.evaluacionesService.anularAplicacion(id)
     return { mensaje: 'Evaluación anulada correctamente', datos }
   }
+
+  @Delete('aplicaciones/:id')
+  @Permisos('evaluaciones.eliminar')
+  @ApiOperation({ summary: 'Eliminar permanentemente una aplicación de evaluación' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  async eliminarAplicacion(@Param('id', ParseUUIDPipe) id: string) {
+    const datos = await this.evaluacionesService.eliminarAplicacion(id)
+    return { mensaje: 'Evaluación eliminada correctamente', datos }
+  }
 }

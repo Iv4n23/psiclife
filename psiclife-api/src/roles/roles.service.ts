@@ -10,7 +10,7 @@ import { CrearRolDto, ActualizarRolDto } from './dto/roles.dto'
 const PROTEGIDOS = ['Administrador', 'Psicólogo', 'Recepcionista', 'Paciente']
 
 const PERMISOS_VACIOS = [
-  'usuarios','roles','categorias','productos','web_medica',
+  'usuarios','roles','categorias','servicios','web_medica',
   'disponibilidad','pacientes','citas','diagnosticos',
   'evaluaciones','actividades','facturacion','reportes','auditoria',
 ].reduce((acc, m) => ({ ...acc, [m]: { ver:false, crear:false, editar:false, eliminar:false } }), {})

@@ -3,7 +3,8 @@ import { useState, useEffect } from 'react'
 import { facturacionApi, pacientesApi, psicologosApi, citasApi, configuracionApi } from '../services/api'
 import { EmptyState, Spinner } from '../components/ui/index.jsx'
 import toast from 'react-hot-toast'
-import { Plus, X, Save, Eye, DollarSign, TrendingUp, CheckCircle, AlertTriangle, ImageOff } from 'lucide-react'
+import { Plus, X, Save, Eye, DollarSign, TrendingUp, CheckCircle, AlertTriangle, ImageOff, Trash2 } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
 
 const API_BASE = import.meta.env.VITE_API_URL?.replace('/api/v1', '') ?? 'http://localhost:3000'
 
@@ -18,6 +19,7 @@ const ESTADO_BADGE = {
 const IGV_RATE = 0.18
 
 export default function Facturacion() {
+  const { puedo } = useAuth()
   const [facturas,   setFacturas]   = useState([])
   const [cargando,   setCargando]   = useState(true)
   const [guardando,  setGuardando]  = useState(false)
@@ -140,6 +142,18 @@ export default function Facturacion() {
       toast.success('Factura anulada')
       setVista('lista'); await cargar()
     } catch {} finally { setGuardando(false) }
+  }
+
+  const eliminarFactura = async (id) => {
+    if (!window.confirm('¿Estás seguro de que deseas eliminar esta factura de forma permanente? Se eliminarán también los pagos vinculados.')) return
+    try {
+      await facturacionApi.eliminar(id)
+      toast.success('Factura eliminada permanentemente')
+      await cargar()
+    } catch (err) {
+      const msg = err.response?.data?.mensaje ?? 'Error al eliminar factura'
+      toast.error(msg)
+    }
   }
 
   const confirmarPagoYape = async (pagoId) => {
@@ -303,9 +317,9 @@ export default function Facturacion() {
                   {/* Comprobante */}
                   <div style={{ flexShrink: 0 }}>
                     {p.url_comprobante ? (
-                      <a href={`${API_BASE}/${p.url_comprobante}`} target="_blank" rel="noopener noreferrer">
+                      <a href={`${API_BASE}${p.url_comprobante}`} target="_blank" rel="noopener noreferrer">
                         <img
-                          src={`${API_BASE}/${p.url_comprobante}`}
+                          src={`${API_BASE}${p.url_comprobante}`}
                           alt="Comprobante Yape"
                           style={{
                             width: 100, height: 100, objectFit: 'cover',
@@ -550,6 +564,11 @@ export default function Facturacion() {
                         <button className="btn btn-ghost btn-icon btn-sm" onClick={() => verDetalle(f.id)}>
                           <Eye size={13}/>
                         </button>
+                        {puedo('facturacion.eliminar') && (
+                          <button className="btn btn-ghost btn-icon btn-sm" onClick={() => eliminarFactura(f.id)} style={{ color: 'var(--danger)' }} title="Eliminar factura">
+                            <Trash2 size={13}/>
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}

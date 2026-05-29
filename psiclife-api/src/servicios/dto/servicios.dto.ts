@@ -1,4 +1,4 @@
-// src/productos/dto/productos.dto.ts
+// src/servicios/dto/servicios.dto.ts
 import {
   IsString, IsOptional, IsUUID, IsNumber,
   IsPositive, MaxLength, IsArray, ValidateNested, IsInt, Min,
@@ -17,7 +17,7 @@ export class PresentacionDto {
   orden?: number
 }
 
-export class CrearProductoDto {
+export class CrearServicioDto {
   @ApiProperty() @IsString() @MaxLength(200)
   nombre: string
 
@@ -37,4 +37,4 @@ export class CrearProductoDto {
   presentaciones?: PresentacionDto[]
 }
 
-export class ActualizarProductoDto extends PartialType(CrearProductoDto) {}
+export class ActualizarServicioDto extends PartialType(CrearServicioDto) {}
