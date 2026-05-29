@@ -164,8 +164,8 @@ export default function WebMedica() {
             const fd = new FormData()
             fd.append('archivo', esp.file)
             const { data } = await webMedicaApi.subirEspecialidadImagen(fd)
-            // El endpoint devuelve { archivo_info: { ruta_publica } }
-            imagenFinal = data?.archivo_info?.ruta_publica ?? esp.imagen ?? null
+            // El endpoint devuelve el objeto envuelto en data.datos
+            imagenFinal = data?.datos?.archivo_info?.ruta_publica ?? esp.imagen ?? null
           } catch (uploadErr) {
             console.error('Error subiendo imagen de especialidad:', uploadErr)
             toast.error(`Error subiendo imagen de "${esp.nombre}"`)

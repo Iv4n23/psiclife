@@ -82,8 +82,8 @@ export const serviciosApi = {
   crear:               (data)      => api.post('/servicios', data),
   actualizar:          (id, d)     => api.patch(`/servicios/${id}`, d),
   eliminar:            (id)        => api.delete(`/servicios/${id}`),
-  subirFotoPrincipal:  (id, form)  => api.post(`/servicios/${id}/foto-principal`, form),
-  subirFotoSecundaria: (id, form)  => api.post(`/servicios/${id}/fotos`, form),
+  subirFotoPrincipal:  (id, form)  => api.post(`/servicios/${id}/foto-principal`, form, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  subirFotoSecundaria: (id, form)  => api.post(`/servicios/${id}/fotos`, form, { headers: { 'Content-Type': 'multipart/form-data' } }),
   eliminarFoto:        (id, fid)   => api.delete(`/servicios/${id}/fotos/${fid}`),
   agregarPresentacion: (id, data)  => api.post(`/servicios/${id}/presentaciones`, data),
   eliminarPresentacion:(id, pid)   => api.delete(`/servicios/${id}/presentaciones/${pid}`),
@@ -92,9 +92,9 @@ export const serviciosApi = {
 export const webMedicaApi = {
   obtener:           ()      => api.get('/web-medica'),
   actualizar:        (data)  => api.patch('/web-medica', data),
-  subirLogo:         (form)  => api.post('/web-medica/logo', form),
-  subirDirectorFoto: (form)  => api.post('/web-medica/director-foto', form),
-  subirEspecialidadImagen: (form) => api.post('/web-medica/archivo', form),
+  subirLogo:         (form)  => api.post('/web-medica/logo', form, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  subirDirectorFoto: (form)  => api.post('/web-medica/director-foto', form, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  subirEspecialidadImagen: (form) => api.post('/web-medica/archivo', form, { headers: { 'Content-Type': 'multipart/form-data' } }),
 }
 
 export const disponibilidadApi = {

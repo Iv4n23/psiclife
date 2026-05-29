@@ -82,16 +82,16 @@ export default function LandingPage() {
           .slice(0, 3)
         setEquipo(psicologos)
 
-        // Servicios / Productos
+        // Servicios
         const dataProd = resProd?.data?.datos || []
-        const todosProductos = Array.isArray(dataProd) ? dataProd : []
+        const todosServicios = Array.isArray(dataProd) ? dataProd : []
         
         const serviciosDesdeWeb = resWeb?.data?.datos?.servicios_destacados
         if (serviciosDesdeWeb && Array.isArray(serviciosDesdeWeb) && serviciosDesdeWeb.length > 0) {
           setServicios(serviciosDesdeWeb.slice(0, 5))
         } else {
-          const activos = todosProductos.filter(p => p.esta_activo !== false)
-          setServicios((activos.length > 0 ? activos : todosProductos).slice(0, 5))
+          const activos = todosServicios.filter(p => p.esta_activo !== false)
+          setServicios((activos.length > 0 ? activos : todosServicios).slice(0, 5))
         }
         
         // Cargar horarios del primer psicólogo (si existe)

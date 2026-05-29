@@ -5,8 +5,7 @@ import { EmptyState, Spinner } from '../components/ui/index.jsx'
 import toast from 'react-hot-toast'
 import { Plus, X, Save, Eye, DollarSign, TrendingUp, CheckCircle, AlertTriangle, ImageOff, Trash2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-
-const API_BASE = import.meta.env.VITE_API_URL?.replace('/api/v1', '') ?? 'http://localhost:3000'
+import { getImageUrl } from '../utils/image'
 
 const ESTADO_BADGE = {
   pendiente:   'badge-warning',
@@ -317,9 +316,9 @@ export default function Facturacion() {
                   {/* Comprobante */}
                   <div style={{ flexShrink: 0 }}>
                     {p.url_comprobante ? (
-                      <a href={`${API_BASE}${p.url_comprobante}`} target="_blank" rel="noopener noreferrer">
+                      <a href={getImageUrl(p.url_comprobante)} target="_blank" rel="noopener noreferrer">
                         <img
-                          src={`${API_BASE}${p.url_comprobante}`}
+                          src={getImageUrl(p.url_comprobante)}
                           alt="Comprobante Yape"
                           style={{
                             width: 100, height: 100, objectFit: 'cover',

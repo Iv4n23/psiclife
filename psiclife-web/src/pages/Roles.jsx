@@ -6,7 +6,7 @@ import toast from 'react-hot-toast'
 import { Plus, Pencil, Trash2, ArrowLeft, ShieldCheck } from 'lucide-react'
 
 const MODULOS = [
-  'usuarios','roles','categorias','productos','web_medica',
+  'usuarios','roles','categorias','servicios','web_medica',
   'disponibilidad','pacientes','citas','diagnosticos',
   'evaluaciones','actividades','facturacion','reportes','auditoria',
 ]

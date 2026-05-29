@@ -19,7 +19,7 @@ const NAV_STAFF = [
     { label: 'Usuarios',       path: '/usuarios',       icon: Users,        permiso: 'usuarios.ver' },
     { label: 'Roles',          path: '/roles',          icon: Shield,       permiso: 'roles.ver' },
     { label: 'Categorías',     path: '/categorias',     icon: Tag,          permiso: 'categorias.ver' },
-    { label: 'Servicios',      path: '/servicios',      icon: Package,      permiso: 'productos.ver' },
+    { label: 'Servicios',      path: '/servicios',      icon: Package,      permiso: 'servicios.ver' },
     { label: 'Web Médica',     path: '/web-medica',     icon: Globe,        permiso: 'web_medica.ver' },
   ]},
   { seccion: 'Clínico', items: [

@@ -1141,7 +1141,7 @@ function DashboardStaff() {
     { label:'Pacientes activos',  num: stats?.pacientes ?? 0, icon:Users,     color:'hsl(210,72%,52%)',  bg:'rgba(33, 150, 243, 0.08)' },
     { label:'Usuarios activos',   num: stats?.usuarios ?? 0,  icon:UserCheck, color:'hsl(145,62%,42%)',  bg:'rgba(76, 175, 80, 0.08)' },
     { label:'Roles definidos',    num: stats?.roles ?? 0,     icon:Shield,    color:'hsl(262,68%,58%)',  bg:'rgba(156, 39, 176, 0.08)' },
-    { label:'Productos',          num: stats?.productos ?? 0, icon:Package,   color:'hsl(38,88%,50%)',   bg:'rgba(255, 152, 0, 0.08)' },
+    { label:'Servicios',          num: stats?.servicios ?? 0, icon:Package,   color:'hsl(38,88%,50%)',   bg:'rgba(255, 152, 0, 0.08)' },
     { label:'Categorías',         num: stats?.categorias ?? 0,icon:Tag,       color:'hsl(316,65%,52%)',  bg:'rgba(233, 30, 99, 0.08)' },
     { label:'Citas para hoy',     num: stats?.citasHoy ?? 0,  icon:Calendar,  color:'hsl(354,72%,52%)',  bg:'rgba(244, 67, 54, 0.08)' },
   ]
