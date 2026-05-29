@@ -1,0 +1,123 @@
+/* Navbar.module.css */
+.nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  padding: 20px 0;
+  transition: all .3s;
+}
+.nav.scrolled {
+  background: rgba(255,255,255,0.94);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(42,173,219,.1);
+  box-shadow: 0 2px 24px rgba(42,173,219,.06);
+}
+.inner {
+  max-width: 1200px; margin: 0 auto; padding: 0 48px;
+  display: flex; align-items: center; justify-content: space-between; gap: 32px;
+}
+.logo {
+  font-family: 'Playfair Display', serif;
+  font-size: 24px; font-weight: 600; color: var(--ink);
+  letter-spacing: -.3px; flex-shrink: 0;
+}
+.logo em { font-style: italic; color: var(--c2); }
+
+/* Si el logo viene como imagen, limitar su tamaño para que no desborde */
+.logo img,
+.logoImg {
+  display: block;
+  height: 48px;
+  width: auto;
+  object-fit: contain;
+}
+
+.nav.scrolled .logo img,
+.nav.scrolled .logoImg {
+  height: 40px;
+}
+
+.links {
+  display: flex; gap: 28px; list-style: none; align-items: center;
+}
+.links a {
+  font-size: 14px; font-weight: 400; color: var(--ink2);
+  transition: color .2s; white-space: nowrap;
+}
+.links a:hover { color: var(--ink); }
+
+.actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+
+.btnLogin {
+  padding: 8px 20px; border-radius: 100px;
+  font-size: 14px; font-weight: 400; color: var(--ink2);
+  border: 1.5px solid var(--c4); transition: all .2s;
+}
+.btnLogin:hover { background: var(--c3); color: var(--ink); border-color: var(--c); }
+
+.btnAgendar {
+  padding: 8px 22px; border-radius: 100px;
+  font-size: 14px; font-weight: 500;
+  background: linear-gradient(135deg, var(--c), var(--c2));
+  color: #fff; box-shadow: 0 4px 16px rgba(42,173,219,.3);
+  transition: all .2s;
+}
+.btnAgendar:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(42,173,219,.4); }
+
+.hamburger {
+  display: none; flex-direction: column; gap: 4px;
+  width: 28px; padding: 4px;
+}
+.hamburger span {
+  display: block; height: 2px; border-radius: 2px;
+  background: var(--ink); transition: all .2s;
+}
+
+@media (max-width: 860px) {
+  .links {
+    display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(255,255,255,.97); backdrop-filter: blur(20px);
+    flex-direction: column; justify-content: center; gap: 32px;
+    font-size: 18px; z-index: 99;
+  }
+  .links.open { display: flex; }
+  .hamburger { display: flex; }
+  .inner { padding: 0 24px; }
+  .btnLogin { display: none; }
+  .logo img, .logoImg { height: 40px }
+}
+
+.userMenu {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--c), var(--c2));
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(42,173,219,.2);
+}
+
+.btnLogout {
+  padding: 8px;
+  border-radius: 50%;
+  color: var(--ink2);
+  transition: all .2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.btnLogout:hover {
+  background: #fef2f2;
+  color: #ef4444;
+}
+

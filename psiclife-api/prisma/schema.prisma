@@ -1,0 +1,739 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model roles {
+  id             String     @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  nombre         String     @unique(map: "uq_roles_nombre") @db.VarChar(60)
+  descripcion    String?    @db.VarChar(255)
+  permisos       Json
+  es_del_sistema Boolean    @default(false)
+  esta_activo    Boolean    @default(true)
+  creado_en      DateTime   @default(now()) @db.DateTime(0)
+  actualizado_en DateTime   @default(now()) @updatedAt @db.DateTime(0)
+  usuarios       usuarios[]
+}
+
+model usuarios {
+  id                           String                  @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  rol_id                       String                  @db.Char(36)
+  correo                       String                  @unique(map: "uq_usuarios_correo") @db.VarChar(255)
+  contrasena_hash              String                  @db.Text
+  esta_activo                  Boolean                 @default(true)
+  ultimo_acceso                DateTime?               @db.DateTime(0)
+  creado_en                    DateTime                @default(now()) @db.DateTime(0)
+  actualizado_en               DateTime                @default(now()) @updatedAt @db.DateTime(0)
+  act_biblioteca               act_biblioteca[]
+  asistencias                  asistencias[]           @relation("asistencias_registrador")
+  auditoria                    auditoria[]
+  bloqueos_creados             bloqueos_agenda[]       @relation("bloqueos_creador")
+  pacientes                    pacientes[]
+  pagos                        pagos[]
+  psicologos                   psicologos?
+  refresh_tokens               refresh_tokens[]
+  sesiones                     sesiones[]
+  solicitudes_como_resolutor   solicitudes_reembolso[] @relation("solicitudes_resolutor")
+  solicitudes_como_solicitante solicitudes_reembolso[] @relation("solicitudes_solicitante")
+  tokens_recuperacion          tokens_recuperacion[]
+  rol                          roles                   @relation(fields: [rol_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_usuarios_rol")
+
+  @@index([rol_id], map: "idx_usuarios_rol")
+}
+
+model sesiones {
+  id             String   @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  usuario_id     String   @db.Char(36)
+  ip_origen      String?  @db.VarChar(45)
+  agente_usuario String?  @db.Text
+  creado_en      DateTime @default(now()) @db.DateTime(0)
+  usuario        usuarios @relation(fields: [usuario_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_sesiones_usuario")
+
+  @@index([usuario_id], map: "idx_sesiones_usuario")
+}
+
+model refresh_tokens {
+  id         String   @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  usuario_id String   @db.Char(36)
+  token_hash String   @db.Text
+  expira_en  DateTime @db.DateTime(0)
+  revocado   Boolean  @default(false)
+  creado_en  DateTime @default(now()) @db.DateTime(0)
+  usuario    usuarios @relation(fields: [usuario_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_refresh_usuario")
+
+  @@index([usuario_id], map: "idx_refresh_usuario")
+}
+
+model tokens_recuperacion {
+  id         String   @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  usuario_id String   @db.Char(36)
+  token_hash String   @db.Text
+  expira_en  DateTime @db.DateTime(0)
+  usado      Boolean  @default(false)
+  creado_en  DateTime @default(now()) @db.DateTime(0)
+  usuario    usuarios @relation(fields: [usuario_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_tokens_rec_usuario")
+
+  @@index([usuario_id], map: "idx_tokens_rec_usuario")
+}
+
+model pacientes {
+  id                     String                           @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  usuario_id             String?                          @db.Char(36)
+  nombres                String                           @db.VarChar(100)
+  apellidos              String                           @db.VarChar(100)
+  tipo_documento         String                           @default("DNI") @db.VarChar(10)
+  numero_documento       String                           @unique(map: "uq_pacientes_doc") @db.VarChar(20)
+  fecha_nacimiento       DateTime?                        @db.Date
+  sexo                   String?                          @db.Char(1)
+  telefono               String?                          @db.VarChar(20)
+  whatsapp               String?                          @db.VarChar(20)
+  correo_personal        String?                          @db.VarChar(255)
+  empresa_u_organizacion String?                          @db.VarChar(150)
+  cargo                  String?                          @db.VarChar(100)
+  direccion              String?                          @db.Text
+  contacto_emergencia    String?                          @db.VarChar(150)
+  telefono_emergencia    String?                          @db.VarChar(20)
+  es_menor_de_edad       Boolean                          @default(false)
+  tutor_legal            String?                          @db.VarChar(150)
+  canal_primer_contacto  pacientes_canal_primer_contacto? @default(whatsapp)
+  estado_paciente        pacientes_estado_paciente        @default(activo)
+  notas_generales        String?                          @db.Text
+  creado_en              DateTime                         @default(now()) @db.DateTime(0)
+  actualizado_en         DateTime                         @default(now()) @updatedAt @db.DateTime(0)
+  act_asignaciones       act_asignaciones[]
+  citas                  citas[]
+  dx_diagnosticos        dx_diagnosticos[]
+  eva_aplicaciones       eva_aplicaciones[]
+  facturas               facturas[]
+  usuario                usuarios?                        @relation(fields: [usuario_id], references: [id], onUpdate: NoAction, map: "fk_pacientes_usuario")
+
+  @@index([usuario_id], map: "fk_pacientes_usuario")
+  @@index([apellidos, nombres], map: "idx_pacientes_apellidos")
+  @@index([estado_paciente], map: "idx_pacientes_estado")
+}
+
+model psicologos {
+  id                  String             @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  usuario_id          String             @unique(map: "uq_psicologos_usuario") @db.Char(36)
+  nombres             String             @db.VarChar(100)
+  apellidos           String             @db.VarChar(100)
+  numero_colegiatura  String             @unique(map: "uq_psicologos_colegiatura") @db.VarChar(30)
+  especialidad        String?            @default("Psicología Organizacional") @db.VarChar(150)
+  descripcion_perfil  String?            @db.Text
+  foto_url            String?            @db.Text
+  duracion_sesion_min Int                @default(60) @db.SmallInt
+  precio_sesion       Decimal            @default(0.00) @db.Decimal(10, 2)
+  esta_activo         Boolean            @default(true)
+  creado_en           DateTime           @default(now()) @db.DateTime(0)
+  actualizado_en      DateTime           @default(now()) @updatedAt @db.DateTime(0)
+  act_asignaciones    act_asignaciones[]
+  bloqueos_agenda     bloqueos_agenda[]
+  citas               citas[]
+  dx_diagnosticos     dx_diagnosticos[]
+  eva_aplicaciones    eva_aplicaciones[]
+  facturas            facturas[]
+  horarios            horarios[]
+  usuario             usuarios           @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_psicologos_usuario")
+}
+
+model horarios {
+  id              String              @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  psicologo_id    String              @db.Char(36)
+  dia_semana      horarios_dia_semana
+  hora_inicio     String              @db.VarChar(5)
+  hora_fin        String              @db.VarChar(5)
+  esta_disponible Boolean             @default(true)
+  psicologo       psicologos          @relation(fields: [psicologo_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_horarios_psicologo")
+
+  @@unique([psicologo_id, dia_semana, hora_inicio], map: "uq_horario_dia")
+  @@index([psicologo_id], map: "idx_horarios_psicologo")
+}
+
+model bloqueos_agenda {
+  id            String     @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  psicologo_id  String     @db.Char(36)
+  fecha_bloqueo DateTime   @db.Date
+  hora_inicio   String?    @db.VarChar(5)
+  hora_fin      String?    @db.VarChar(5)
+  motivo        String?    @db.VarChar(255)
+  creado_por    String?    @db.Char(36)
+  creado_en     DateTime   @default(now()) @db.DateTime(0)
+  creador       usuarios?  @relation("bloqueos_creador", fields: [creado_por], references: [id], onUpdate: NoAction, map: "fk_bloqueos_creador")
+  psicologo     psicologos @relation(fields: [psicologo_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_bloqueos_psicologo")
+
+  @@index([creado_por], map: "fk_bloqueos_creador")
+  @@index([psicologo_id, fecha_bloqueo], map: "idx_bloqueos_psicologo_fecha")
+}
+
+model citas {
+  id                    String                  @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  paciente_id           String                  @db.Char(36)
+  psicologo_id          String                  @db.Char(36)
+  factura_id            String?                 @db.Char(36)
+  numero_sesion         Int                     @default(1) @db.SmallInt
+  programada_para       DateTime                @db.DateTime(0)
+  duracion_minutos      Int                     @default(60) @db.SmallInt
+  modalidad             citas_modalidad         @default(presencial)
+  enlace_reunion        String?                 @db.VarChar(500)
+  estado                citas_estado            @default(pendiente)
+  cancelado_por         citas_cancelado_por?
+  motivo_cancelacion    String?                 @db.Text
+  cita_original_id      String?                 @db.Char(36)
+  notas_sesion          String?                 @db.Text
+  recordatorio_enviado  Boolean                 @default(false)
+  agendado_por          citas_agendado_por?     @default(psicologo)
+  creado_en             DateTime                @default(now()) @db.DateTime(0)
+  actualizado_en        DateTime                @default(now()) @updatedAt @db.DateTime(0)
+  act_asignaciones      act_asignaciones[]
+  asistencias           asistencias?
+  cita_original         citas?                  @relation("reprogramaciones", fields: [cita_original_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_citas_original")
+  reprogramaciones      citas[]                 @relation("reprogramaciones")
+  paciente              pacientes               @relation(fields: [paciente_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_citas_paciente")
+  psicologo             psicologos              @relation(fields: [psicologo_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_citas_psicologo")
+  dx_diagnosticos       dx_diagnosticos[]
+  eva_aplicaciones      eva_aplicaciones[]
+  facturas              facturas?
+  solicitudes_reembolso solicitudes_reembolso[]
+
+  @@index([cita_original_id], map: "fk_citas_original")
+  @@index([estado], map: "idx_citas_estado")
+  @@index([paciente_id], map: "idx_citas_paciente")
+  @@index([programada_para], map: "idx_citas_programada")
+  @@index([psicologo_id], map: "idx_citas_psicologo")
+}
+
+model asistencias {
+  id               String    @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  cita_id          String    @unique(map: "uq_asistencias_cita") @db.Char(36)
+  asistio          Boolean   @default(false)
+  hora_llegada     String?   @db.VarChar(5)
+  minutos_tardanza Int       @default(0) @db.SmallInt
+  justificacion    String?   @db.Text
+  registrado_por   String?   @db.Char(36)
+  registrado_en    DateTime  @default(now()) @db.DateTime(0)
+  cita             citas     @relation(fields: [cita_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_asistencias_cita")
+  registrador      usuarios? @relation("asistencias_registrador", fields: [registrado_por], references: [id], onUpdate: NoAction, map: "fk_asistencias_usuario")
+
+  @@index([registrado_por], map: "fk_asistencias_usuario")
+}
+
+model solicitudes_reembolso {
+  id               String                               @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  cita_id          String                               @db.Char(36)
+  solicitado_por   String                               @db.Char(36)
+  tipo_solicitud   solicitudes_reembolso_tipo_solicitud @default(reembolso)
+  motivo           String                               @db.Text
+  estado           solicitudes_reembolso_estado         @default(pendiente)
+  monto_solicitado Decimal?                             @db.Decimal(10, 2)
+  notas_resolucion String?                              @db.Text
+  resuelto_por     String?                              @db.Char(36)
+  solicitado_en    DateTime                             @default(now()) @db.DateTime(0)
+  resuelto_en      DateTime?                            @db.DateTime(0)
+  cita             citas                                @relation(fields: [cita_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_solicitudes_cita")
+  resolutor        usuarios?                            @relation("solicitudes_resolutor", fields: [resuelto_por], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_solicitudes_resolutor")
+  solicitante      usuarios                             @relation("solicitudes_solicitante", fields: [solicitado_por], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_solicitudes_solicitante")
+
+  @@index([resuelto_por], map: "fk_solicitudes_resolutor")
+  @@index([solicitado_por], map: "fk_solicitudes_solicitante")
+  @@index([cita_id], map: "idx_solicitudes_cita")
+  @@index([estado], map: "idx_solicitudes_estado")
+}
+
+model dx_catalogo {
+  id              String              @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  codigo          String              @db.VarChar(20)
+  sistema         dx_catalogo_sistema @default(CIE_10)
+  nombre          String              @db.VarChar(255)
+  descripcion     String?             @db.Text
+  categoria       String?             @db.VarChar(150)
+  esta_activo     Boolean             @default(true)
+  dx_diagnosticos dx_diagnosticos[]
+
+  @@unique([codigo, sistema], map: "uq_dx_codigo_sistema")
+}
+
+model dx_diagnosticos {
+  id                String               @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  paciente_id       String               @db.Char(36)
+  psicologo_id      String               @db.Char(36)
+  catalogo_id       String               @db.Char(36)
+  cita_id           String?              @db.Char(36)
+  tipo              dx_diagnosticos_tipo @default(presuntivo)
+  observaciones     String?              @db.Text
+  fecha_diagnostico DateTime             @db.Date
+  fecha_cierre      DateTime?            @db.Date
+  creado_en         DateTime             @default(now()) @db.DateTime(0)
+  actualizado_en    DateTime             @default(now()) @updatedAt @db.DateTime(0)
+  catalogo          dx_catalogo          @relation(fields: [catalogo_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_dx_catalogo")
+  cita              citas?               @relation(fields: [cita_id], references: [id], onUpdate: NoAction, map: "fk_dx_cita")
+  paciente          pacientes            @relation(fields: [paciente_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_dx_paciente")
+  psicologo         psicologos           @relation(fields: [psicologo_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_dx_psicologo")
+
+  @@index([cita_id], map: "fk_dx_cita")
+  @@index([psicologo_id], map: "fk_dx_psicologo")
+  @@index([catalogo_id], map: "idx_dx_catalogo")
+  @@index([paciente_id], map: "idx_dx_paciente")
+}
+
+model eva_instrumentos {
+  id                    String                @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  nombre                String                @db.VarChar(200)
+  codigo_instrumento    String                @unique(map: "uq_eva_codigo") @db.VarChar(50)
+  descripcion           String?               @db.Text
+  tipo                  eva_instrumentos_tipo @default(cuestionario)
+  area_evaluada         String?               @db.VarChar(150)
+  instrucciones         String?               @db.Text
+  escala_global_json    Json?
+  reglas_interpretacion Json?
+  esta_activo           Boolean               @default(true)
+  creado_en             DateTime              @default(now()) @db.DateTime(0)
+  eva_aplicaciones      eva_aplicaciones[]
+  eva_items             eva_items[]
+}
+
+model eva_items {
+  id             String                   @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  instrumento_id String                   @db.Char(36)
+  numero_item    Int                      @db.SmallInt
+  enunciado      String                   @db.Text
+  tipo_respuesta eva_items_tipo_respuesta @default(likert)
+  opciones_json  Json?
+  puntaje_maximo Decimal?                 @db.Decimal(5, 2)
+  instrumento    eva_instrumentos         @relation(fields: [instrumento_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_eva_item_instrumento")
+  eva_respuestas eva_respuestas[]
+
+  @@unique([instrumento_id, numero_item], map: "uq_eva_item")
+}
+
+model eva_aplicaciones {
+  id               String                  @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  paciente_id      String                  @db.Char(36)
+  psicologo_id     String                  @db.Char(36)
+  instrumento_id   String                  @db.Char(36)
+  cita_id          String?                 @db.Char(36)
+  estado           eva_aplicaciones_estado @default(pendiente)
+  puntaje_total    Decimal?                @db.Decimal(8, 2)
+  interpretacion   String?                 @db.Text
+  fecha_aplicacion DateTime                @db.Date
+  fecha_completado DateTime?               @db.DateTime(0)
+  creado_en        DateTime                @default(now()) @db.DateTime(0)
+  actualizado_en   DateTime                @default(now()) @updatedAt @db.DateTime(0)
+  cita             citas?                  @relation(fields: [cita_id], references: [id], onUpdate: NoAction, map: "fk_eva_app_cita")
+  instrumento      eva_instrumentos        @relation(fields: [instrumento_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_eva_app_instrumento")
+  paciente         pacientes               @relation(fields: [paciente_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_eva_app_paciente")
+  psicologo        psicologos              @relation(fields: [psicologo_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_eva_app_psicologo")
+  eva_respuestas   eva_respuestas[]
+
+  @@index([cita_id], map: "fk_eva_app_cita")
+  @@index([psicologo_id], map: "fk_eva_app_psicologo")
+  @@index([instrumento_id], map: "idx_eva_app_instrumento")
+  @@index([paciente_id], map: "idx_eva_app_paciente")
+}
+
+model eva_respuestas {
+  id                 String           @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  aplicacion_id      String           @db.Char(36)
+  item_id            String           @db.Char(36)
+  respuesta_texto    String?          @db.Text
+  respuesta_numerica Decimal?         @db.Decimal(8, 2)
+  puntaje_obtenido   Decimal?         @db.Decimal(5, 2)
+  respondido_en      DateTime         @default(now()) @db.DateTime(0)
+  aplicacion         eva_aplicaciones @relation(fields: [aplicacion_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_eva_resp_aplicacion")
+  item               eva_items        @relation(fields: [item_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_eva_resp_item")
+
+  @@unique([aplicacion_id, item_id], map: "uq_eva_respuesta")
+  @@index([item_id], map: "fk_eva_resp_item")
+}
+
+model act_biblioteca {
+  id               String              @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  titulo           String              @db.VarChar(200)
+  tipo             act_biblioteca_tipo @default(tarea)
+  descripcion      String?             @db.Text
+  contenido_html   String?             @db.LongText
+  archivo_url      String?             @db.Text
+  area_psicologica String?             @db.VarChar(100)
+  creado_por       String              @db.Char(36)
+  esta_activo      Boolean             @default(true)
+  creado_en        DateTime            @default(now()) @db.DateTime(0)
+  actualizado_en   DateTime            @default(now()) @updatedAt @db.DateTime(0)
+  act_asignaciones act_asignaciones[]
+  creador          usuarios            @relation(fields: [creado_por], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_act_bib_creador")
+
+  @@index([creado_por], map: "fk_act_bib_creador")
+}
+
+model act_asignaciones {
+  id                String                  @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  paciente_id       String                  @db.Char(36)
+  psicologo_id      String                  @db.Char(36)
+  actividad_id      String                  @db.Char(36)
+  cita_id           String?                 @db.Char(36)
+  instrucciones     String?                 @db.Text
+  fecha_asignacion  DateTime                @db.Date
+  fecha_limite      DateTime?               @db.Date
+  estado            act_asignaciones_estado @default(pendiente)
+  retroalimentacion String?                 @db.Text
+  completada_en     DateTime?               @db.DateTime(0)
+  creado_en         DateTime                @default(now()) @db.DateTime(0)
+  actualizado_en    DateTime                @default(now()) @updatedAt @db.DateTime(0)
+  actividad         act_biblioteca          @relation(fields: [actividad_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_act_asig_actividad")
+  cita              citas?                  @relation(fields: [cita_id], references: [id], onUpdate: NoAction, map: "fk_act_asig_cita")
+  paciente          pacientes               @relation(fields: [paciente_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_act_asig_paciente")
+  psicologo         psicologos              @relation(fields: [psicologo_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_act_asig_psicologo")
+  act_respuestas    act_respuestas[]
+
+  @@index([actividad_id], map: "fk_act_asig_actividad")
+  @@index([cita_id], map: "fk_act_asig_cita")
+  @@index([psicologo_id], map: "fk_act_asig_psicologo")
+  @@index([estado], map: "idx_act_asig_estado")
+  @@index([paciente_id], map: "idx_act_asig_paciente")
+}
+
+model act_respuestas {
+  id                String           @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  asignacion_id     String           @db.Char(36)
+  contenido         String?          @db.LongText
+  archivos_adjuntos Json?
+  porcentaje_avance Int              @default(0) @db.TinyInt
+  enviado_en        DateTime         @default(now()) @db.DateTime(0)
+  asignacion        act_asignaciones @relation(fields: [asignacion_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_act_resp_asignacion")
+
+  @@index([asignacion_id], map: "fk_act_resp_asignacion")
+}
+
+model categorias {
+  id             String      @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  nombre         String      @unique(map: "uq_categorias_nombre") @db.VarChar(100)
+  descripcion    String?     @db.VarChar(255)
+  esta_activa    Boolean     @default(true)
+  creado_en      DateTime    @default(now()) @db.DateTime(0)
+  actualizado_en DateTime    @default(now()) @updatedAt @db.DateTime(0)
+  productos      productos[]
+}
+
+model productos {
+  id                       String                     @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  categoria_id             String                     @db.Char(36)
+  nombre                   String                     @db.VarChar(200)
+  descripcion              String?                    @db.Text
+  precio                   Decimal                    @default(0.00) @db.Decimal(10, 2)
+  foto_principal           String?                    @db.Text
+  esta_activo              Boolean                    @default(true)
+  creado_en                DateTime                   @default(now()) @db.DateTime(0)
+  actualizado_en           DateTime                   @default(now()) @updatedAt @db.DateTime(0)
+  categoria                categorias                 @relation(fields: [categoria_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_productos_categoria")
+  productos_fotos          productos_fotos[]
+  productos_presentaciones productos_presentaciones[]
+
+  @@index([categoria_id], map: "idx_productos_categoria")
+}
+
+model productos_fotos {
+  id          String    @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  producto_id String    @db.Char(36)
+  url         String    @db.Text
+  alt_text    String?   @db.VarChar(255)
+  orden       Int       @default(0)
+  creado_en   DateTime  @default(now()) @db.DateTime(0)
+  producto    productos @relation(fields: [producto_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_prod_fotos_producto")
+
+  @@index([producto_id], map: "idx_prod_fotos_producto")
+}
+
+model productos_presentaciones {
+  id             String    @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  producto_id    String    @db.Char(36)
+  titulo         String    @db.VarChar(150)
+  contenido      String    @db.Text
+  orden          Int       @default(0)
+  creado_en      DateTime  @default(now()) @db.DateTime(0)
+  actualizado_en DateTime  @default(now()) @updatedAt @db.DateTime(0)
+  producto       productos @relation(fields: [producto_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_prod_pres_producto")
+
+  @@index([producto_id], map: "idx_prod_pres_producto")
+}
+
+model facturas {
+  id                   String          @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  cita_id              String          @unique(map: "uq_facturas_cita") @db.Char(36)
+  paciente_id          String          @db.Char(36)
+  psicologo_id         String          @db.Char(36)
+  numero_factura       String          @unique(map: "uq_facturas_numero") @db.VarChar(30)
+  descripcion_servicio String          @default("Consulta psicológica") @db.VarChar(255)
+  subtotal             Decimal         @default(0.00) @db.Decimal(10, 2)
+  igv                  Decimal         @default(0.00) @db.Decimal(10, 2)
+  total                Decimal         @default(0.00) @db.Decimal(10, 2)
+  estado               facturas_estado @default(pendiente)
+  emitida_en           DateTime        @default(now()) @db.DateTime(0)
+  actualizado_en       DateTime        @default(now()) @updatedAt @db.DateTime(0)
+  cita                 citas           @relation(fields: [cita_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_facturas_cita")
+  paciente             pacientes       @relation(fields: [paciente_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_facturas_paciente")
+  psicologo            psicologos      @relation(fields: [psicologo_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_facturas_psicologo")
+  pagos                pagos[]
+
+  @@index([psicologo_id], map: "fk_facturas_psicologo")
+  @@index([estado], map: "idx_facturas_estado")
+  @@index([paciente_id], map: "idx_facturas_paciente")
+}
+
+model pagos {
+  id                String       @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  factura_id        String       @db.Char(36)
+  monto             Decimal      @db.Decimal(10, 2)
+  metodo            pagos_metodo
+  codigo_referencia String?      @db.VarChar(100)
+  url_comprobante   String?      @db.Text
+  confirmado        Boolean      @default(true)
+  registrado_por    String       @db.Char(36)
+  pagado_en         DateTime     @default(now()) @db.DateTime(0)
+  factura           facturas     @relation(fields: [factura_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_pagos_factura")
+  registrador       usuarios     @relation(fields: [registrado_por], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_pagos_usuario")
+
+  @@index([registrado_por], map: "fk_pagos_usuario")
+  @@index([factura_id], map: "idx_pagos_factura")
+  @@index([metodo], map: "idx_pagos_metodo")
+}
+
+model cor_plantillas {
+  id             String     @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  codigo         String     @unique(map: "uq_cor_codigo") @db.VarChar(60)
+  nombre         String     @db.VarChar(150)
+  asunto         String     @db.VarChar(255)
+  cuerpo_html    String     @db.LongText
+  esta_activa    Boolean    @default(true)
+  creado_en      DateTime   @default(now()) @db.DateTime(0)
+  actualizado_en DateTime   @default(now()) @updatedAt @db.DateTime(0)
+  cola           cor_cola[]
+}
+
+model cor_cola {
+  id              String          @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  plantilla_id    String?         @db.Char(36)
+  destinatario    String          @db.VarChar(255)
+  asunto          String          @db.VarChar(255)
+  cuerpo_html     String          @db.LongText
+  variables_json  Json?
+  entidad_origen  String?         @db.VarChar(60)
+  entidad_id      String?         @db.Char(36)
+  estado          cor_cola_estado @default(pendiente)
+  intentos        Int             @default(0) @db.TinyInt
+  max_intentos    Int             @default(3) @db.TinyInt
+  ultimo_error    String?         @db.Text
+  programado_para DateTime?       @db.DateTime(0)
+  enviado_en      DateTime?       @db.DateTime(0)
+  creado_en       DateTime        @default(now()) @db.DateTime(0)
+  actualizado_en  DateTime        @default(now()) @updatedAt @db.DateTime(0)
+  plantilla       cor_plantillas? @relation(fields: [plantilla_id], references: [id], onUpdate: NoAction, map: "fk_cor_plantilla")
+
+  @@index([plantilla_id], map: "fk_cor_plantilla")
+  @@index([estado, programado_para], map: "idx_cor_cola_estado")
+  @@index([entidad_origen, entidad_id], map: "idx_cor_entidad")
+}
+
+model web_medica {
+  id                     String   @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  nombre_consultorio     String   @default("PsicLife") @db.VarChar(150)
+  titulo_principal       String?  @db.VarChar(255)
+  slogan                 String?  @db.VarChar(255)
+  descripcion            String?  @db.Text
+  etiqueta_hero          String?  @db.VarChar(100)
+  direccion              String?  @db.VarChar(255)
+  telefono               String?  @db.VarChar(20)
+  whatsapp               String?  @db.VarChar(20)
+  correo_contacto        String?  @db.VarChar(255)
+  logo_url               String?  @db.Text
+  mision                 String?  @db.Text
+  vision                 String?  @db.Text
+  redes_sociales_json    Json?
+  director_foto          String?  @db.Text
+  director_nombre        String?  @db.VarChar(150)
+  director_rol           String?  @db.VarChar(150)
+  director_frase         String?  @db.VarChar(255)
+  director_bio           String?  @db.Text
+  mostrar_equipo         Boolean  @default(true)
+  mostrar_especialidades Boolean  @default(true)
+  mostrar_horarios       Boolean  @default(true)
+  
+  proceso_json           Json?
+  testimonios_json       Json?
+  faq_json               Json?
+  para_quien_json        Json?
+  servicios_sub          String?  @db.VarChar(255)
+  
+  mostrar_proceso        Boolean  @default(true)
+  mostrar_para_quien     Boolean  @default(true)
+  mostrar_testimonios    Boolean  @default(true)
+  mostrar_faq            Boolean  @default(true)
+  especialidades_json    Json?
+
+  actualizado_en         DateTime @default(now()) @updatedAt @db.DateTime(0)
+}
+
+model auditoria {
+  id               String    @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  usuario_id       String?   @db.Char(36)
+  accion           String    @db.VarChar(100)
+  modulo           String    @db.VarChar(60)
+  entidad_id       String?   @db.Char(36)
+  datos_anteriores Json?
+  datos_nuevos     Json?
+  ip_origen        String?   @db.VarChar(45)
+  creado_en        DateTime  @default(now()) @db.DateTime(0)
+  usuario          usuarios? @relation(fields: [usuario_id], references: [id], onUpdate: NoAction, map: "fk_auditoria_usuario")
+
+  @@index([accion], map: "idx_auditoria_accion")
+  @@index([creado_en], map: "idx_auditoria_creado")
+  @@index([modulo], map: "idx_auditoria_modulo")
+  @@index([usuario_id], map: "idx_auditoria_usuario")
+}
+
+enum act_biblioteca_tipo {
+  tarea
+  cartilla
+  tecnica
+  recurso
+  ejercicio
+}
+
+enum dx_catalogo_sistema {
+  CIE_10  @map("CIE-10")
+  DSM_5   @map("DSM-5")
+  INTERNO
+}
+
+enum horarios_dia_semana {
+  lunes
+  martes
+  miercoles
+  jueves
+  viernes
+  sabado
+  domingo
+}
+
+model sys_configuracion {
+  id             String   @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  clave          String   @unique(map: "uq_sys_config_clave") @db.VarChar(100)
+  valor          Json
+  descripcion    String?  @db.VarChar(255)
+  actualizado_en DateTime @default(now()) @updatedAt @db.DateTime(0)
+}
+
+enum pagos_metodo {
+  efectivo
+  yape
+  transferencia
+  tarjeta
+}
+
+enum solicitudes_reembolso_tipo_solicitud {
+  reembolso
+  reprogramacion
+}
+
+enum eva_instrumentos_tipo {
+  cuestionario
+  cartilla
+  prueba_proyectiva
+  escala
+  inventario
+  otro
+}
+
+enum eva_items_tipo_respuesta {
+  likert
+  opcion_multiple
+  abierta
+  si_no
+  numerica
+}
+
+enum dx_diagnosticos_tipo {
+  principal
+  secundario
+  presuntivo
+  descartado
+}
+
+enum eva_aplicaciones_estado {
+  pendiente
+  en_progreso
+  completado
+  anulado
+}
+
+enum solicitudes_reembolso_estado {
+  pendiente
+  aprobado
+  rechazado
+  procesado
+}
+
+enum citas_modalidad {
+  presencial
+  virtual
+}
+
+enum act_asignaciones_estado {
+  pendiente
+  en_progreso
+  completada
+  omitida
+}
+
+enum cor_cola_estado {
+  pendiente
+  enviado
+  fallido
+  reintentando
+}
+
+enum citas_estado {
+  pendiente
+  confirmada
+  completada
+  cancelada
+  reprogramada
+  no_asistio
+}
+
+enum facturas_estado {
+  pendiente
+  pagada
+  reembolsada
+  parcial
+  anulada
+}
+
+enum citas_cancelado_por {
+  paciente
+  psicologo
+  administrador
+}
+
+enum citas_agendado_por {
+  paciente
+  psicologo
+  recepcionista
+  sistema
+}
+
+enum pacientes_canal_primer_contacto {
+  whatsapp
+  web
+  telefono
+  referido
+  otro
+}
+
+enum pacientes_estado_paciente {
+  activo
+  inactivo
+  alta
+  derivado
+}

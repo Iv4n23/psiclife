@@ -1,0 +1,235 @@
+/* FormAgendarCita.module.css */
+.wrap {
+  background: #fff;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--c4);
+  box-shadow: 0 8px 48px rgba(42,173,219,.08);
+  overflow: hidden;
+}
+
+/* ── Progress ── */
+.progress {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 24px 32px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--c4);
+  position: relative;
+}
+.progressLine {
+  position: absolute; left: 32px; right: 32px;
+  top: 50%; transform: translateY(-50%);
+  height: 2px; background: var(--c4); z-index: 0;
+}
+.progressLineFill {
+  height: 100%; background: var(--c);
+  border-radius: 2px; transition: width .4s ease;
+}
+.progressItem {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  position: relative; z-index: 1;
+}
+.progressDot {
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 2px solid var(--c4);
+  background: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 600; color: var(--ink3);
+  transition: all .3s;
+}
+.progressActive .progressDot {
+  border-color: var(--c); color: var(--c);
+  box-shadow: 0 0 0 4px rgba(42,173,219,.1);
+}
+.progressDone .progressDot {
+  background: var(--c); border-color: var(--c);
+  color: #fff;
+}
+.progressLabel {
+  font-size: 11px; font-weight: 500; color: var(--ink3);
+  white-space: nowrap;
+}
+.progressActive .progressLabel { color: var(--c2); }
+.progressDone .progressLabel   { color: var(--ink2); }
+
+/* ── Paso ── */
+.paso {
+  padding: 32px;
+  animation: slideIn .3s ease;
+}
+@keyframes slideIn { from { opacity:0; transform: translateY(10px) } to { opacity:1; transform: none } }
+
+.pasoTitle {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 24px; font-weight: 400;
+  color: var(--ink); margin-bottom: 5px; letter-spacing: -.3px;
+}
+.pasoSub { font-size: 14px; color: var(--ink3); margin-bottom: 24px; }
+
+/* ── Fields ── */
+.fRow { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.fGroup { margin-bottom: 16px; }
+.fLabel {
+  display: block; font-size: 11px; font-weight: 500;
+  letter-spacing: .5px; text-transform: uppercase;
+  color: var(--ink3); margin-bottom: 6px;
+}
+.fLabel span { color: var(--c); }
+.opt { color: var(--ink3); font-weight: 400; letter-spacing: 0; text-transform: none; font-size: 10px; }
+.fInput {
+  width: 100%; padding: 11px 16px; border-radius: 12px;
+  border: 1.5px solid var(--c4); background: var(--bg2);
+  color: var(--ink); font-size: 15px; font-weight: 500;
+  outline: none; transition: all .2s;
+}
+.fInput::placeholder { color: var(--ink2); font-weight: 400; }
+.fInput:focus {
+  border-color: var(--c); background: #fff;
+  box-shadow: 0 0 0 3px rgba(42,173,219,.08);
+}
+.fInput.error { border-color: #e03050; }
+.fError { font-size: 11.5px; color: #e03050; margin-top: 4px; display: block; }
+
+/* ── Opciones servicio ── */
+.opciones { display: flex; flex-direction: column; gap: 8px; }
+.opcion {
+  display: flex; align-items: center; gap: 14px;
+  padding: 13px 16px; border-radius: 12px;
+  border: 1.5px solid var(--c4);
+  background: var(--bg2); cursor: pointer;
+  transition: all .2s;
+}
+.opcion:hover { border-color: var(--c); background: var(--c3); }
+.opcionSel { border-color: var(--c); background: var(--c3); }
+.opcionEmoji { font-size: 22px; flex-shrink: 0; }
+.opcionNombre { font-size: 14px; font-weight: 500; color: var(--ink); }
+.opcionSub    { font-size: 12px; color: var(--ink3); }
+.opcionCheck {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 2px solid var(--c4); margin-left: auto; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: transparent; transition: all .2s;
+}
+.opcionSel .opcionCheck { background: var(--c); border-color: var(--c); color: #fff; }
+
+/* ── Modalidad ── */
+.modalidadBtns { display: flex; gap: 10px; }
+.modalidadBtn {
+  flex: 1; padding: 11px; border-radius: 12px;
+  border: 1.5px solid var(--c4); font-size: 14px;
+  font-weight: 500; color: var(--ink2);
+  background: var(--bg2); transition: all .2s;
+}
+.modalidadBtn:hover { border-color: var(--c); color: var(--ink); }
+.modalidadSel { background: var(--c3); border-color: var(--c); color: var(--c2); }
+
+/* ── Horarios ── */
+.horariosGrid {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 8px; margin-bottom: 10px;
+}
+.horario {
+  padding: 10px; border-radius: 10px; text-align: center;
+  border: 1.5px solid var(--c4); font-size: 13.5px;
+  font-weight: 400; color: var(--ink2);
+  background: var(--bg2); cursor: pointer; transition: all .2s;
+}
+.horario:hover { border-color: var(--c); color: var(--c2); }
+.horarioSel   { background: var(--c); border-color: var(--c); color: #fff; font-weight: 500; }
+.horarioOcupado {
+  opacity: .35; cursor: not-allowed;
+  text-decoration: line-through; pointer-events: none;
+}
+.horariosLeyenda {
+  display: flex; gap: 16px; font-size: 12px; color: var(--ink3);
+  align-items: center;
+}
+.dotSel  { display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--c); margin-right: 5px; vertical-align: middle; }
+.dotDisp { display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--bg2); border: 1.5px solid var(--c4); margin-right: 5px; vertical-align: middle; }
+.dotOcup { display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--bg2); border: 1.5px solid var(--c4); margin-right: 5px; vertical-align: middle; opacity: .35; }
+
+/* ── Resumen ── */
+.resumen {
+  background: var(--bg2); border-radius: 14px;
+  border: 1px solid var(--c4); padding: 20px;
+  margin-bottom: 14px;
+}
+.resRow {
+  display: flex; justify-content: space-between;
+  font-size: 14px; padding: 8px 0;
+  border-bottom: 1px dashed var(--c4);
+}
+.resRow:last-child { border-bottom: none; }
+.resRow span { color: var(--ink3); }
+.resRow b    { color: var(--ink); font-weight: 500; max-width: 60%; text-align: right; }
+.resTotal span { color: var(--ink); font-weight: 500; }
+.resTotal b    { color: var(--c2); }
+.resNota { font-size: 13px; color: var(--ink3); line-height: 1.65; }
+
+/* ── Nav ── */
+.nav {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 20px 32px;
+  border-top: 1px solid var(--c4);
+  background: var(--bg2);
+  gap: 12px;
+}
+.btnBack {
+  display: flex; align-items: center; gap: 6px;
+  padding: 11px 22px; border-radius: 100px;
+  font-size: 14px; font-weight: 400;
+  border: 1.5px solid var(--c4); color: var(--ink2);
+  transition: all .2s;
+}
+.btnBack:hover { border-color: var(--c); color: var(--ink); }
+.btnNext {
+  flex: 1; display: flex; align-items: center;
+  justify-content: center; gap: 6px;
+  padding: 12px 28px; border-radius: 100px;
+  font-size: 14px; font-weight: 500;
+}
+.btnNext:disabled { opacity: .65; cursor: not-allowed; transform: none !important; }
+
+/* ── Éxito ── */
+.exito {
+  padding: 48px 32px; text-align: center;
+}
+.exitoIcon {
+  width: 80px; height: 80px; border-radius: 50%;
+  background: var(--c3); color: var(--c2);
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 20px;
+}
+.exitoTitle {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 32px; font-weight: 400;
+  color: var(--ink); margin-bottom: 12px; letter-spacing: -.5px;
+}
+.exitoSub {
+  font-size: 15px; color: var(--ink2); line-height: 1.75;
+  font-weight: 300; margin-bottom: 28px; max-width: 380px; margin-left: auto; margin-right: auto;
+}
+.exitoCard {
+  background: var(--c3); border-radius: 14px;
+  border: 1px solid var(--c4); padding: 20px;
+  text-align: left; margin-bottom: 24px;
+  max-width: 360px; margin-left: auto; margin-right: auto;
+}
+.exitoRow {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 14px; padding: 7px 0;
+  border-bottom: 1px dashed var(--c4);
+}
+.exitoRow:last-child { border-bottom: none; }
+.exitoRow span { color: var(--c5); font-weight: 500; }
+.exitoRow b    { color: var(--ink); font-weight: 400; }
+.exitoBtn { margin: 0 auto; }
+
+/* Responsive */
+@media (max-width: 640px) {
+  .progress { padding: 18px 20px; }
+  .progressLabel { display: none; }
+  .paso { padding: 24px 20px; }
+  .nav  { padding: 16px 20px; }
+  .fRow { grid-template-columns: 1fr; }
+  .horariosGrid { grid-template-columns: repeat(3, 1fr); }
+}
