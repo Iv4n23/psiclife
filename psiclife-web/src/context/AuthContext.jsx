@@ -69,6 +69,10 @@ export function AuthProvider({ children }) {
   // Verificar permiso del usuario actual
   // permisos vienen como objeto: { usuarios: { ver: true }, roles: ... }
   const puedo = (permiso) => {
+    const rol = typeof usuario?.rol === 'string' ? usuario.rol.toLowerCase() : ''
+    const esAdmin = rol.includes('admin') || rol.includes('administrador')
+    if (esAdmin) return true
+
     if (!usuario?.permisos) return false
     
     if (typeof usuario.permisos === 'object' && !Array.isArray(usuario.permisos)) {

@@ -179,6 +179,21 @@ export default function Sesiones() {
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
                   {new Date(detalle.programada_para).toLocaleString('es-PE')} — {detalle.modalidad}
                 </div>
+                {detalle.modalidad === 'virtual' && (
+                  <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-secondary)' }}>
+                    {(() => {
+                      const [plataforma, enlace] = detalle.enlace_reunion?.includes('::')
+                        ? detalle.enlace_reunion.split('::')
+                        : [detalle.plataforma_virtual || 'Zoom', detalle.enlace_reunion || '']
+                      return (
+                        <>
+                          <div><b>Medio:</b> {plataforma}</div>
+                          <div><b>Enlace / contacto:</b> {enlace || '—'}</div>
+                        </>
+                      )
+                    })()}
+                  </div>
+                )}
               </div>
               {detalle.estado !== 'completada' && (
                 <button className="btn btn-success btn-sm" onClick={marcarCompletada} disabled={guardando}>

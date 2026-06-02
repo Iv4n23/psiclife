@@ -8,7 +8,7 @@ import { useAuth } from '../context/AuthContext'
 import { getImageUrl } from '../utils/image'
 
 const ESTADO_BADGE = {
-  pendiente:   'badge-warning',
+  pendiente:   'badge-info',
   pagada:      'badge-success',
   parcial:     'badge-info',
   anulada:     'badge-danger',
@@ -16,6 +16,7 @@ const ESTADO_BADGE = {
 }
 
 const IGV_RATE = 0.18
+const API_BASE = import.meta.env.VITE_API_URL?.replace('/api/v1', '') ?? 'http://localhost:3000'
 
 export default function Facturacion() {
   const { puedo } = useAuth()
@@ -235,7 +236,7 @@ export default function Facturacion() {
               <div><b>IGV (18%):</b> S/ {Number(detalle.igv).toFixed(2)}</div>
               <div style={{ fontWeight: 600, fontSize: 15 }}><b>Total:</b> S/ {Number(detalle.total).toFixed(2)}</div>
               <div><b>Pagado:</b> S/ {pagado.toFixed(2)}</div>
-              {restante > 0 && <div style={{ color: 'var(--warning)' }}><b>Saldo pendiente:</b> S/ {restante.toFixed(2)}</div>}
+              {restante > 0 && <div style={{ color: 'var(--info)' }}><b>Saldo pendiente:</b> S/ {restante.toFixed(2)}</div>}
             </div>
           </div>
 
@@ -296,13 +297,13 @@ export default function Facturacion() {
         {detalle.pagos?.some(p => p.metodo === 'yape' && p.confirmado === false) && (
           <div className="card" style={{
             marginTop: 16,
-            border: '2px solid hsl(38,85%,65%)',
-            background: 'linear-gradient(135deg, hsl(38,95%,97%), hsl(28,90%,95%))',
+            border: '2px solid rgba(58,174,216,0.25)',
+            background: 'linear-gradient(135deg, rgba(232,246,252,0.95), rgba(217,239,249,0.95))',
           }}>
-            <div className="card-header" style={{ background: 'hsl(38,90%,90%)', borderBottom: '1px solid hsl(38,80%,75%)' }}>
+            <div className="card-header" style={{ background: 'rgba(58,174,216,0.12)', borderBottom: '1px solid rgba(58,174,216,0.2)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <AlertTriangle size={18} color="hsl(28,80%,40%)" />
-                <span className="card-title" style={{ color: 'hsl(28,80%,30%)' }}>Pago(s) Yape Pendientes de Confirmación</span>
+                <AlertTriangle size={18} color="var(--info)" />
+                <span className="card-title" style={{ color: 'var(--info)' }}>Pago(s) Yape Pendientes de Confirmación</span>
               </div>
             </div>
             <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -310,7 +311,7 @@ export default function Facturacion() {
                 <div key={p.id} style={{
                   display: 'flex', gap: 18, alignItems: 'flex-start',
                   padding: '16px 18px', borderRadius: 14,
-                  background: 'white', border: '1.5px solid hsl(38,75%,75%)',
+                  background: 'var(--surface)', border: '1.5px solid rgba(58,174,216,0.22)',
                   boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
                 }}>
                   {/* Comprobante */}
@@ -322,29 +323,29 @@ export default function Facturacion() {
                           alt="Comprobante Yape"
                           style={{
                             width: 100, height: 100, objectFit: 'cover',
-                            borderRadius: 10, border: '2px solid hsl(38,75%,70%)',
+                            borderRadius: 10, border: '2px solid rgba(58,174,216,0.4)',
                             cursor: 'pointer', transition: 'transform 0.2s',
                           }}
                           onMouseOver={e => e.currentTarget.style.transform='scale(1.05)'}
                           onMouseOut={e => e.currentTarget.style.transform='scale(1)'}
                         />
-                        <div style={{ fontSize: 11, color: 'hsl(28,70%,45%)', textAlign: 'center', marginTop: 4 }}>Ver completo</div>
+                        <div style={{ fontSize: 11, color: 'var(--info)', textAlign: 'center', marginTop: 4 }}>Ver completo</div>
                       </a>
                     ) : (
                       <div style={{
                         width: 100, height: 100, borderRadius: 10,
-                        background: 'hsl(38,60%,92%)', border: '2px dashed hsl(38,60%,70%)',
+                        background: 'var(--info-bg)', border: '2px dashed rgba(58,174,216,0.4)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 6,
                       }}>
-                        <ImageOff size={24} color="hsl(38,60%,55%)" />
-                        <span style={{ fontSize: 10, color: 'hsl(38,50%,50%)' }}>Sin imagen</span>
+                        <ImageOff size={24} color="var(--info)" />
+                        <span style={{ fontSize: 10, color: 'var(--info)' }}>Sin imagen</span>
                       </div>
                     )}
                   </div>
 
                   {/* Datos */}
                   <div style={{ flex: 1, fontSize: 13 }}>
-                    <div style={{ fontWeight: 700, color: 'hsl(28,80%,30%)', marginBottom: 8, fontSize: 14 }}>Detalle del pago Yape</div>
+                    <div style={{ fontWeight: 700, color: 'var(--info)', marginBottom: 8, fontSize: 14 }}>Detalle del pago Yape</div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                       <div><span style={{ color: 'var(--text-muted)' }}>Monto:</span> <strong>S/ {Number(p.monto).toFixed(2)}</strong></div>
                       <div><span style={{ color: 'var(--text-muted)' }}>Código:</span> <strong style={{ fontFamily: 'monospace' }}>{p.codigo_referencia ?? '—'}</strong></div>
@@ -353,8 +354,8 @@ export default function Facturacion() {
                         <span style={{
                           display: 'inline-flex', alignItems: 'center', gap: 4,
                           padding: '2px 10px', borderRadius: 20, fontSize: 11.5, fontWeight: 600,
-                          background: 'hsl(38,90%,85%)', color: 'hsl(28,80%,35%)',
-                          border: '1px solid hsl(38,75%,65%)',
+                          background: 'var(--info-bg)', color: 'var(--info)',
+                          border: '1px solid rgba(58,174,216,0.35)',
                         }}>
                           ⏳ Pendiente de revisión
                         </span>
@@ -369,12 +370,12 @@ export default function Facturacion() {
                       disabled={guardando}
                       style={{
                         padding: '10px 18px',
-                        background: 'linear-gradient(135deg, hsl(145,65%,40%), hsl(160,60%,38%))',
+                        background: 'linear-gradient(135deg, rgba(58,174,216,0.95), rgba(58,174,216,0.8))',
                         color: 'white', border: 'none', borderRadius: 10,
                         fontSize: 13, fontWeight: 700, cursor: guardando ? 'not-allowed' : 'pointer',
                         display: 'flex', alignItems: 'center', gap: 7,
                         opacity: guardando ? 0.7 : 1, transition: 'all 0.2s',
-                        boxShadow: '0 4px 14px rgba(34,197,94,0.3)',
+                        boxShadow: '0 4px 14px rgba(58,174,216,0.25)',
                       }}
                     >
                       <CheckCircle size={16} />
@@ -402,7 +403,7 @@ export default function Facturacion() {
                       <td style={{ color: 'var(--text-muted)', fontSize: 12.5 }}>{p.codigo_referencia ?? '—'}</td>
                       <td>
                         {p.metodo === 'yape' ? (
-                          <span className={`badge ${p.confirmado ? 'badge-success' : 'badge-warning'}`}>
+                          <span className={`badge ${p.confirmado ? 'badge-success' : 'badge-info'}`}>
                             {p.confirmado ? '✓ Confirmado' : '⏳ Pendiente'}
                           </span>
                         ) : (
@@ -534,7 +535,7 @@ export default function Facturacion() {
           </div>
           {reporte.por_metodo?.map(m => (
             <div className="stat-card" key={m.metodo}>
-              <div className="stat-icon" style={{ background: 'var(--warning-bg)' }}><DollarSign size={18} color="var(--warning)"/></div>
+              <div className="stat-icon" style={{ background: 'var(--info-bg)' }}><DollarSign size={18} color="var(--info)"/></div>
               <div>
                 <div className="stat-num">S/ {Number(m._sum?.monto ?? 0).toFixed(2)}</div>
                 <div className="stat-label">{m.metodo} ({m._count?.metodo} pagos)</div>

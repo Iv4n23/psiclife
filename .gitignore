@@ -45,6 +45,12 @@ prisma/*.db-journal
 uploads/
 **/uploads/
 
+# Bizagi
+BIZAGI_PROCESOS.md
+*.bpm
+*.bpmn
+*.bizagi
+
 # Temporales
 *.tmp
 *.temp

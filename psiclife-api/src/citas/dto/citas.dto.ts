@@ -131,6 +131,14 @@ export class SolicitarCitaPublicaDto {
   @IsOptional() @IsString()
   modalidad?: citas_modalidad
 
+  @ApiPropertyOptional()
+  @IsOptional() @IsString()
+  plataforma_virtual?: string
+
+  @ApiPropertyOptional()
+  @IsOptional() @IsString()
+  enlace_reunion?: string
+
   @ApiPropertyOptional({ description: 'UUID del psicólogo preferido (opcional)' })
   @IsOptional() @IsUUID()
   psicologo_id?: string

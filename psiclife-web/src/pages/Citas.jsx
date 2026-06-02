@@ -109,10 +109,12 @@ export default function Citas() {
   const [modalEliminar,   setModalEliminar]   = useState(null)
   const [modalReprogramar, setModalReprogramar] = useState(null)
   const [formReprogramar, setFormReprogramar] = useState({ programada_para: '', modalidad: 'presencial', plataforma_virtual: 'zoom', enlace_reunion: '' })
+  const [detalleCita,     setDetalleCita]     = useState(null)
 
   const { puedo } = useAuth()
 
   useEffect(() => { cargar() }, [mesActual, añoActual])
+  useEffect(() => { setDetalleCita(null) }, [diaSelec])
 
   // Cargar slots disponibles al cambiar fecha o psicólogo
   useEffect(() => {
@@ -773,12 +775,15 @@ export default function Citas() {
                 .sort((a, b) => new Date(a.programada_para) - new Date(b.programada_para))
                 .map(c => {
                   const col = colorCita(c)
+                  const isSelected = detalleCita?.id === c.id
                   return (
-                    <div key={c.id} style={{
+                    <div key={c.id} onClick={() => setDetalleCita(c)} style={{
+                      cursor: 'pointer',
                       borderRadius: 12,
-                      border: `1.5px solid ${col.border}`,
-                      background: col.bg,
+                      border: isSelected ? '2px solid var(--celeste)' : `1.5px solid ${col.border}`,
+                      background: isSelected ? 'rgba(58,174,216,0.08)' : col.bg,
                       overflow: 'hidden',
+                      boxShadow: isSelected ? '0 0 0 3px rgba(58,174,216,0.12)' : undefined,
                     }}>
                       {/* Franja de color superior */}
                       <div style={{ height: 3, background: col.dot, borderRadius: '12px 12px 0 0' }} />
@@ -830,9 +835,7 @@ export default function Citas() {
                               <button
                                 className="btn btn-warning btn-sm"
                                 style={{ fontSize: 11, padding: '4px 10px', background: 'var(--warning-bg)', border: '1px solid var(--warning)', color: 'var(--text-primary)' }}
-                                onClick={() => {
-                                  setModalReprogramar(c)
-                                  setFormReprogramar({
+                                onClick={e => { e.stopPropagation(); setModalReprogramar(c); setFormReprogramar({
                                     programada_para: new Date(c.programada_para).toLocaleString('sv').replace(' ', 'T').slice(0,16),
                                     modalidad: c.modalidad || 'presencial',
                                     plataforma_virtual: c.enlace_reunion?.includes('::') ? c.enlace_reunion.split('::')[0] : 'zoom',
@@ -849,14 +852,14 @@ export default function Citas() {
                               <button
                                 className="btn btn-ghost btn-sm"
                                 style={{ fontSize: 11, padding: '4px 10px' }}
-                                onClick={() => { setModalAsistencia(c); setAsistencia({ asistio: true, hora_llegada: '', minutos_tardanza: 0 }) }}
+                                onClick={e => { e.stopPropagation(); setModalAsistencia(c); setAsistencia({ asistio: true, hora_llegada: '', minutos_tardanza: 0 }) }}
                               >
                                 <CheckCircle size={12} /> Asistencia
                               </button>
                               <button
                                 className="btn btn-danger btn-sm"
                                 style={{ fontSize: 11, padding: '4px 10px' }}
-                                onClick={() => { setModalCancelar(c); setMotivoCancelar('') }}
+                                onClick={e => { e.stopPropagation(); setModalCancelar(c); setMotivoCancelar('') }}
                               >
                                 <XCircle size={12} /> Cancelar
                               </button>
@@ -872,7 +875,7 @@ export default function Citas() {
                                 color: 'var(--danger)',
                                 borderRadius: 6,
                               }}
-                              onClick={() => setModalEliminar(c)}
+                              onClick={e => { e.stopPropagation(); setModalEliminar(c) }}
                               title="Eliminar cita permanentemente"
                             >
                               <Trash2 size={12} /> Eliminar
@@ -883,6 +886,36 @@ export default function Citas() {
                     </div>
                   )
                 })
+            )}
+            {detalleCita && (
+              <div className="card" style={{ marginTop: 14, borderRadius: 14, border: '1px solid var(--border)' }}>
+                <div className="card-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span className="card-title">Detalle de cita seleccionada</span>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setDetalleCita(null)}>Cerrar</button>
+                </div>
+                <div className="card-body" style={{ display: 'grid', gap: 12, fontSize: 13.5 }}>
+                  <div><b>Paciente:</b> {detalleCita.paciente?.nombres} {detalleCita.paciente?.apellidos}</div>
+                  <div><b>Psicólogo:</b> {detalleCita.psicologo?.nombres} {detalleCita.psicologo?.apellidos}</div>
+                  <div><b>Fecha y hora:</b> {new Date(detalleCita.programada_para).toLocaleString('es-PE', { dateStyle: 'medium', timeStyle: 'short' })}</div>
+                  <div><b>Duración:</b> {detalleCita.duracion_minutos ?? 60} minutos</div>
+                  <div><b>Modalidad:</b> {detalleCita.modalidad}</div>
+                  {detalleCita.modalidad === 'virtual' && (() => {
+                    const [plataforma, enlace] = detalleCita.enlace_reunion?.includes('::')
+                      ? detalleCita.enlace_reunion.split('::')
+                      : [detalleCita.plataforma_virtual || 'zoom', detalleCita.enlace_reunion || '']
+                    return (
+                      <>
+                        <div><b>Plataforma:</b> {plataforma}</div>
+                        <div><b>Enlace / contacto:</b> {enlace || '—'}</div>
+                      </>
+                    )
+                  })()}
+                  {detalleCita.factura && (
+                    <div><b>Pago:</b> {detalleCita.factura.estado} — S/ {Number(detalleCita.factura.total ?? 0).toFixed(2)}</div>
+                  )}
+                  <div><b>Estado de cita:</b> {detalleCita.estado}</div>
+                </div>
+              </div>
             )}
           </div>
         </div>

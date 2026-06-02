@@ -556,11 +556,16 @@ export class CitasService {
     const programada = new Date(`${dto.fecha}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`)
 
     // 4. Crear la cita (esto también crea la factura automáticamente)
+    const enlace = dto.modalidad === 'virtual' && dto.enlace_reunion
+      ? `${dto.plataforma_virtual ?? 'zoom'}::${dto.enlace_reunion}`
+      : undefined
+
     const citaCreada = await this.crear({
       paciente_id:     paciente.id,
       psicologo_id:    psicologo.id,
       programada_para: programada.toISOString(),
       modalidad:       dto.modalidad ?? 'presencial',
+      enlace_reunion:  enlace,
       agendado_por:    'paciente',
     })
 
