@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { actividadesApi, pacientesApi, psicologosApi, citasApi } from '../services/api'
 import { EmptyState, Spinner } from '../components/ui/index.jsx'
 import toast from 'react-hot-toast'
-import { Plus, X, Save, Eye, BookOpen, ClipboardList, Edit2, Trash2 } from 'lucide-react'
+import { Plus, X, Save, Eye, BookOpen, ClipboardList, Edit2, Trash2, Search } from 'lucide-react'
 import { cleanPayload } from '../utils/payload'
 
 const ESTADO_BADGE = {
@@ -25,6 +25,8 @@ export default function Actividades() {
   const [detalle,      setDetalle]      = useState(null)
   const [errores,      setErrores]      = useState({})
   const [retro,        setRetro]        = useState('')
+  const [busqAsignaciones, setBusqAsignaciones] = useState('')
+  const [busqBiblioteca, setBusqBiblioteca] = useState('')
 
   const [formAsig, setFormAsig] = useState({
     paciente_id: '', psicologo_id: '', actividad_id: '', cita_id: '',
@@ -42,6 +44,16 @@ export default function Actividades() {
   })
 
   const [vistaForm, setVistaForm] = useState('asignacion') // 'asignacion' | 'biblioteca'
+
+  const asignacionesFiltradas = asignaciones.filter(a => {
+    const texto = `${a.paciente?.nombres || ''} ${a.paciente?.apellidos || ''} ${a.actividad?.titulo || ''} ${a.actividad?.tipo || ''} ${a.estado || ''} ${a.fecha_limite ? new Date(a.fecha_limite).toLocaleDateString('es-PE') : ''}`.toLowerCase()
+    return texto.includes(busqAsignaciones.toLowerCase())
+  })
+
+  const bibliotecaFiltrada = biblioteca.filter(a => {
+    const texto = `${a.titulo || ''} ${a.tipo || ''} ${a.area_psicologica || ''}`.toLowerCase()
+    return texto.includes(busqBiblioteca.toLowerCase())
+  })
 
   useEffect(() => { cargar() }, [])
 
@@ -423,13 +435,20 @@ export default function Actividades() {
         </div>
 
         {cargando ? <Spinner /> : tab === 'asignaciones' ? (
-          asignaciones.length === 0
+          asignacionesFiltradas.length === 0
             ? <EmptyState titulo="Sin asignaciones" descripcion="Asigna una actividad a un paciente." />
-            : <div className="table-wrap">
+            : <>
+                <div className="search-box" style={{ maxWidth: 360, margin: '16px 0' }}>
+                  <Search className="search-icon" />
+                  <input className="form-control" style={{ paddingLeft: 34 }}
+                    placeholder="Buscar asignaciones..."
+                    value={busqAsignaciones} onChange={e => setBusqAsignaciones(e.target.value)} />
+                </div>
+                <div className="table-wrap">
                 <table>
                   <thead><tr><th>Paciente</th><th>Actividad</th><th>Tipo</th><th>Límite</th><th>Estado</th><th></th></tr></thead>
                   <tbody>
-                    {asignaciones.map(a => (
+                    {asignacionesFiltradas.map(a => (
                       <tr key={a.id}>
                         <td style={{ fontWeight:500 }}>{a.paciente?.apellidos}, {a.paciente?.nombres}</td>
                         <td>{a.actividad?.titulo}</td>
@@ -456,14 +475,22 @@ export default function Actividades() {
                   </tbody>
                 </table>
               </div>
+            </>
         ) : (
-          biblioteca.length === 0
+          bibliotecaFiltrada.length === 0
             ? <EmptyState titulo="Biblioteca vacía" descripcion="Crea la primera actividad en la biblioteca." />
-            : <div className="table-wrap">
+            : <>
+                <div className="search-box" style={{ maxWidth: 360, margin: '16px 0' }}>
+                  <Search className="search-icon" />
+                  <input className="form-control" style={{ paddingLeft: 34 }}
+                    placeholder="Buscar biblioteca..."
+                    value={busqBiblioteca} onChange={e => setBusqBiblioteca(e.target.value)} />
+                </div>
+                <div className="table-wrap">
                 <table>
                   <thead><tr><th>Título</th><th>Tipo</th><th>Área</th><th>Asignaciones</th><th></th></tr></thead>
                   <tbody>
-                    {biblioteca.map(a => (
+                    {bibliotecaFiltrada.map(a => (
                       <tr key={a.id}>
                         <td style={{ fontWeight:500 }}>{a.titulo}</td>
                         <td><span className="badge badge-muted">{a.tipo}</span></td>
@@ -498,6 +525,7 @@ export default function Actividades() {
                   </tbody>
                 </table>
               </div>
+            </>
         )}
       </div>
     </div>

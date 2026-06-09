@@ -20,7 +20,7 @@ import Citas               from './pages/Citas'
 import Diagnosticos        from './pages/Diagnosticos'
 import Evaluaciones        from './pages/Evaluaciones'
 import Actividades         from './pages/Actividades'
-import Facturacion         from './pages/Facturacion'
+import Pagos               from './pages/Pagos'
 import Sesiones            from './pages/Sesiones'
 
 function PrivadaRoute({ children }) {
@@ -62,7 +62,7 @@ function AppRoutes() {
         <Route path="/diagnosticos"   element={<Diagnosticos />} />
         <Route path="/evaluaciones"   element={<Evaluaciones />} />
         <Route path="/actividades"    element={<Actividades />} />
-        <Route path="/facturacion"    element={<Facturacion />} />
+        <Route path="/pagos"          element={<Pagos />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

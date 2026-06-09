@@ -17,6 +17,7 @@ import { RolesModule }          from './roles/roles.module'
 import { PacientesModule }      from './pacientes/pacientes.module'
 import { PsicologosModule }     from './psicologos/psicologos.module'
 import { DisponibilidadModule } from './disponibilidad/disponibilidad.module'
+import { ResenasModule } from './resenas/resenas.module';
 import { CitasModule }          from './citas/citas.module'
 import { DiagnosticosModule }   from './diagnosticos/diagnosticos.module'
 import { EvaluacionesModule }   from './evaluaciones/evaluaciones.module'
@@ -68,6 +69,7 @@ import { ConfiguracionModule }  from './configuracion/configuracion.module'
     WebMedicaModule,
     DashboardModule,
     ConfiguracionModule,
+    ResenasModule,
   ],
 
   providers: [

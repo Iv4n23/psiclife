@@ -52,14 +52,17 @@ export class CitasService {
         paciente:  { select: { id: true, nombres: true, apellidos: true, telefono: true, whatsapp: true } },
         psicologo: { select: { id: true, nombres: true, apellidos: true } },
         facturas:  { select: { id: true, numero_factura: true, estado: true, total: true } },
+        solicitudes_reembolso: { select: { id: true, estado: true, monto_solicitado: true, tipo_solicitud: true } },
       },
     })
 
-    // Normalizar: exponer la primera factura como campo 'factura' (singular)
-    // para compatibilidad con el frontend de calendario y dashboard
+    // Normalizar: exponer la primera factura y primera solicitud de reembolso
     return citas.map(c => ({
       ...c,
-      factura: c.facturas?.[0] ?? null,
+      factura: c.facturas ?? null,
+      reembolso: c.solicitudes_reembolso?.[0] ?? null,
+      facturas: undefined, // limpiar original para no duplicar
+      solicitudes_reembolso: undefined,
     }))
   }
 
@@ -487,6 +490,28 @@ export class CitasService {
     }).catch(() => {})
 
     return actualizada
+  }
+
+  // ── Listar solicitudes de reembolso ──────────────────────
+  async listarReembolsos(estado?: string) {
+    const where: any = {}
+    if (estado) where.estado = estado
+    return this.prisma.solicitudes_reembolso.findMany({
+      where,
+      orderBy: { solicitado_en: 'desc' },
+      include: {
+        cita: {
+          select: {
+            id: true,
+            programada_para: true,
+            paciente:  { select: { nombres: true, apellidos: true } },
+            psicologo: { select: { nombres: true, apellidos: true } },
+          }
+        },
+        solicitante: { select: { correo: true } },
+        resolutor:   { select: { correo: true } },
+      }
+    })
   }
 
   // ── Eliminar (solo admin) ──────────────────────────────────

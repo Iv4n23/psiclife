@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { diagnosticosApi, pacientesApi, psicologosApi } from '../services/api'
 import { EmptyState, Spinner } from '../components/ui/index.jsx'
 import toast from 'react-hot-toast'
-import { Plus, X, Save, Search } from 'lucide-react'
+import { Plus, X, Save, Search, Pencil, Trash2, AlertTriangle, Brain } from 'lucide-react'
 import { cleanPayload } from '../utils/payload'
 
 const TIPO_BADGE = {
@@ -36,27 +36,39 @@ export default function Diagnosticos() {
   const [modalCatalogo, setModalCatalogo] = useState(false)
   const [formCatalogo, setFormCatalogo]   = useState({ id: null, codigo: '', nombre: '', categoria: '', sistema: 'CIE_10' })
 
+  // Edición/Eliminación de Diagnóstico (paciente)
+  const [modalDx, setModalDx] = useState(false)
+  const [editDxId, setEditDxId] = useState(null)
+  const [confirmElimDx, setConfirmElimDx] = useState(null)
+  const [formDx, setFormDx] = useState({ catalogo_id: '', tipo: 'presuntivo', observaciones: '' })
+
   useEffect(() => { cargar() }, [])
 
   const cargar = async () => {
     setCargando(true)
     try {
-      const [{ data: dp }, { data: dps }, { data: dc }] = await Promise.all([
+      const [{ data: dp }, { data: dps }, { data: dc }, { data: dxs }] = await Promise.all([
         pacientesApi.listar(),
         psicologosApi.listar(),
         diagnosticosApi.catalogo(),
+        diagnosticosApi.listarTodos()
       ])
       setPacientes(dp.datos)
       setPsicologos(dps.datos)
       setCatalogo(dc.datos)
+      setDiagnosticos(dxs.datos || [])
     } catch {} finally { setCargando(false) }
   }
 
   const cargarDiagnosticosPaciente = async (pacienteId) => {
-    if (!pacienteId) { setDiagnosticos([]); return }
+    if (!pacienteId) { 
+      const { data } = await diagnosticosApi.listarTodos()
+      setDiagnosticos(data.datos || [])
+      return 
+    }
     try {
       const { data } = await diagnosticosApi.porPaciente(pacienteId)
-      setDiagnosticos(data.datos)
+      setDiagnosticos(data.datos || [])
     } catch {}
   }
 
@@ -77,9 +89,35 @@ export default function Diagnosticos() {
     try {
       await diagnosticosApi.crear(cleanPayload(form))
       toast.success('Diagnóstico registrado')
-      await cargarDiagnosticosPaciente(form.paciente_id)
+      await cargarDiagnosticosPaciente(busqPaciente ? form.paciente_id : null)
       setVista('lista')
     } catch {} finally { setGuardando(false) }
+  }
+
+  const guardarEdicionDx = async () => {
+    setGuardando(true)
+    try {
+      await diagnosticosApi.actualizar(editDxId, { catalogo_id: formDx.catalogo_id, tipo: formDx.tipo, observaciones: formDx.observaciones })
+      toast.success('Diagnóstico actualizado')
+      setModalDx(false)
+      await cargarDiagnosticosPaciente(busqPaciente ? form.paciente_id : null)
+    } catch { toast.error('Error al actualizar') } finally { setGuardando(false) }
+  }
+
+  const eliminarDx = async (id) => {
+    setGuardando(true)
+    try {
+      await diagnosticosApi.eliminar(id)
+      toast.success('Diagnóstico eliminado')
+      setConfirmElimDx(null)
+      await cargarDiagnosticosPaciente(busqPaciente ? form.paciente_id : null)
+    } catch { toast.error('Error al eliminar') } finally { setGuardando(false) }
+  }
+
+  const abrirEdicionDx = (dx) => {
+    setEditDxId(dx.id)
+    setFormDx({ catalogo_id: dx.catalogo_id ?? '', tipo: dx.tipo ?? 'presuntivo', observaciones: dx.observaciones ?? '' })
+    setModalDx(true)
   }
 
   const guardarCatalogo = async (e) => {
@@ -135,6 +173,11 @@ export default function Diagnosticos() {
     `${p.nombres} ${p.apellidos}`.toLowerCase().includes(busqPaciente.toLowerCase()) ||
     p.numero_documento.includes(busqPaciente)
   )
+
+  const diagnosticosFiltrados = busqPaciente ? diagnosticos.filter(d => 
+    `${d.paciente?.nombres} ${d.paciente?.apellidos}`.toLowerCase().includes(busqPaciente.toLowerCase()) ||
+    d.paciente?.numero_documento?.includes(busqPaciente)
+  ) : diagnosticos;
 
   const renderModalCatalogo = () => {
     if (!modalCatalogo) return null
@@ -304,42 +347,51 @@ export default function Diagnosticos() {
       {tab === 'diagnosticos' ? (
         <>
           <div className="card" style={{ marginBottom: 16 }}>
-        <div className="card-header"><span className="card-title">Buscar diagnósticos por paciente</span></div>
-        <div className="card-body">
-          <div className="search-box" style={{ maxWidth: 400 }}>
-            <Search className="search-icon" />
-            <input className="form-control" style={{ paddingLeft: 34 }}
-              placeholder="Nombre o documento del paciente..."
-              value={busqPaciente} onChange={e => setBusqPaciente(e.target.value)} />
-          </div>
-          {busqPaciente && (
-            <div style={{ marginTop: 10, border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', maxHeight: 160, overflowY: 'auto' }}>
-              {pacientesFiltrados.slice(0, 8).map(p => (
-                <div key={p.id} style={{ padding: '8px 14px', cursor: 'pointer', fontSize: 13, borderBottom: '0.5px solid var(--border)' }}
-                  onClick={() => { setBusqPaciente(`${p.nombres} ${p.apellidos}`); cargarDiagnosticosPaciente(p.id) }}>
-                  {p.apellidos}, {p.nombres} — <span style={{ color: 'var(--text-muted)' }}>{p.numero_documento}</span>
-                </div>
-              ))}
+            <div className="card-header"><span className="card-title">Filtro por Paciente</span></div>
+            <div className="card-body">
+              <div className="search-box" style={{ maxWidth: 400 }}>
+                <Search className="search-icon" />
+                <input className="form-control" style={{ paddingLeft: 34 }}
+                  placeholder="Escribe el nombre o documento para filtrar..."
+                  value={busqPaciente} onChange={e => {
+                    setBusqPaciente(e.target.value)
+                  }} />
+              </div>
             </div>
-          )}
-        </div>
-      </div>
+          </div>
 
       <div className="card">
-        {cargando ? <Spinner /> : diagnosticos.length === 0
-          ? <EmptyState titulo="Sin diagnósticos" descripcion="Busca un paciente para ver sus diagnósticos o registra uno nuevo." />
+        {cargando ? <Spinner /> : diagnosticosFiltrados.length === 0
+          ? <EmptyState titulo="Sin diagnósticos" descripcion="No se encontraron diagnósticos registrados." />
           : (
             <div className="table-wrap">
               <table>
-                <thead><tr><th>Código</th><th>Diagnóstico</th><th>Tipo</th><th>Fecha</th><th>Observaciones</th></tr></thead>
+                <thead><tr><th>Paciente</th><th>Diagnóstico</th><th>Tipo</th><th>Fecha</th><th>Atendido por</th><th>Observaciones</th><th></th></tr></thead>
                 <tbody>
-                  {diagnosticos.map(d => (
+                  {diagnosticosFiltrados.map(d => (
                     <tr key={d.id}>
-                      <td style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--celeste-dark)' }}>{d.catalogo?.codigo}</td>
-                      <td>{d.catalogo?.nombre}</td>
+                      <td>
+                        <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{d.paciente?.nombres} {d.paciente?.apellidos}</div>
+                        <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>{d.paciente?.numero_documento}</div>
+                      </td>
+                      <td>
+                        <div style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--celeste-dark)' }}>{d.catalogo?.codigo}</div>
+                        <div style={{ fontSize: 12.5 }}>{d.catalogo?.nombre}</div>
+                      </td>
                       <td><span className={`badge ${TIPO_BADGE[d.tipo] ?? 'badge-muted'}`}>{d.tipo}</span></td>
                       <td>{new Date(d.fecha_diagnostico).toLocaleDateString('es-PE')}</td>
+                      <td style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>Ps. {d.psicologo?.nombres} {d.psicologo?.apellidos}</td>
                       <td style={{ color: 'var(--text-muted)', fontSize: 12.5 }}>{d.observaciones ?? '—'}</td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button type="button" className="btn btn-ghost btn-icon" onClick={() => abrirEdicionDx(d)}>
+                            <Pencil size={14} />
+                          </button>
+                          <button type="button" className="btn btn-ghost btn-icon" onClick={() => setConfirmElimDx(d.id)} style={{ color: 'var(--danger)' }}>
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -389,6 +441,81 @@ export default function Diagnosticos() {
       )}
 
       {renderModalCatalogo()}
+
+      {/* Modal Confirmar Eliminación Diagnóstico (paciente) */}
+      {confirmElimDx && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ maxWidth: 380 }}>
+            <div className="modal-icon modal-icon-danger"><AlertTriangle size={22} /></div>
+            <div className="modal-title">Eliminar Diagnóstico</div>
+            <div className="modal-desc">¿Estás seguro de que deseas eliminar este diagnóstico? Esta acción no se puede deshacer.</div>
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={() => setConfirmElimDx(null)} disabled={guardando}>Cancelar</button>
+              <button className="btn btn-danger" onClick={() => eliminarDx(confirmElimDx)} disabled={guardando}>
+                {guardando ? 'Eliminando...' : 'Sí, eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Editar Diagnóstico (paciente) */}
+      {modalDx && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ width: 500, maxWidth: '90vw' }}>
+            <div className="modal-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              Editar Diagnóstico
+              <button className="btn btn-ghost btn-sm" onClick={() => setModalDx(false)}><X size={16} /></button>
+            </div>
+            
+            <div className="form-group" style={{ marginBottom: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label className="form-label">Buscar código CIE-10 / DSM-5</label>
+              </div>
+              <div className="search-box" style={{ maxWidth: '100%', marginBottom: 10 }}>
+                <Search className="search-icon" />
+                <input className="form-control" style={{ paddingLeft: 34 }} placeholder="Buscar para cambiar el diagnóstico..."
+                  value={busqCatalogo} onChange={e => setBusqCatalogo(e.target.value)} />
+              </div>
+              <div style={{ maxHeight: 150, overflowY: 'auto', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-sm)' }}>
+                {catalogoFiltrado.slice(0, 20).map(c => (
+                  <div key={c.id} onClick={() => setFormDx(f => ({ ...f, catalogo_id: c.id }))}
+                    style={{
+                      padding: '9px 14px', cursor: 'pointer', fontSize: 13,
+                      background: formDx.catalogo_id === c.id ? 'var(--celeste-light)' : 'transparent',
+                      borderBottom: '0.5px solid var(--border)',
+                    }}>
+                    <span style={{ fontFamily: 'monospace', marginRight: 10, fontWeight: 600 }}>{c.codigo}</span>
+                    {c.nombre}
+                  </div>
+                ))}
+                {catalogoFiltrado.length === 0 && <div style={{ padding: 14, fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>Sin resultados</div>}
+              </div>
+            </div>
+
+
+            <div className="form-group">
+              <label className="form-label">Tipo</label>
+              <select className="form-control" value={formDx.tipo} onChange={e => setFormDx({...formDx, tipo: e.target.value})}>
+                <option value="presuntivo">Presuntivo</option>
+                <option value="principal">Principal</option>
+                <option value="secundario">Secundario</option>
+                <option value="descartado">Descartado</option>
+              </select>
+            </div>
+            <div className="form-group" style={{ marginBottom: 20 }}>
+              <label className="form-label">Observaciones</label>
+              <textarea className="form-control" value={formDx.observaciones} onChange={e => setFormDx({...formDx, observaciones: e.target.value})} />
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={() => setModalDx(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={guardarEdicionDx} disabled={guardando}>
+                {guardando ? 'Guardando...' : 'Actualizar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

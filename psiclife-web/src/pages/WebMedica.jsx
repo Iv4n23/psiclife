@@ -318,7 +318,7 @@ export default function WebMedica() {
               <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
                 JPG, PNG, WebP o SVG — máx. 2MB
               </p>
-              <input ref={inputLogo} type="file" accept="image/*" style={{ display: 'none' }} onChange={onLogo} />
+              <input ref={inputLogo} type="file" accept="image/png, image/jpeg, image/webp, image/svg+xml" style={{ display: 'none' }} onChange={onLogo} />
             </div>
           </div>
         </div>
@@ -472,7 +472,7 @@ export default function WebMedica() {
                     <X size={13} /> Quitar
                   </button>
                 )}
-                <input ref={inputDir} type="file" accept="image/*" style={{ display: 'none' }} onChange={onDir} />
+                <input ref={inputDir} type="file" accept="image/png, image/jpeg, image/webp, image/svg+xml" style={{ display: 'none' }} onChange={onDir} />
               </div>
             </div>
 
@@ -595,7 +595,7 @@ export default function WebMedica() {
                   setNewEspLocalPreview(null)
                 }}>Añadir</button>
               </div>
-              <input ref={inputEspFile} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => {
+              <input ref={inputEspFile} type="file" accept="image/png, image/jpeg, image/webp, image/svg+xml" style={{ display: 'none' }} onChange={(e) => {
                 const f = e.target.files && e.target.files[0]
                 if (!f) return
                 const objUrl = URL.createObjectURL(f)

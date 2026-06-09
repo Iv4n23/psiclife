@@ -39,6 +39,7 @@ export default function FormAgendarCita({ psicologos = [], pagosConfig = {} }) {
     fecha:      hoy,
     hora:       '9:00 AM',
     metodo_pago: 'efectivo',
+    codigo_referencia: '',
     comprobante: null,
   })
 
@@ -233,8 +234,13 @@ export default function FormAgendarCita({ psicologos = [], pagosConfig = {} }) {
     if (!metodo) e.metodo_pago = 'Selecciona un método de pago'
     else if (!activo[metodo]) e.metodo_pago = 'El método seleccionado no está disponible'
     
-    if (metodo === 'yape' && !datos.comprobante) {
-      e.comprobante = 'Debes subir tu comprobante de pago para continuar'
+    if (metodo === 'yape' || metodo === 'transferencia') {
+      if (!datos.codigo_referencia) e.codigo_referencia = 'Requerido'
+      else if (datos.codigo_referencia.trim().length < 8) e.codigo_referencia = 'Ingresa al menos 8 dígitos'
+      
+      if (!datos.comprobante) {
+        e.comprobante = 'Debes subir tu comprobante de pago para continuar'
+      }
     }
     
     setErrores(e)
@@ -275,8 +281,9 @@ export default function FormAgendarCita({ psicologos = [], pagosConfig = {} }) {
       if (datos.psicologo && datos.psicologo.id) payload.append('psicologo_id', datos.psicologo.id)
       payload.append('metodo_pago', datos.metodo_pago)
       
-      if (datos.metodo_pago === 'yape' && datos.comprobante) {
+      if ((datos.metodo_pago === 'yape' || datos.metodo_pago === 'transferencia') && datos.comprobante) {
         payload.append('comprobante', datos.comprobante)
+        payload.append('codigo_referencia', datos.codigo_referencia)
       }
 
       await landingApi.solicitarCita(payload)
@@ -292,7 +299,7 @@ export default function FormAgendarCita({ psicologos = [], pagosConfig = {} }) {
 
   const reset = () => {
     setEnviado(false); setPaso(0)
-    setDatos({ nombres:'', apellidos:'', numero_documento:'', correo:'', whatsapp:'', empresa:'', servicio: SERVICIOS[0], modalidad:'presencial', psicologo:null, fecha:hoy, hora:'9:00 AM', metodo_pago:'efectivo', comprobante:null })
+    setDatos({ nombres:'', apellidos:'', numero_documento:'', correo:'', whatsapp:'', empresa:'', servicio: SERVICIOS[0], modalidad:'presencial', psicologo:null, fecha:hoy, hora:'9:00 AM', metodo_pago:'efectivo', codigo_referencia:'', comprobante:null })
   }
 
   // ── Éxito ──────────────────────────────────────────────────
@@ -508,32 +515,63 @@ export default function FormAgendarCita({ psicologos = [], pagosConfig = {} }) {
                 <div className={styles.opcionCheck}>{datos.metodo_pago === 'yape' && <Check size={12} />}</div>
               </div>
             )}
-            
-            {/* Si eligió YAPE mostramos el QR y pedimos el archivo */}
-            {datos.metodo_pago === 'yape' && pagosConfig.qr_yape && (
-              <div style={{ background: 'rgba(255,255,255,0.05)', padding: 20, borderRadius: 16, marginTop: 12, border: '1px solid rgba(255,255,255,0.1)' }}>
-                <p style={{ fontSize: 14, marginBottom: 16 }}>Escanea el código QR para realizar el pago de tu sesión, o envía el dinero al número <b>{pagosConfig.yape_numero}</b> ({pagosConfig.yape_titular}).</p>
-                <div style={{ textAlign: 'center', marginBottom: 16 }}>
-                  <img src={(import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'http://localhost:3000') + pagosConfig.qr_yape} alt="QR Yape" style={{ width: 180, height: 180, borderRadius: 12, objectFit: 'cover' }} />
-                </div>
-                <div className={styles.fGroup}>
-                  <label className={styles.fLabel}>Sube tu captura de pago <span>*</span></label>
-                  <input type="file" accept="image/*" className={`${styles.fInput} ${errores.comprobante ? styles.error : ''}`}
-                    onChange={e => set('comprobante', e.target.files[0])}
-                    style={{ padding: '8px' }} />
-                  {errores.comprobante && <span className={styles.fError}>{errores.comprobante}</span>}
-                </div>
-              </div>
-            )}
-
             {(!pagosConfig || pagosConfig.pago_transferencia_activo === 'true' || pagosConfig.pago_transferencia_activo === true) && (
               <div className={`${styles.opcion} ${datos.metodo_pago === 'transferencia' ? styles.opcionSel : ''}`} onClick={() => set('metodo_pago', 'transferencia')}>
                 <span className={styles.opcionEmoji}>🏦</span>
                 <div>
                   <div className={styles.opcionNombre}>Transferencia Bancaria</div>
-                  <div className={styles.opcionSub}>A través de tu banco. <strong>Política:</strong> Tienes 6 horas para subir tu comprobante o la cita se cancelará automáticamente.</div>
+                  <div className={styles.opcionSub}>A través de tu banco.</div>
                 </div>
                 <div className={styles.opcionCheck}>{datos.metodo_pago === 'transferencia' && <Check size={12} />}</div>
+              </div>
+            )}
+
+            {/* Inputs compartidos para Yape y Transferencia */}
+            {(datos.metodo_pago === 'yape' || datos.metodo_pago === 'transferencia') && (
+              <div style={{ background: 'rgba(255,255,255,0.05)', padding: 20, borderRadius: 16, marginTop: 12, border: '1px solid rgba(255,255,255,0.1)' }}>
+                {datos.metodo_pago === 'yape' && pagosConfig.qr_yape ? (
+                  <>
+                    <p style={{ fontSize: 14, marginBottom: 16 }}>Escanea el código QR para realizar el pago de tu sesión, o envía el dinero al número <b>{pagosConfig.yape_numero}</b> ({pagosConfig.yape_titular}).</p>
+                    <div style={{ textAlign: 'center', marginBottom: 16 }}>
+                      <img src={(import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'http://localhost:3000') + pagosConfig.qr_yape} alt="QR Yape" style={{ width: 180, height: 180, borderRadius: 12, objectFit: 'cover' }} />
+                    </div>
+                  </>
+                ) : datos.metodo_pago === 'transferencia' ? (
+                  <p style={{ fontSize: 14, marginBottom: 16 }}>Transfiere el monto de tu sesión a la cuenta bancaria <b>{pagosConfig.cuenta_bancaria}</b> ({pagosConfig.banco_nombre} - {pagosConfig.banco_titular}). CCI: {pagosConfig.cuenta_cci}.</p>
+                ) : null}
+
+                <div className={styles.fRow} style={{ gap: 16 }}>
+                  <div className={styles.fGroup} style={{ flex: 1 }}>
+                    <label className={styles.fLabel}>N° de Operación <span>*</span></label>
+                    <input className={`${styles.fInput} ${errores.codigo_referencia ? styles.error : ''}`}
+                      value={datos.codigo_referencia}
+                      maxLength={30}
+                      placeholder="Mín. 8 dígitos"
+                      onChange={e => {
+                        set('codigo_referencia', e.target.value.replace(/\D/g, ''))
+                      }} />
+                    {errores.codigo_referencia && <span className={styles.fError}>{errores.codigo_referencia}</span>}
+                  </div>
+                  <div className={styles.fGroup} style={{ flex: 1 }}>
+                    <label className={styles.fLabel}>Captura de pago <span>*</span></label>
+                    <input type="file" accept="image/*" className={`${styles.fInput} ${errores.comprobante ? styles.error : ''}`}
+                      onChange={e => {
+                        const file = e.target.files[0]
+                        if (!file) return
+                        if (!file.type.startsWith('image/')) {
+                          setErrores(er => ({ ...er, comprobante: 'Solo imágenes' }))
+                          return
+                        }
+                        if (file.size > 5 * 1024 * 1024) {
+                          setErrores(er => ({ ...er, comprobante: 'Máximo 5MB' }))
+                          return
+                        }
+                        set('comprobante', file)
+                      }}
+                      style={{ padding: '8px' }} />
+                    {errores.comprobante && <span className={styles.fError}>{errores.comprobante}</span>}
+                  </div>
+                </div>
               </div>
             )}
           </div>

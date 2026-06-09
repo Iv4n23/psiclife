@@ -19,6 +19,9 @@ export const landingApi = {
   // Obtener servicios/servicios activos
   getServicios: () => api.get('/servicios'),
 
+  // Obtener reseñas publicas
+  getResenasPublicas: () => api.get('/resenas'),
+
   // Obtener horarios de un psicólogo (recurrentes)
   getHorarios: (psicologoId) => api.get(`/disponibilidad/horarios/${psicologoId}`),
 

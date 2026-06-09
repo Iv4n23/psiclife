@@ -55,10 +55,25 @@ export class DiagnosticosService {
   }
 
   // ── Diagnósticos de paciente ───────────────────────────────
+  async listarTodos() {
+    return this.prisma.dx_diagnosticos.findMany({
+      include: {
+        catalogo: true,
+        paciente: { select: { nombres: true, apellidos: true, numero_documento: true } },
+        psicologo: { select: { nombres: true, apellidos: true } },
+      },
+      orderBy: { fecha_diagnostico: 'desc' },
+    })
+  }
+
   async listarPorPaciente(pacienteId: string) {
     return this.prisma.dx_diagnosticos.findMany({
       where:   { paciente_id: pacienteId },
-      include: { catalogo: true },
+      include: {
+        catalogo: true,
+        paciente: { select: { nombres: true, apellidos: true, numero_documento: true } },
+        psicologo: { select: { nombres: true, apellidos: true } },
+      },
       orderBy: { fecha_diagnostico: 'desc' },
     })
   }
@@ -97,6 +112,7 @@ export class DiagnosticosService {
     return this.prisma.dx_diagnosticos.update({
       where: { id },
       data: {
+        catalogo_id:       dto.catalogo_id,
         tipo:              dto.tipo as dx_diagnosticos_tipo,
         observaciones:     dto.observaciones,
 

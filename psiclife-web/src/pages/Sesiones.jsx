@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { citasApi, diagnosticosApi, evaluacionesApi, actividadesApi } from '../services/api'
 import { Spinner, EmptyState } from '../components/ui/index.jsx'
 import toast from 'react-hot-toast'
-import { Calendar, User, Save, FileText, CheckCircle, Brain, ClipboardList, Activity, ExternalLink, X } from 'lucide-react'
+import { Calendar, User, Save, FileText, CheckCircle, Brain, ClipboardList, Activity, ExternalLink, Search, X, Pencil, Trash2, AlertTriangle } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
 export default function Sesiones() {
@@ -12,6 +12,10 @@ export default function Sesiones() {
   const [guardando, setGuardando] = useState(false)
   const [detalle, setDetalle] = useState(null)
   const [notasSesion, setNotasSesion] = useState('')
+  const [busqSesion, setBusqSesion] = useState('')
+  const [busqDx, setBusqDx] = useState('')
+  const [busqEva, setBusqEva] = useState('')
+  const [busqAct, setBusqAct] = useState('')
   const navigate = useNavigate()
 
   // Modales
@@ -28,6 +32,34 @@ export default function Sesiones() {
   const [formDx, setFormDx] = useState({ catalogo_id: '', tipo: 'presuntivo', observaciones: '' })
   const [formEva, setFormEva] = useState({ instrumento_id: '' })
   const [formAct, setFormAct] = useState({ actividad_id: '', instrucciones: '', fecha_limite: '' })
+
+  // Diagnósticos de la sesión actual
+  const [dxSesion, setDxSesion]         = useState([])
+  const [editDxId, setEditDxId]         = useState(null)   // null = crear, id = editar
+  const [confirmElimDx, setConfirmElimDx] = useState(null) // id a eliminar
+
+  const catalogosFiltrados = catalogosDx.filter(d =>
+    d.codigo.toLowerCase().includes(busqDx.toLowerCase()) ||
+    d.nombre.toLowerCase().includes(busqDx.toLowerCase())
+  )
+  const instrumentosFiltrados = instrumentos.filter(i =>
+    i.nombre.toLowerCase().includes(busqEva.toLowerCase()) ||
+    i.codigo_instrumento.toLowerCase().includes(busqEva.toLowerCase()) ||
+    (i.area_evaluada || '').toLowerCase().includes(busqEva.toLowerCase())
+  )
+  const bibliotecaFiltrada = biblioteca.filter(b =>
+    b.titulo.toLowerCase().includes(busqAct.toLowerCase()) ||
+    (b.tipo || '').toLowerCase().includes(busqAct.toLowerCase()) ||
+    (b.area_psicologica || '').toLowerCase().includes(busqAct.toLowerCase())
+  )
+  const sesionesFiltradas = citas.filter(c => {
+    const paciente = `${c.paciente?.nombres || ''} ${c.paciente?.apellidos || ''}`.toLowerCase()
+    return (
+      paciente.includes(busqSesion.toLowerCase()) ||
+      c.estado?.toLowerCase().includes(busqSesion.toLowerCase()) ||
+      new Date(c.programada_para).toLocaleString('es-PE').toLowerCase().includes(busqSesion.toLowerCase())
+    )
+  })
 
   useEffect(() => { cargar() }, [])
 
@@ -50,8 +82,21 @@ export default function Sesiones() {
       const { data } = await citasApi.obtener(id)
       setDetalle(data.datos)
       setNotasSesion(data.datos.notas_sesion || '')
+      // Cargar diagnósticos asociados a este paciente y filtrar por cita
+      await cargarDxSesion(data.datos.paciente_id, id)
     } catch {
       toast.error('Error al cargar detalle')
+    }
+  }
+
+  const cargarDxSesion = async (pacienteId, citaId) => {
+    try {
+      const { data } = await diagnosticosApi.porPaciente(pacienteId)
+      const todos = data.datos || []
+      // Filtrar los que pertenecen a esta cita (cita_id puede ser null en diagnósticos old)
+      setDxSesion(todos.filter(d => d.cita_id === citaId))
+    } catch {
+      setDxSesion([])
     }
   }
 
@@ -84,25 +129,53 @@ export default function Sesiones() {
   }
 
   // --- Accesos Rápidos (Gestión Clínica) ---
-  const abrirModalDx = async () => {
-    setModalDx(true); setFormDx({ catalogo_id: '', tipo: 'presuntivo', observaciones: '' })
+  const abrirModalDx = async (dx = null) => {
+    setBusqDx('')
+    if (dx) {
+      // Modo edición: precargar datos
+      setEditDxId(dx.id)
+      setFormDx({ catalogo_id: dx.catalogo_id ?? '', tipo: dx.tipo ?? 'presuntivo', observaciones: dx.observaciones ?? '' })
+    } else {
+      setEditDxId(null)
+      setFormDx({ catalogo_id: '', tipo: 'presuntivo', observaciones: '' })
+    }
+    setModalDx(true)
     try { const { data } = await diagnosticosApi.catalogo(''); setCatalogosDx(data.datos || []) } catch {}
   }
+
   const guardarDx = async () => {
-    if(!formDx.catalogo_id) return toast.error('Selecciona un diagnóstico')
+    if (!formDx.catalogo_id) return toast.error('Selecciona un diagnóstico')
     setGuardando(true)
     try {
-      await diagnosticosApi.crear({
-        paciente_id: detalle.paciente_id, psicologo_id: detalle.psicologo_id, cita_id: detalle.id,
-        fecha_diagnostico: new Date().toISOString(), ...formDx
-      })
-      toast.success('Diagnóstico enlazado a la cita')
+      if (editDxId) {
+        // Editar diagnóstico existente
+        await diagnosticosApi.actualizar(editDxId, { tipo: formDx.tipo, observaciones: formDx.observaciones })
+        toast.success('Diagnóstico actualizado')
+      } else {
+        // Crear nuevo
+        await diagnosticosApi.crear({
+          paciente_id: detalle.paciente_id, psicologo_id: detalle.psicologo_id, cita_id: detalle.id,
+          fecha_diagnostico: new Date().toISOString(), ...formDx
+        })
+        toast.success('Diagnóstico enlazado a la cita')
+      }
       setModalDx(false)
+      await cargarDxSesion(detalle.paciente_id, detalle.id)
     } catch { toast.error('Error al guardar') } finally { setGuardando(false) }
   }
 
+  const eliminarDx = async (id) => {
+    setGuardando(true)
+    try {
+      await diagnosticosApi.eliminar(id)
+      toast.success('Diagnóstico eliminado')
+      setConfirmElimDx(null)
+      await cargarDxSesion(detalle.paciente_id, detalle.id)
+    } catch { toast.error('Error al eliminar') } finally { setGuardando(false) }
+  }
+
   const abrirModalEva = async () => {
-    setModalEva(true); setFormEva({ instrumento_id: '' })
+    setModalEva(true); setFormEva({ instrumento_id: '' }); setBusqEva('')
     try { const { data } = await evaluacionesApi.listarInstrumentos(); setInstrumentos(data.datos || []) } catch {}
   }
   const guardarEva = async () => {
@@ -119,7 +192,7 @@ export default function Sesiones() {
   }
 
   const abrirModalAct = async () => {
-    setModalAct(true); setFormAct({ actividad_id: '', instrucciones: '', fecha_limite: '' })
+    setModalAct(true); setFormAct({ actividad_id: '', instrucciones: '', fecha_limite: '' }); setBusqAct('')
     try { const { data } = await actividadesApi.listarBiblioteca(); setBiblioteca(data.datos || []) } catch {}
   }
   const guardarAct = async () => {
@@ -142,12 +215,20 @@ export default function Sesiones() {
         <div className="card-header">
           <span className="card-title">Historial de Sesiones</span>
         </div>
+        <div style={{ padding: 12 }}>
+          <div className="search-box" style={{ marginBottom: 12 }}>
+            <Search className="search-icon" />
+            <input className="form-control" style={{ paddingLeft: 34 }}
+              placeholder="Buscar sesión por paciente, estado o fecha..."
+              value={busqSesion} onChange={e => setBusqSesion(e.target.value)} />
+          </div>
+        </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
           {cargando ? <Spinner /> : citas.length === 0 ? (
             <EmptyState titulo="Sin sesiones" descripcion="No hay sesiones registradas" />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {citas.map(c => (
+              {sesionesFiltradas.map(c => (
                 <button key={c.id} onClick={() => verDetalle(c.id)} style={{
                   textAlign: 'left', padding: 12, borderRadius: 8, border: '1px solid var(--border)',
                   background: detalle?.id === c.id ? 'var(--surface-2)' : 'var(--surface)',
@@ -224,9 +305,11 @@ export default function Sesiones() {
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <h4 style={{ margin: 0, fontSize: 14 }}>Gestión Clínica del Paciente</h4>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <h4 style={{ margin: 0, fontSize: 14 }}>Gestión Clínica del Paciente</h4>
+                    </div>
                     <div className="stats-grid" style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 0 }}>
-                      <div className="stat-card" style={{ cursor: 'pointer', width: '100%' }} onClick={abrirModalDx}>
+                      <div className="stat-card" style={{ cursor: 'pointer', width: '100%' }} onClick={() => abrirModalDx()}>
                         <div className="stat-icon" style={{ background: 'var(--info-bg)' }}><Brain size={18} color="var(--info)"/></div>
                         <div>
                           <div className="stat-num" style={{ fontSize: 15, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -254,24 +337,112 @@ export default function Sesiones() {
                         </div>
                       </div>
                     </div>
+
+                    {/* Lista de diagnósticos de esta sesión */}
+                    {dxSesion.length > 0 && (
+                      <div style={{ marginTop: 4 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 8 }}>Diagnósticos de esta sesión</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {dxSesion.map(dx => {
+                            const tipoBadge = { presuntivo: 'badge-info', principal: 'badge-success', secundario: 'badge-warning', descartado: 'badge-muted' }
+                            return (
+                              <div key={dx.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface-2)' }}>
+                                <Brain size={15} color="var(--info)" style={{ marginTop: 2, flexShrink: 0 }} />
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                    <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-primary)' }}>{dx.catalogo?.codigo}</span>
+                                    <span className={`badge ${tipoBadge[dx.tipo] || 'badge-muted'}`} style={{ fontSize: 10 }}>{dx.tipo}</span>
+                                  </div>
+                                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{dx.catalogo?.nombre}</div>
+                                  {dx.observaciones && <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 3, fontStyle: 'italic' }}>{dx.observaciones}</div>}
+                                </div>
+                                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                                  <button className="btn btn-ghost btn-sm btn-icon" title="Editar" onClick={() => abrirModalDx(dx)}>
+                                    <Pencil size={13} />
+                                  </button>
+                                  <button className="btn btn-ghost btn-sm btn-icon" title="Eliminar"
+                                    style={{ color: 'var(--danger)' }}
+                                    onClick={() => setConfirmElimDx(dx.id)}>
+                                    <Trash2 size={13} />
+                                  </button>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignSelf: 'stretch' }}>
-                  {modalDx && (
-                    <div className="card" style={{ width: '100%', marginTop: 4 }}>
-                      <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span className="card-title" style={{ fontSize: 15 }}>Asignar Diagnóstico</span>
-                        <button className="btn btn-ghost" onClick={() => setModalDx(false)}><X size={16} /></button>
-                      </div>
-                      <div className="card-body">
-                        <div className="form-group">
-                          <label className="form-label">Diagnóstico</label>
-                          <select className="form-control" value={formDx.catalogo_id} onChange={e => setFormDx({...formDx, catalogo_id: e.target.value})}>
-                            <option value="">Seleccionar...</option>
-                            {catalogosDx.map(d => <option key={d.id} value={d.id}>{d.codigo} - {d.nombre}</option>)}
-                          </select>
+                  {/* Modal Confirmar Eliminación Diagnóstico */}
+                  {confirmElimDx && (
+                    <div className="modal-overlay">
+                      <div className="modal" style={{ maxWidth: 380 }}>
+                        <div className="modal-icon modal-icon-danger"><AlertTriangle size={22} /></div>
+                        <div className="modal-title">Eliminar Diagnóstico</div>
+                        <div className="modal-desc">¿Estás seguro de que deseas eliminar este diagnóstico? Esta acción no se puede deshacer.</div>
+                        <div className="modal-actions">
+                          <button className="btn btn-ghost" onClick={() => setConfirmElimDx(null)} disabled={guardando}>Cancelar</button>
+                          <button className="btn btn-danger" onClick={() => eliminarDx(confirmElimDx)} disabled={guardando}>
+                            {guardando ? 'Eliminando...' : 'Sí, eliminar'}
+                          </button>
                         </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {modalDx && (
+                    <div className="modal-overlay">
+                      <div className="modal" style={{ width: 500, maxWidth: '90vw' }}>
+                        <div className="modal-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                          {editDxId ? 'Editar Diagnóstico' : 'Añadir Diagnóstico'}
+                          <button className="btn btn-ghost btn-sm" onClick={() => setModalDx(false)}><X size={16} /></button>
+                        </div>
+
+                        {/* En modo edición: mostrar diagnóstico seleccionado como solo lectura */}
+                        {editDxId ? (
+                          <div style={{ padding: '10px 14px', background: 'var(--surface-2)', borderRadius: 8, border: '1px solid var(--border)', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <Brain size={16} color="var(--info)" />
+                            <div>
+                              <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-primary)' }}>
+                                {catalogosDx.find(d => d.id === formDx.catalogo_id)?.codigo ?? '—'}
+                              </div>
+                              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                                {catalogosDx.find(d => d.id === formDx.catalogo_id)?.nombre ?? 'Diagnóstico seleccionado'}
+                              </div>
+                            </div>
+                            <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>Solo tipo y observaciones editables</span>
+                          </div>
+                        ) : (
+                          /* En modo creación: mostrar buscador */
+                          <div className="form-group">
+                            <label className="form-label">Diagnóstico</label>
+                            <div className="search-box" style={{ marginBottom: 10 }}>
+                              <Search className="search-icon" />
+                              <input className="form-control" style={{ paddingLeft: 34 }}
+                                placeholder="Buscar diagnóstico..." value={busqDx}
+                                onChange={e => setBusqDx(e.target.value)} />
+                            </div>
+                            <div className="search-results">
+                              {catalogosFiltrados.length > 0 ? catalogosFiltrados.map(d => (
+                                <button key={d.id} type="button" className="search-result-item"
+                                  style={{
+                                    background: formDx.catalogo_id === d.id ? 'var(--surface-2)' : 'transparent',
+                                    borderLeft: formDx.catalogo_id === d.id ? '3px solid var(--celeste)' : '3px solid transparent'
+                                  }}
+                                  onClick={() => setFormDx({...formDx, catalogo_id: d.id})}>
+                                  <div style={{ fontWeight: 600 }}>{d.codigo}</div>
+                                  <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{d.nombre}</div>
+                                </button>
+                              )) : (
+                                <div className="search-empty">Sin resultados</div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
                         <div className="form-group">
                           <label className="form-label">Tipo</label>
                           <select className="form-control" value={formDx.tipo} onChange={e => setFormDx({...formDx, tipo: e.target.value})}>
@@ -281,66 +452,102 @@ export default function Sesiones() {
                             <option value="descartado">Descartado</option>
                           </select>
                         </div>
-                        <div className="form-group">
+                        <div className="form-group" style={{ marginBottom: 20 }}>
                           <label className="form-label">Observaciones</label>
                           <textarea className="form-control" value={formDx.observaciones} onChange={e => setFormDx({...formDx, observaciones: e.target.value})} />
                         </div>
-                      </div>
-                      <div className="card-footer" style={{ textAlign: 'right', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                        <button className="btn btn-ghost" onClick={() => setModalDx(false)}>Cancelar</button>
-                        <button className="btn btn-primary" onClick={guardarDx} disabled={guardando}>Guardar Diagnóstico</button>
+                        <div className="modal-actions">
+                          <button className="btn btn-ghost" onClick={() => setModalDx(false)}>Cancelar</button>
+                          <button className="btn btn-primary" onClick={guardarDx} disabled={guardando}>
+                            {guardando ? 'Guardando...' : editDxId ? 'Actualizar' : 'Guardar Diagnóstico'}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
 
                   {modalEva && (
-                    <div className="card" style={{ width: '100%', marginTop: 4 }}>
-                      <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span className="card-title" style={{ fontSize: 15 }}>Aplicar Evaluación</span>
-                        <button className="btn btn-ghost" onClick={() => setModalEva(false)}><X size={16} /></button>
-                      </div>
-                      <div className="card-body">
-                        <div className="form-group">
-                          <label className="form-label">Instrumento Psicométrico</label>
-                          <select className="form-control" value={formEva.instrumento_id} onChange={e => setFormEva({...formEva, instrumento_id: e.target.value})}>
-                            <option value="">Seleccionar...</option>
-                            {instrumentos.map(i => <option key={i.id} value={i.id}>{i.codigo_instrumento} - {i.nombre}</option>)}
-                          </select>
+                    <div className="modal-overlay">
+                      <div className="modal" style={{ width: 500, maxWidth: '90vw' }}>
+                        <div className="modal-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                          Aplicar Evaluación
+                          <button className="btn btn-ghost btn-sm" onClick={() => setModalEva(false)}><X size={16} /></button>
                         </div>
-                      </div>
-                      <div className="card-footer" style={{ textAlign: 'right', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                        <button className="btn btn-ghost" onClick={() => setModalEva(false)}>Cancelar</button>
-                        <button className="btn btn-primary" onClick={guardarEva} disabled={guardando}>Asignar Instrumento</button>
+                        <div className="form-group" style={{ marginBottom: 20 }}>
+                          <label className="form-label">Instrumento Psicométrico</label>
+                          <div className="search-box" style={{ marginBottom: 10 }}>
+                            <Search className="search-icon" />
+                            <input className="form-control" style={{ paddingLeft: 34 }}
+                              placeholder="Buscar instrumento..." value={busqEva}
+                              onChange={e => setBusqEva(e.target.value)} />
+                          </div>
+                          <div className="search-results">
+                            {instrumentosFiltrados.length > 0 ? instrumentosFiltrados.map(i => (
+                              <button key={i.id} type="button" className="search-result-item"
+                                style={{
+                                  background: formEva.instrumento_id === i.id ? 'var(--surface-2)' : 'transparent',
+                                  borderLeft: formEva.instrumento_id === i.id ? '3px solid var(--warning)' : '3px solid transparent'
+                                }}
+                                onClick={() => setFormEva({...formEva, instrumento_id: i.id})}>
+                                <div style={{ fontWeight: 600 }}>{i.codigo_instrumento}</div>
+                                <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{i.nombre}</div>
+                              </button>
+                            )) : (
+                              <div className="search-empty">Sin resultados</div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="modal-actions">
+                          <button className="btn btn-ghost" onClick={() => setModalEva(false)}>Cancelar</button>
+                          <button className="btn btn-primary" onClick={guardarEva} disabled={guardando}>Asignar Instrumento</button>
+                        </div>
                       </div>
                     </div>
                   )}
 
                   {modalAct && (
-                    <div className="card" style={{ width: '100%', marginTop: 4 }}>
-                      <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span className="card-title" style={{ fontSize: 15 }}>Asignar Actividad Terapéutica</span>
-                        <button className="btn btn-ghost" onClick={() => setModalAct(false)}><X size={16} /></button>
-                      </div>
-                      <div className="card-body">
+                    <div className="modal-overlay">
+                      <div className="modal" style={{ width: 500, maxWidth: '90vw' }}>
+                        <div className="modal-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                          Asignar Actividad Terapéutica
+                          <button className="btn btn-ghost btn-sm" onClick={() => setModalAct(false)}><X size={16} /></button>
+                        </div>
                         <div className="form-group">
                           <label className="form-label">Actividad de Biblioteca</label>
-                          <select className="form-control" value={formAct.actividad_id} onChange={e => setFormAct({...formAct, actividad_id: e.target.value})}>
-                            <option value="">Seleccionar...</option>
-                            {biblioteca.map(b => <option key={b.id} value={b.id}>{b.titulo}</option>)}
-                          </select>
+                          <div className="search-box" style={{ marginBottom: 10 }}>
+                            <Search className="search-icon" />
+                            <input className="form-control" style={{ paddingLeft: 34 }}
+                              placeholder="Buscar actividad..." value={busqAct}
+                              onChange={e => setBusqAct(e.target.value)} />
+                          </div>
+                          <div className="search-results">
+                            {bibliotecaFiltrada.length > 0 ? bibliotecaFiltrada.map(b => (
+                              <button key={b.id} type="button" className="search-result-item"
+                                style={{
+                                  background: formAct.actividad_id === b.id ? 'var(--surface-2)' : 'transparent',
+                                  borderLeft: formAct.actividad_id === b.id ? '3px solid var(--success)' : '3px solid transparent'
+                                }}
+                                onClick={() => setFormAct({...formAct, actividad_id: b.id})}>
+                                <div style={{ fontWeight: 600 }}>{b.titulo}</div>
+                                <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{b.tipo || 'Actividad'}</div>
+                              </button>
+                            )) : (
+                              <div className="search-empty">Sin resultados</div>
+                            )}
+                          </div>
                         </div>
                         <div className="form-group">
                           <label className="form-label">Instrucciones</label>
                           <textarea className="form-control" value={formAct.instrucciones} onChange={e => setFormAct({...formAct, instrucciones: e.target.value})} />
                         </div>
-                        <div className="form-group">
+                        <div className="form-group" style={{ marginBottom: 20 }}>
                           <label className="form-label">Fecha Límite</label>
                           <input type="date" className="form-control" value={formAct.fecha_limite} onChange={e => setFormAct({...formAct, fecha_limite: e.target.value})} />
                         </div>
-                      </div>
-                      <div className="card-footer" style={{ textAlign: 'right', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                        <button className="btn btn-ghost" onClick={() => setModalAct(false)}>Cancelar</button>
-                        <button className="btn btn-primary" onClick={guardarAct} disabled={guardando}>Guardar Actividad</button>
+                        <div className="modal-actions">
+                          <button className="btn btn-ghost" onClick={() => setModalAct(false)}>Cancelar</button>
+                          <button className="btn btn-primary" onClick={guardarAct} disabled={guardando}>Guardar Actividad</button>
+                        </div>
                       </div>
                     </div>
                   )}

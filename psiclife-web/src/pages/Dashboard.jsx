@@ -4,11 +4,11 @@ import {
   Calendar, Clock, CheckCircle, AlertTriangle, BookOpen,
   Activity, Smartphone, X, Upload, Send, TrendingUp,
   Heart, Star, ChevronRight, Users, Shield, Package, Tag,
-  UserCheck,
+  UserCheck, CreditCard, Banknote, XCircle,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { dashboardApi, facturacionApi, citasApi, psicologosApi, actividadesApi, evaluacionesApi, disponibilidadApi } from '../services/api'
+import { dashboardApi, facturacionApi, citasApi, psicologosApi, actividadesApi, evaluacionesApi, disponibilidadApi, configuracionApi, resenasApi } from '../services/api'
 import { Spinner, CalendarioSemanal } from '../components/ui/index.jsx'
 import toast from 'react-hot-toast'
 
@@ -16,7 +16,12 @@ const API_BASE = import.meta.env.VITE_API_URL?.replace('/api/v1', '') ?? 'http:/
 
 // ── Utilidades ─────────────────────────────────────────────────────────────────
 // El backend devuelve citas con `facturas[]`; esta helper devuelve la primera
-const getFactura = (cita) => cita?.facturas?.[0] ?? cita?.factura ?? null
+const getFactura = (cita) => {
+  if (!cita) return null
+  if (Array.isArray(cita.facturas)) return cita.facturas[0] ?? null
+  if (cita.facturas && typeof cita.facturas === 'object') return cita.facturas
+  return cita.factura ?? null
+}
 function colorPago(factura) {
   const e = factura?.estado
   if (!e || e === 'pendiente' || e === 'parcial') {
@@ -46,6 +51,15 @@ function colorPago(factura) {
   }
 }
 
+function getRol(usuario) {
+  const raw = typeof usuario?.rol === 'string'
+    ? usuario.rol
+    : typeof usuario?.rolNombre === 'string'
+      ? usuario.rolNombre
+      : ''
+  return raw.trim().toLowerCase()
+}
+
 function formatFecha(iso) {
   return new Date(iso).toLocaleString('es-PE', {
     weekday: 'short', day: '2-digit', month: 'short',
@@ -54,7 +68,7 @@ function formatFecha(iso) {
 }
 
 // ── Modal Yape premium ─────────────────────────────────────────────────────────
-function ModalYape({ facturaId, total, onClose, onSuccess }) {
+function ModalYape({ facturaId, total, config, onClose, onSuccess }) {
   const [monto,   setMonto]   = useState(total ?? '')
   const [codigo,  setCodigo]  = useState('')
   const [archivo, setArchivo] = useState(null)
@@ -81,14 +95,14 @@ function ModalYape({ facturaId, total, onClose, onSuccess }) {
 
   const handleEnviar = async () => {
     if (!monto || Number(monto) <= 0) { toast.error('Ingresa el monto'); return }
-    if (!codigo.trim())               { toast.error('Ingresa el código de operación'); return }
+    if (codigo.trim().length < 8)     { toast.error('Ingresa un número de operación válido (mínimo 8 dígitos numéricos)'); return }
     if (!archivo)                     { toast.error('Sube la captura de tu Yape'); return }
     setEnviando(true)
     try {
       const form = new FormData()
       form.append('monto', monto)
       form.append('codigo_referencia', codigo)
-      form.append('comprobante', archivo)
+      form.append('archivo', archivo)
       await facturacionApi.subirComprobanteYape(facturaId, form)
       toast.success('¡Comprobante enviado! El personal confirmará tu pago pronto.')
       onSuccess?.(); onClose()
@@ -124,11 +138,21 @@ function ModalYape({ facturaId, total, onClose, onSuccess }) {
 
         {/* Info Yape */}
         <div style={{ background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:14, padding:'16px 18px', marginBottom:20, display:'flex', alignItems:'center', gap:16 }}>
-          <div style={{ width:60, height:60, borderRadius:12, background:'linear-gradient(135deg,#7c3aed,#9333ea)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:26, flexShrink:0 }}>📱</div>
+          {config?.qr_yape ? (
+            <div
+              onClick={() => window.open(`${API_BASE}${config.qr_yape}`, '_blank')}
+              title="Click para ampliar QR"
+              style={{ width:70, height:70, borderRadius:8, border:'1px solid rgba(255,255,255,0.2)', display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden', background:'white', flexShrink:0, cursor:'zoom-in' }}
+            >
+              <img src={`${API_BASE}${config.qr_yape}`} alt="QR Yape" style={{ width:'100%', height:'100%', objectFit:'contain' }} />
+            </div>
+          ) : (
+            <div style={{ width:60, height:60, borderRadius:12, background:'linear-gradient(135deg,#7c3aed,#9333ea)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:26, flexShrink:0 }}>📱</div>
+          )}
           <div>
             <div style={{ color:'rgba(255,255,255,0.45)', fontSize:10, textTransform:'uppercase', letterSpacing:1, marginBottom:3 }}>Yapea al número</div>
-            <div style={{ color:'white', fontSize:24, fontWeight:900, letterSpacing:2 }}>987 654 321</div>
-            <div style={{ color:'hsl(262,55%,68%)', fontSize:12, marginTop:3 }}>PsicLife Consultorio</div>
+            <div style={{ color:'white', fontSize:24, fontWeight:900, letterSpacing:2 }}>{config?.yape_numero || '987 654 321'}</div>
+            <div style={{ color:'hsl(262,55%,68%)', fontSize:12, marginTop:3 }}>{config?.yape_titular || 'PsicLife Consultorio'}</div>
             {total && <div style={{ color:'hsl(38,85%,65%)', fontSize:13, fontWeight:700, marginTop:4 }}>S/ {Number(total).toFixed(2)}</div>}
           </div>
         </div>
@@ -138,10 +162,13 @@ function ModalYape({ facturaId, total, onClose, onSuccess }) {
           {[
             { label:'Monto pagado (S/)', key:'monto', type:'number', ph:'0.00', val:monto, set:setMonto },
             { label:'Código de operación', key:'codigo', type:'text', ph:'Ej. 987654321', val:codigo, set:setCodigo },
-          ].map(({ label, type, ph, val, set }) => (
+          ].map(({ label, key, type, ph, val, set }) => (
             <div key={label}>
               <label style={{ display:'block', fontSize:11, color:'rgba(255,255,255,0.45)', marginBottom:6, textTransform:'uppercase', letterSpacing:0.5 }}>{label}</label>
-              <input type={type} value={val} onChange={e => set(e.target.value)} placeholder={ph}
+              <input type={type} value={val} onChange={e => {
+                if (key === 'codigo') set(e.target.value.replace(/\D/g, '').slice(0, 20))
+                else set(e.target.value)
+              }} placeholder={ph}
                 style={{ width:'100%', padding:'10px 14px', borderRadius:10, background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.14)', color:'white', fontSize:14, outline:'none', boxSizing:'border-box' }} />
             </div>
           ))}
@@ -158,7 +185,7 @@ function ModalYape({ facturaId, total, onClose, onSuccess }) {
             borderRadius:14, padding:'20px 16px', textAlign:'center', cursor:'pointer', marginBottom:20,
             background: drag ? 'rgba(139,92,246,0.12)' : 'rgba(255,255,255,0.04)', transition:'all 0.2s',
           }}>
-          <input ref={inputRef} type="file" accept="image/*" style={{ display:'none' }}
+          <input ref={inputRef} type="file" accept="image/png, image/jpeg, image/jpg, image/webp" style={{ display:'none' }}
             onChange={e => handleFile(e.target.files[0])} />
           {preview
             ? <div>
@@ -186,7 +213,14 @@ function DashboardPaciente() {
   const { usuario } = useAuth()
   const [datos,    setDatos]    = useState(null)
   const [cargando, setCargando] = useState(true)
+  const [error,    setError]    = useState(null)
   const [yape,     setYape]     = useState(null)
+  const [config,   setConfig]   = useState({
+    yape_numero: '', yape_titular: '', qr_yape: '',
+    banco_nombre: '', banco_titular: '', cuenta_bancaria: '', cuenta_cci: '',
+    pago_efectivo_activo: 'true', pago_yape_activo: 'true', pago_transferencia_activo: 'true'
+  })
+  const [imagenExpandida, setImagenExpandida] = useState(null)
   const [evaluacionActiva, setEvaluacionActiva] = useState(null)
   const [datosEvaluacion, setDatosEvaluacion] = useState(null)
   const [respuestas, setRespuestas] = useState({})
@@ -196,6 +230,10 @@ function DashboardPaciente() {
   const [contenidoRespuesta, setContenidoRespuesta] = useState('')
   const [archivoRespuesta, setArchivoRespuesta] = useState(null)
   const [actEnviando, setActEnviando] = useState(false)
+
+  const [modalCancelar, setModalCancelar] = useState(null)
+  const [motivoCancelar, setMotivoCancelar] = useState('')
+  const [cancelando, setCancelando] = useState(false)
 
   const normalizarOpciones = (item) => {
     if (Array.isArray(item?.opciones_json)) return item.opciones_json
@@ -299,15 +337,21 @@ function DashboardPaciente() {
 
   // --- Lógica para Agendar Cita (Paciente) ---
   const [modalAgendar, setModalAgendar] = useState(false)
+  const [pasoAgendar, setPasoAgendar] = useState(1)
   const [psicologos, setPsicologos] = useState([])
   const [formCita, setFormCita] = useState({ psicologo_id: '', fecha: '', hora: '', modalidad: 'presencial' })
   const [slotsDisponibles, setSlotsDisponibles] = useState([])
   const [cargandoSlots, setCargandoSlots] = useState(false)
   const [guardandoCita, setGuardandoCita] = useState(false)
+  // Pago al agendar
+  const [formPago, setFormPago] = useState({ metodo: 'efectivo', codigo: '', archivo: null, preview: null })
+  const pagoInputRef = useRef()
 
   const abrirModalAgendar = async () => {
     setFormCita({ psicologo_id: '', fecha: '', hora: '', modalidad: 'presencial' })
+    setFormPago({ metodo: 'efectivo', codigo: '', archivo: null, preview: null })
     setSlotsDisponibles([])
+    setPasoAgendar(1)
     setModalAgendar(true)
     try {
       const { data } = await psicologosApi.listar()
@@ -370,9 +414,17 @@ function DashboardPaciente() {
     if (!formCita.psicologo_id || !formCita.fecha || !formCita.hora) {
       return toast.error('Completa todos los campos requeridos')
     }
+    // Validar comprobante si el método lo requiere
+    if ((formPago.metodo === 'yape' || formPago.metodo === 'transferencia') && !formPago.archivo) {
+      return toast.error('Debes adjuntar el comprobante de pago')
+    }
+    if ((formPago.metodo === 'yape' || formPago.metodo === 'transferencia') && !formPago.codigo.trim()) {
+      return toast.error('Ingresa el código / número de operación')
+    }
     setGuardandoCita(true)
     try {
-      await citasApi.crear({
+      // 1. Crear la cita
+      const { data: citaRes } = await citasApi.crear({
         paciente_id: paciente.id,
         psicologo_id: formCita.psicologo_id,
         programada_para: `${formCita.fecha}T${formCita.hora}:00`,
@@ -380,13 +432,120 @@ function DashboardPaciente() {
         modalidad: formCita.modalidad || 'presencial',
         agendado_por: 'paciente'
       })
-      toast.success('¡Cita agendada exitosamente!')
+      const citaId = citaRes.datos?.id ?? citaRes.id
+
+      // 2. Si hay comprobante, obtener la factura y subirlo
+      if (citaId && (formPago.metodo === 'yape' || formPago.metodo === 'transferencia') && formPago.archivo) {
+        try {
+          const { data: facRes } = await facturacionApi.porCita(citaId)
+          const facturaId = facRes.datos?.id ?? facRes.id
+          if (facturaId) {
+            const fd = new FormData()
+            fd.append('monto', '0')  // el staff confirmará el monto exacto
+            fd.append('codigo_referencia', formPago.codigo)
+            fd.append('metodo_pago', formPago.metodo)
+            fd.append('archivo', formPago.archivo)
+            await facturacionApi.subirComprobanteYape(facturaId, fd)
+          }
+        } catch {
+          // No bloquear si falla la subida del comprobante
+          toast.error('Cita agendada, pero hubo un problema al subir el comprobante. Contáctanos.')
+        }
+      }
+
+      toast.success('Cita agendada correctamente')
       setModalAgendar(false)
-      cargarDatos()
+      await cargar()
     } catch (err) {
-      toast.error(err.response?.data?.mensaje ?? 'Error al agendar cita')
+      toast.error(err.response?.data?.mensaje || 'Error al agendar cita')
     } finally {
       setGuardandoCita(false)
+    }
+  }
+
+  const cancelarCitaPaciente = async () => {
+    if (!motivoCancelar.trim()) { return toast.error('Debes indicar un motivo de cancelación') }
+    setCancelando(true)
+    try {
+      await citasApi.cancelar(modalCancelar.id, { cancelado_por: 'paciente', motivo_cancelacion: motivoCancelar })
+      toast.success('Cita cancelada correctamente')
+      setModalCancelar(null)
+      setMotivoCancelar('')
+      await cargar()
+    } catch (err) {
+      toast.error(err.response?.data?.mensaje || 'Error al cancelar la cita')
+    } finally {
+      setCancelando(false)
+    }
+  }
+
+  // --- Lógica para Reseñas ---
+  const [modalResena, setModalResena] = useState(null)
+  const [formResena, setFormResena] = useState({ calificacion: 5, comentario: '', es_anonima: false })
+  const [guardandoResena, setGuardandoResena] = useState(false)
+
+  const abrirModalResena = (cita) => {
+    setModalResena(cita)
+    setFormResena({ calificacion: 5, comentario: '', es_anonima: false })
+  }
+
+  const enviarResena = async () => {
+    if (!formResena.calificacion || !formResena.comentario.trim()) {
+      return toast.error('Ingresa una calificación y un comentario')
+    }
+    setGuardandoResena(true)
+    try {
+      await resenasApi.crear({
+        cita_id: modalResena.id,
+        calificacion: formResena.calificacion,
+        texto: formResena.comentario,
+        es_anonima: formResena.es_anonima
+      })
+      toast.success('¡Gracias por tu reseña!')
+      setModalResena(null)
+      cargarDatos()
+    } catch (err) {
+      toast.error(err.response?.data?.mensaje ?? 'Error al enviar reseña')
+    } finally {
+      setGuardandoResena(false)
+    }
+  }
+
+  // --- Lógica para Cancelar Cita (Paciente) ---
+  const [modalCancelarPaciente, setModalCancelarPaciente] = useState(null)
+  const [motivoCancelarPaciente, setMotivoCancelarPaciente] = useState('')
+  const [guardandoCancelacion, setGuardandoCancelacion] = useState(false)
+
+  const confirmarCancelacionPaciente = async () => {
+    if (!motivoCancelarPaciente.trim()) return toast.error('Ingresa un motivo para cancelar')
+    setGuardandoCancelacion(true)
+    try {
+      await citasApi.cancelar(modalCancelarPaciente.id, { 
+        cancelado_por: 'paciente', 
+        motivo_cancelacion: motivoCancelarPaciente 
+      })
+      
+      const f = getFactura(modalCancelarPaciente)
+      if (f?.estado === 'pagada') {
+         // Solicitar reembolso automáticamente
+         try {
+           await citasApi.solicitarReembolso(modalCancelarPaciente.id, { 
+             tipo_solicitud: 'reembolso', 
+             motivo: motivoCancelarPaciente 
+           })
+           toast.success('Cita cancelada. Se ha enviado una solicitud de reembolso.')
+         } catch {
+           toast.error('Cita cancelada, pero hubo un error al solicitar el reembolso automáticamente.')
+         }
+      } else {
+         toast.success('Cita cancelada correctamente')
+      }
+      setModalCancelarPaciente(null)
+      cargarDatos()
+    } catch (err) {
+      toast.error(err.response?.data?.mensaje ?? 'Error al cancelar la cita')
+    } finally {
+      setGuardandoCancelacion(false)
     }
   }
 
@@ -397,19 +556,55 @@ function DashboardPaciente() {
 
   const setTab = (t) => navigate(`/dashboard?tab=${t}`)
 
-  const cargarDatos = () =>
+  const cargarDatos = () => {
+    setError(null)
     dashboardApi.paciente()
       .then(res => setDatos(res.data.datos))
-      .catch(() => toast.error('No se pudo cargar tu portal'))
+      .catch((err) => {
+        if (err.response?.status === 404) {
+          setError('No se encontró tu ficha de paciente. Contacta con el consultorio para vincular tu cuenta.')
+        } else {
+          toast.error('No se pudo cargar tu portal')
+        }
+      })
       .finally(() => setCargando(false))
+
+    configuracionApi.listar()
+      .then(res => {
+        let cfgObj = {}
+        if (res.data?.datos) {
+          if (Array.isArray(res.data.datos)) {
+            res.data.datos.forEach(c => cfgObj[c.clave] = c.valor)
+          } else if (typeof res.data.datos === 'object') {
+            cfgObj = { ...res.data.datos }
+          }
+        }
+        if (cfgObj.METODOS_PAGO && typeof cfgObj.METODOS_PAGO === 'object') {
+          cfgObj.qr_yape = cfgObj.METODOS_PAGO.qr_yape || ''
+        }
+        setConfig(prev => ({ ...prev, ...cfgObj }))
+      })
+      .catch(() => {})
+  }
 
   useEffect(() => { cargarDatos() }, [])
 
   if (cargando) return <Spinner />
+  if (error) {
+    return (
+      <div className="page-enter" style={{ display:'flex', flexDirection:'column', gap:20 }}>
+        <div style={{ padding:24, borderRadius:18, background:'var(--surface)', border:'1px solid var(--border)' }}>
+          <div style={{ fontSize:18, fontWeight:700, marginBottom:10 }}>Portal de paciente temporalmente no disponible</div>
+          <div style={{ color:'var(--text-secondary)', lineHeight:1.7, marginBottom:18 }}>{error}</div>
+          <button className="btn btn-primary" onClick={cargarDatos}>Reintentar</button>
+        </div>
+      </div>
+    )
+  }
 
-  const citas        = datos?.citas ?? []
-  const evaluaciones = datos?.evaluaciones ?? []
-  const actividades  = datos?.actividades ?? []
+  const citas        = Array.isArray(datos?.citas) ? datos.citas : []
+  const evaluaciones = Array.isArray(datos?.evaluaciones) ? datos.evaluaciones : []
+  const actividades  = Array.isArray(datos?.actividades) ? datos.actividades : []
   const paciente     = datos?.paciente
   const nombre       = paciente?.nombres?.split(' ')[0] ?? usuario?.correo?.split('@')[0] ?? 'Paciente'
 
@@ -556,6 +751,24 @@ function DashboardPaciente() {
                   </span>
                 </div>
 
+                {proximaCita.modalidad === 'virtual' && proximaCita.enlace_reunion && (() => {
+                  const [plataforma, enlace] = proximaCita.enlace_reunion.includes('::') 
+                    ? proximaCita.enlace_reunion.split('::') 
+                    : ['Reunión', proximaCita.enlace_reunion];
+                  return (
+                    <a href={enlace.startsWith('http') ? enlace : `https://${enlace}`} target="_blank" rel="noreferrer"
+                      style={{
+                        width:'100%', padding:'10px', borderRadius:12, marginBottom: 8,
+                        background:'linear-gradient(135deg, var(--info), var(--celeste-dark))',
+                        color:'white', border:'none', fontSize:13.5, fontWeight:700, textDecoration: 'none',
+                        display:'flex', alignItems:'center', justifyContent:'center', gap:7,
+                        boxShadow:'0 4px 14px rgba(58,174,216,0.35)',
+                      }}>
+                      <Smartphone size={15} /> Unirse a {plataforma}
+                    </a>
+                  )
+                })()}
+
                 {esPendientePago && fProx?.id && (
                   <button onClick={() => setYape({ facturaId: fProx.id, total: fProx.total })}
                     style={{
@@ -566,6 +779,17 @@ function DashboardPaciente() {
                       boxShadow:'0 4px 14px rgba(124,58,237,0.35)',
                     }}>
                     <Smartphone size={15} /> Pagar con Yape
+                  </button>
+                )}
+                
+                {proximaCita.estado !== 'cancelada' && proximaCita.estado !== 'completada' && (
+                  <button onClick={() => setModalCancelar(proximaCita)}
+                    style={{
+                      width:'100%', padding:'10px', borderRadius:12, marginTop: 8,
+                      background:'var(--danger-bg)', color:'var(--danger)', border:'1.5px solid var(--danger-border)', fontSize:13.5, fontWeight:600,
+                      cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7,
+                    }}>
+                    <X size={15} /> Cancelar Cita
                   </button>
                 )}
               </div>
@@ -613,10 +837,25 @@ function DashboardPaciente() {
                         {formatFecha(c.programada_para)}
                       </div>
                     </div>
+                    {c.modalidad === 'virtual' && c.enlace_reunion && (() => {
+                      const enlace = c.enlace_reunion.includes('::') ? c.enlace_reunion.split('::')[1] : c.enlace_reunion;
+                      return (
+                        <a href={enlace.startsWith('http') ? enlace : `https://${enlace}`} target="_blank" rel="noreferrer"
+                          style={{ padding:'5px 12px', borderRadius:18, background:'linear-gradient(135deg, var(--info), var(--celeste-dark))', color:'white', border:'none', fontSize:11.5, fontWeight:600, textDecoration:'none', display:'flex', alignItems:'center', gap:4, whiteSpace:'nowrap', flexShrink:0 }}>
+                          <Smartphone size={11} /> Unirse
+                        </a>
+                      )
+                    })()}
                     {esPendPago && factura?.id && (
                       <button onClick={() => setYape({ facturaId: factura.id, total: factura.total })}
                         style={{ padding:'5px 12px', borderRadius:18, background:'linear-gradient(135deg,#7c3aed,#2563eb)', color:'white', border:'none', fontSize:11.5, fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:4, whiteSpace:'nowrap', flexShrink:0 }}>
                         <Smartphone size={11} /> Yape
+                      </button>
+                    )}
+                    {c.estado !== 'cancelada' && c.estado !== 'completada' && (
+                      <button onClick={() => setModalCancelar(c)}
+                        style={{ padding:'5px 12px', borderRadius:18, background:'var(--danger-bg)', color:'var(--danger)', border:`1px solid var(--danger-border)`, fontSize:11.5, fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:4, whiteSpace:'nowrap', flexShrink:0 }}>
+                        <X size={11} /> Cancelar
                       </button>
                     )}
                   </div>
@@ -726,13 +965,21 @@ function DashboardPaciente() {
   )}
 
   {tab === 'citas' && (
-    <div className="card">
-      <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span className="card-title">Historial de Citas</span>
-        <button className="btn btn-primary btn-sm" onClick={abrirModalAgendar}>
-          <Calendar size={14} style={{ marginRight: 6 }} /> Agendar Nueva Cita
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <button className="btn btn-primary" onClick={abrirModalAgendar} style={{
+          padding: '16px 32px', fontSize: 16, borderRadius: 30,
+          background: 'linear-gradient(135deg, #7c3aed, #2563eb)',
+          boxShadow: '0 8px 24px rgba(124,58,237,0.35)',
+          display: 'flex', alignItems: 'center', gap: 10, border: 'none', color: '#fff', cursor: 'pointer', fontWeight: 700
+        }}>
+          <Calendar size={20} /> Agendar Nueva Cita
         </button>
       </div>
+      <div className="card">
+        <div className="card-header">
+          <span className="card-title">Historial de Citas</span>
+        </div>
       <div className="card-body">
         {citas.length === 0 ? <div style={{ color:'var(--text-muted)' }}>No hay citas.</div> : (
           <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
@@ -742,12 +989,33 @@ function DashboardPaciente() {
                   <div style={{ fontWeight:600 }}>{c.psicologo?.nombres} {c.psicologo?.apellidos}</div>
                   <div style={{ fontSize:12, color:'var(--text-muted)' }}>{formatFecha(c.programada_para)}</div>
                 </div>
-                <span className={`badge ${c.estado==='cancelada'?'badge-danger':c.estado==='confirmada'?'badge-success':'badge-warning'}`}>{c.estado}</span>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  {(c.estado === 'pendiente' || c.estado === 'confirmada') && (
+                    <button className="btn btn-ghost btn-sm" onClick={() => {
+                       setModalCancelarPaciente(c)
+                       setMotivoCancelarPaciente('')
+                    }} style={{ color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <XCircle size={14} /> Cancelar
+                    </button>
+                  )}
+                  {c.estado === 'completada' && !c.resenas && (
+                    <button className="btn btn-warning btn-sm" onClick={() => abrirModalResena(c)} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Star size={14} fill="currentColor" /> Dejar Reseña
+                    </button>
+                  )}
+                  {c.reembolso && (
+                    <span className={`badge ${c.reembolso.estado === 'aprobado' ? 'badge-success' : c.reembolso.estado === 'rechazado' ? 'badge-danger' : 'badge-warning'}`}>
+                      {c.reembolso.estado === 'pendiente' ? 'Reembolso Pendiente' : c.reembolso.estado === 'aprobado' ? 'Reembolsado' : 'Reembolso Rechazado'}
+                    </span>
+                  )}
+                  <span className={`badge ${c.estado==='cancelada'?'badge-danger':c.estado==='confirmada'?'badge-success':c.estado==='completada'?'badge-primary':'badge-warning'}`}>{c.estado}</span>
+                </div>
               </div>
             ))}
           </div>
         )}
       </div>
+    </div>
     </div>
   )}
 
@@ -763,7 +1031,6 @@ function DashboardPaciente() {
                 <th style={{ padding: 12 }}>Concepto</th>
                 <th style={{ padding: 12 }}>Estado</th>
                 <th style={{ padding: 12 }}>Total</th>
-                <th style={{ padding: 12 }}>Acción</th>
               </tr>
             </thead>
             <tbody>
@@ -775,11 +1042,6 @@ function DashboardPaciente() {
                     <td style={{ padding: 12 }}>Sesión Psicológica</td>
                     <td style={{ padding: 12 }}><span className={`badge ${fac.estado==='pagada'?'badge-success':'badge-warning'}`}>{fac.estado}</span></td>
                     <td style={{ padding: 12 }}>S/ {Number(fac.total).toFixed(2)}</td>
-                    <td style={{ padding: 12 }}>
-                      {fac.estado === 'pendiente' && (
-                        <button className="btn btn-primary btn-sm" onClick={() => setYape({ facturaId: fac.id, total: fac.total })}>Pagar Yape</button>
-                      )}
-                    </td>
                   </tr>
                 )
               })}
@@ -954,75 +1216,428 @@ function DashboardPaciente() {
         <ModalYape
           facturaId={yape.facturaId}
           total={yape.total}
+          config={config}
           onClose={() => setYape(null)}
           onSuccess={cargarDatos}
         />
       )}
 
-      {/* Modal Agendar Cita */}
+      {/* Modal Agendar Cita (Wizard) */}
       {modalAgendar && (
-        <div className="modal-backdrop">
-          <div className="card" style={{ width: 450 }}>
-            <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span className="card-title" style={{ fontSize: 15 }}>Agendar Nueva Cita</span>
-              <button className="btn btn-ghost" onClick={() => setModalAgendar(false)}><X size={16} /></button>
+        <div className="modal-overlay">
+          <div className="card" style={{ width: 480, maxWidth: '95vw', borderRadius: 20 }}>
+            <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', borderBottom: 'none', paddingBottom: 0 }}>
+              <span className="card-title" style={{ fontSize: 18 }}>Agendar Cita</span>
+              <button className="btn btn-ghost" onClick={() => setModalAgendar(false)}><X size={20} /></button>
             </div>
             <div className="card-body">
-              <div className="form-group">
-                <label className="form-label">Psicólogo</label>
-                <select className="form-control" value={formCita.psicologo_id} onChange={e => setFormCita({...formCita, psicologo_id: e.target.value, hora: ''})}>
-                  <option value="">Selecciona un psicólogo...</option>
-                  {psicologos.map(p => <option key={p.id} value={p.id}>{p.nombres} {p.apellidos} - {p.especialidad}</option>)}
-                </select>
+              {/* Progreso del Wizard */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8, marginTop: 10 }}>
+                {[1, 2, 3, 4].map(p => (
+                  <div key={p} style={{ flex: 1, height: 5, borderRadius: 4, background: pasoAgendar >= p ? 'var(--celeste)' : 'var(--border)', transition: 'background 0.3s' }} />
+                ))}
               </div>
-              <div className="form-group">
-                <label className="form-label">Modalidad</label>
-                <select className="form-control" value={formCita.modalidad} onChange={e => setFormCita({...formCita, modalidad: e.target.value})}>
-                  <option value="presencial">Presencial</option>
-                  <option value="virtual">Virtual (videollamada)</option>
-                  <option value="domicilio">A domicilio</option>
-                </select>
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:10, color:'var(--text-muted)', marginBottom:18 }}>
+                {['Profesional','Fecha y Hora','Pago','Confirmar'].map((l,i) => (
+                  <span key={l} style={{ color: pasoAgendar > i ? 'var(--celeste)' : 'var(--text-muted)', fontWeight: pasoAgendar === i+1 ? 600 : 400 }}>{l}</span>
+                ))}
               </div>
-              <div className="form-group">
-                <label className="form-label">Fecha</label>
-                {(() => {
-                  const hoy = new Date()
-                  const maxFecha = new Date(hoy)
-                  maxFecha.setMonth(maxFecha.getMonth() + 1)
-                  return (
-                    <>
-                      <input type="date" className="form-control"
-                        min={hoy.toLocaleDateString('en-CA')}
-                        max={maxFecha.toLocaleDateString('en-CA')}
-                        value={formCita.fecha}
-                        onChange={e => setFormCita({...formCita, fecha: e.target.value, hora: ''})} />
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginTop: 3 }}>
-                        Solo puedes agendar dentro de los próximos 30 días.
-                      </span>
-                    </>
-                  )
-                })()}
+
+              {/* Paso 1: Psicólogo y Modalidad */}
+              {pasoAgendar === 1 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minHeight: 220 }}>
+                  <h3 style={{ margin: 0, fontSize: 16 }}>1. Selecciona el Profesional</h3>
+                  <div className="form-group">
+                    <label className="form-label">Especialista</label>
+                    <select className="form-control" value={formCita.psicologo_id} onChange={e => setFormCita({...formCita, psicologo_id: e.target.value, hora: ''})}>
+                      <option value="">Selecciona un psicólogo...</option>
+                      {psicologos.map(p => <option key={p.id} value={p.id}>{p.nombres} {p.apellidos} - {p.especialidad}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Modalidad de Atención</label>
+                    <select className="form-control" value={formCita.modalidad} onChange={e => setFormCita({...formCita, modalidad: e.target.value})}>
+                      <option value="presencial">Presencial (Consultorio)</option>
+                      <option value="virtual">Virtual (Videollamada)</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Paso 2: Fecha y Hora */}
+              {pasoAgendar === 2 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minHeight: 220 }}>
+                  <h3 style={{ margin: 0, fontSize: 16 }}>2. Elige Fecha y Hora</h3>
+                  <div className="form-group">
+                    <label className="form-label">Fecha de la cita</label>
+                    {(() => {
+                      const hoy = new Date()
+                      const maxFecha = new Date(hoy)
+                      maxFecha.setMonth(maxFecha.getMonth() + 1)
+                      return (
+                        <input type="date" className="form-control"
+                          min={hoy.toLocaleDateString('en-CA')}
+                          max={maxFecha.toLocaleDateString('en-CA')}
+                          value={formCita.fecha}
+                          onChange={e => setFormCita({...formCita, fecha: e.target.value, hora: ''})} />
+                      )
+                    })()}
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Horarios Disponibles</label>
+                    {cargandoSlots ? (
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', color: 'var(--text-muted)' }}><Spinner /> Cargando...</div>
+                    ) : slotsDisponibles.length > 0 ? (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: 10, marginTop: 8 }}>
+                        {slotsDisponibles.map(h => (
+                          <button key={h} type="button" onClick={() => setFormCita({...formCita, hora: h})}
+                            style={{
+                              padding: '8px 4px', borderRadius: 10, border: `1.5px solid ${formCita.hora === h ? 'var(--celeste)' : 'var(--border)'}`,
+                              background: formCita.hora === h ? 'var(--celeste-light)' : 'transparent',
+                              color: formCita.hora === h ? 'var(--celeste-dark)' : 'var(--text-primary)',
+                              fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s'
+                            }}>
+                            {h}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 13, color: 'var(--danger)', marginTop: 8, padding: 12, background: 'var(--danger-bg)', borderRadius: 8, border: '1px solid rgba(224,48,80,0.2)' }}>
+                        {formCita.fecha ? 'No hay horarios disponibles para esta fecha. Intenta con otro día.' : 'Selecciona una fecha para ver los horarios.'}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Paso 3: Método de Pago */}
+              {pasoAgendar === 3 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minHeight: 220 }}>
+                  <h3 style={{ margin: 0, fontSize: 16 }}>3. Método de Pago</h3>
+                  <div style={{ display: 'grid', gap: 10 }}>
+                    {[
+                      ...(config.pago_efectivo_activo === 'true' ? [{ id: 'efectivo', icon: <Banknote size={20} />, label: 'Efectivo', desc: 'Paga en el consultorio el día de tu cita' }] : []),
+                      ...(config.pago_yape_activo === 'true' ? [{ id: 'yape',     icon: <Smartphone size={20} />, label: 'Yape / Plin', desc: 'Transfiere y adjunta tu comprobante' }] : []),
+                      ...(config.pago_transferencia_activo === 'true' ? [{ id: 'transferencia', icon: <CreditCard size={20} />, label: 'Transferencia Bancaria', desc: 'Depósito o transferencia + comprobante' }] : []),
+                    ].map(m => (
+                      <button key={m.id} type="button" onClick={() => setFormPago({ metodo: m.id, codigo: '', archivo: null, preview: null })}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px',
+                          borderRadius: 12, border: `2px solid ${formPago.metodo === m.id ? 'var(--celeste)' : 'var(--border)'}`,
+                          background: formPago.metodo === m.id ? 'var(--celeste-light)' : 'var(--surface)',
+                          cursor: 'pointer', transition: 'all 0.2s', textAlign: 'left'
+                        }}>
+                        <div style={{ color: formPago.metodo === m.id ? 'var(--celeste)' : 'var(--text-muted)', flexShrink: 0 }}>{m.icon}</div>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 13.5, color: 'var(--text-primary)' }}>{m.label}</div>
+                          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{m.desc}</div>
+                        </div>
+                        {formPago.metodo === m.id && <CheckCircle size={16} color="var(--celeste)" style={{ marginLeft: 'auto', flexShrink: 0 }} />}
+                      </button>
+                    ))}
+                    {[config.pago_efectivo_activo, config.pago_yape_activo, config.pago_transferencia_activo].every(x => x !== 'true') && (
+                      <div style={{ fontSize: 13, color: 'var(--danger)', padding: 10, background: 'var(--danger-bg)', borderRadius: 8, border: '1px solid var(--danger)' }}>
+                        No hay métodos de pago habilitados. Comunícate con recepción.
+                      </div>
+                    )}
+                  </div>
+
+                  {(formPago.metodo === 'yape' || formPago.metodo === 'transferencia') && (() => {
+                    const precio = Number(psicologos.find(p => p.id === formCita.psicologo_id)?.precio_sesion) || 0;
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 4, padding: 14, background: 'var(--surface-2)', borderRadius: 12, border: '1px solid var(--border)' }}>
+
+                        {/* QR / Datos bancarios */}
+                        <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: 12, display: 'flex', gap: 12, alignItems: 'center' }}>
+                          {formPago.metodo === 'yape' && config.qr_yape && (
+                            <div 
+                              onClick={() => setImagenExpandida(`${API_BASE}${config.qr_yape}`)}
+                              title="Click para ampliar QR"
+                              style={{ width: 80, height: 80, border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden', flexShrink: 0, cursor: 'zoom-in' }}
+                            >
+                              <img src={`${API_BASE}${config.qr_yape}`} alt="QR Yape" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                            </div>
+                          )}
+                          <div style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <div><span style={{ color: 'var(--text-muted)' }}>Monto a pagar:</span> <strong style={{ color: 'var(--celeste-dark)' }}>S/ {precio.toFixed(2)}</strong></div>
+                            {formPago.metodo === 'yape' ? (
+                              <>
+                                <div><span style={{ color: 'var(--text-muted)' }}>Número Yape/Plin:</span> <strong>{config.yape_numero || '—'}</strong></div>
+                                <div><span style={{ color: 'var(--text-muted)' }}>Titular:</span> <strong>{config.yape_titular || '—'}</strong></div>
+                              </>
+                            ) : (
+                              <>
+                                <div><span style={{ color: 'var(--text-muted)' }}>Banco:</span> <strong>{config.banco_nombre || '—'}</strong></div>
+                                <div><span style={{ color: 'var(--text-muted)' }}>Titular:</span> <strong>{config.banco_titular || '—'}</strong></div>
+                                <div><span style={{ color: 'var(--text-muted)' }}>N° Cuenta:</span> <strong>{config.cuenta_bancaria || '—'}</strong></div>
+                                <div><span style={{ color: 'var(--text-muted)' }}>CCI:</span> <strong>{config.cuenta_cci || '—'}</strong></div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* 1. Comprobante PRIMERO */}
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label">
+                            📎 Adjuntar comprobante de pago <span style={{ color: 'var(--danger)' }}>*</span>
+                          </label>
+                          <div
+                            onClick={() => pagoInputRef.current?.click()}
+                            style={{
+                              border: `2px dashed ${formPago.archivo ? 'var(--success)' : 'var(--border)'}`,
+                              borderRadius: 10, padding: '16px 14px', textAlign: 'center', cursor: 'pointer',
+                              background: formPago.preview ? 'var(--success-bg)' : 'var(--surface)',
+                              transition: 'all 0.2s',
+                            }}
+                          >
+                            <input
+                              ref={pagoInputRef}
+                              type="file"
+                              accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+                              style={{ display: 'none' }}
+                              onChange={e => {
+                                const f = e.target.files[0]
+                                e.target.value = '' // reset para permitir re-selección
+                                if (!f) return
+                                if (!f.type.startsWith('image/')) {
+                                  toast.error('❌ Solo se aceptan imágenes (JPG, PNG, WEBP)')
+                                  return
+                                }
+                                if (f.size > 5 * 1024 * 1024) {
+                                  toast.error('❌ La imagen no debe superar 5 MB')
+                                  return
+                                }
+                                setFormPago(p => ({ ...p, archivo: f, preview: URL.createObjectURL(f) }))
+                              }}
+                            />
+                            {formPago.preview ? (
+                              <div>
+                                <img
+                                  src={formPago.preview}
+                                  alt="Comprobante"
+                                  style={{ maxHeight: 110, maxWidth: '100%', borderRadius: 8, objectFit: 'contain' }}
+                                />
+                                <div style={{ fontSize: 11, color: 'var(--success)', marginTop: 5, fontWeight: 600 }}>
+                                  ✓ {formPago.archivo?.name} — Haz clic para cambiar
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <Upload size={22} color="var(--text-muted)" style={{ marginBottom: 4 }} />
+                                <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>Haz clic para subir tu captura</div>
+                                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>Solo imágenes · Máx. 5 MB</div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* 2. Código de operación DEBAJO */}
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label">
+                            🔢 Número de operación / código de transacción <span style={{ color: 'var(--danger)' }}>*</span>
+                          </label>
+                          <input
+                            className="form-control"
+                            placeholder="Ej. 987654321 (mín. 8 dígitos)"
+                            value={formPago.codigo}
+                            maxLength={30}
+                            onChange={e => setFormPago(p => ({ ...p, codigo: e.target.value.replace(/\D/g, '') }))}
+                            style={{
+                              borderColor: formPago.codigo.trim().length > 0 && formPago.codigo.trim().length < 8
+                                ? 'var(--danger)'
+                                : formPago.codigo.trim().length >= 8
+                                  ? 'var(--success)'
+                                  : undefined
+                            }}
+                          />
+                          {formPago.codigo.trim().length > 0 && formPago.codigo.trim().length < 8 && (
+                            <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 4 }}>
+                              ⚠ Ingresa al menos 8 dígitos numéricos
+                            </div>
+                          )}
+                        </div>
+
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Paso 4: Confirmación */}
+              {pasoAgendar === 4 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minHeight: 220 }}>
+                  <h3 style={{ margin: 0, fontSize: 16 }}>4. Confirma tu Cita</h3>
+                  <div style={{ background: 'var(--surface-2)', padding: 20, borderRadius: 14, border: '1px solid var(--border)' }}>
+                    <div style={{ display: 'grid', gap: 12, fontSize: 14 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><UserCheck size={16} color="var(--celeste)" /> <strong>Especialista:</strong> {psicologos.find(p => p.id === formCita.psicologo_id)?.nombres} {psicologos.find(p => p.id === formCita.psicologo_id)?.apellidos}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Calendar size={16} color="var(--celeste)" /> <strong>Fecha:</strong> {new Date(formCita.fecha + 'T00:00:00').toLocaleDateString('es-PE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Clock size={16} color="var(--celeste)" /> <strong>Hora:</strong> {formCita.hora}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Smartphone size={16} color="var(--celeste)" /> <strong>Modalidad:</strong> <span style={{ textTransform: 'capitalize' }}>{formCita.modalidad}</span></div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><CreditCard size={16} color="var(--celeste)" /> <strong>Pago:</strong> <span style={{ textTransform: 'capitalize' }}>{formPago.metodo === 'yape' ? 'Yape / Plin' : formPago.metodo}</span></div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', marginTop: 6, lineHeight: 1.7 }}>
+                    {formPago.metodo === 'efectivo'
+                      ? 'Recuerda traer el monto exacto el día de tu cita.'
+                      : 'Tu comprobante será revisado. Recibirás confirmación por correo.'}
+                  </div>
+                </div>
+              )}
+
+            </div>
+            <div className="card-footer" style={{ display: 'flex', justifyContent: 'space-between', borderTop: 'none', paddingTop: 0 }}>
+              {pasoAgendar > 1 ? (
+                <button className="btn btn-ghost" onClick={() => setPasoAgendar(p => p - 1)}>Atrás</button>
+              ) : (
+                <button className="btn btn-ghost" onClick={() => setModalAgendar(false)}>Cancelar</button>
+              )}
+              
+              {pasoAgendar < 4 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                  {/* Mensajes de ayuda por paso */}
+                  {pasoAgendar === 1 && !formCita.psicologo_id && (
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Selecciona un profesional para continuar</div>
+                  )}
+                  {pasoAgendar === 2 && !formCita.hora && (
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Selecciona un horario disponible</div>
+                  )}
+                  {pasoAgendar === 3 && (formPago.metodo === 'yape' || formPago.metodo === 'transferencia') && (
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right' }}>
+                      {!formPago.archivo && '📎 Falta adjuntar el comprobante'}
+                      {formPago.archivo && formPago.codigo.trim().length < 8 && '🔢 Falta el número de operación (mín. 8 dígitos)'}
+                    </div>
+                  )}
+                  <button className="btn btn-primary"
+                    onClick={() => setPasoAgendar(p => p + 1)}
+                    disabled={
+                      (pasoAgendar === 1 && !formCita.psicologo_id) ||
+                      (pasoAgendar === 2 && !formCita.hora) ||
+                      (pasoAgendar === 3 && (formPago.metodo === 'yape' || formPago.metodo === 'transferencia') && (!formPago.archivo || formPago.codigo.trim().length < 8))
+                    }>
+                    Continuar
+                  </button>
+                </div>
+              ) : (
+                <button className="btn btn-primary" onClick={confirmarCita} disabled={guardandoCita}
+                  style={{ background: 'linear-gradient(135deg, var(--celeste), var(--celeste-dark))', border: 'none', color: '#fff' }}>
+                  {guardandoCita ? 'Confirmando...' : 'Confirmar Cita'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Dejar Reseña */}
+      {modalResena && (
+        <div className="modal-overlay">
+          <div className="card" style={{ width: 450, maxWidth: '95vw', borderRadius: 20 }}>
+            <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', borderBottom: 'none', paddingBottom: 0 }}>
+              <span className="card-title" style={{ fontSize: 18 }}>Califica tu Experiencia</span>
+              <button className="btn btn-ghost" onClick={() => setModalResena(null)}><X size={20} /></button>
+            </div>
+            <div className="card-body">
+              <div style={{ textAlign: 'center', marginBottom: 20 }}>
+                <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+                  ¿Cómo te fue en tu sesión con el especialista <strong>{modalResena.psicologo?.nombres} {modalResena.psicologo?.apellidos}</strong>?
+                </p>
+                
+                {/* Estrellas */}
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 16 }}>
+                  {[1, 2, 3, 4, 5].map(star => (
+                    <button
+                      key={star}
+                      onClick={() => setFormResena(prev => ({ ...prev, calificacion: star }))}
+                      style={{
+                        background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
+                        color: star <= formResena.calificacion ? 'var(--warning)' : 'var(--border)',
+                        transition: 'color 0.2s, transform 0.2s',
+                        transform: star <= formResena.calificacion ? 'scale(1.15)' : 'scale(1)'
+                      }}
+                    >
+                      <Star size={36} fill={star <= formResena.calificacion ? 'currentColor' : 'none'} />
+                    </button>
+                  ))}
+                </div>
               </div>
+
               <div className="form-group">
-                <label className="form-label">Hora Disponible</label>
-                <select className="form-control" value={formCita.hora} onChange={e => setFormCita({...formCita, hora: e.target.value})} disabled={!formCita.fecha || !formCita.psicologo_id || cargandoSlots}>
-                  <option value="">{cargandoSlots ? 'Cargando horarios...' : 'Selecciona una hora...'}</option>
-                  {slotsDisponibles.map(h => <option key={h} value={h}>{h}</option>)}
-                </select>
-                {slotsDisponibles.length === 0 && formCita.fecha && formCita.psicologo_id && !cargandoSlots && (
-                  <span style={{ fontSize: 12, color: 'var(--danger)', marginTop: 4, display: 'block' }}>No hay horarios disponibles para este día.</span>
-                )}
+                <label className="form-label">Cuéntanos más (opcional pero muy útil)</label>
+                <textarea
+                  className="form-control"
+                  rows={4}
+                  placeholder="Excelente trato, me ayudó mucho con mis herramientas emocionales..."
+                  value={formResena.comentario}
+                  onChange={e => setFormResena(prev => ({ ...prev, comentario: e.target.value }))}
+                />
+              </div>
+
+              <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 16 }}>
+                <div className="toggle-wrap">
+                  <label className="toggle">
+                    <input type="checkbox" checked={formResena.es_anonima} onChange={e => setFormResena(prev => ({ ...prev, es_anonima: e.target.checked }))} />
+                    <span className="toggle-slider" />
+                  </label>
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                  Publicar de forma anónima (tu nombre no se mostrará)
+                </div>
               </div>
             </div>
-            <div className="card-footer" style={{ textAlign: 'right', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button className="btn btn-ghost" onClick={() => setModalAgendar(false)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={confirmarCita} disabled={guardandoCita || !formCita.hora}>
-                {guardandoCita ? 'Agendando...' : 'Confirmar Cita'}
+            <div className="card-footer" style={{ textAlign: 'right', display: 'flex', gap: 10, justifyContent: 'flex-end', borderTop: 'none', paddingTop: 0 }}>
+              <button className="btn btn-ghost" onClick={() => setModalResena(null)}>Cancelar</button>
+              <button className="btn btn-warning" onClick={enviarResena} disabled={guardandoResena} style={{ fontWeight: 700 }}>
+                {guardandoResena ? 'Enviando...' : 'Publicar Reseña'}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Modal de Cancelación de Cita (Paciente) */}
+      {modalCancelarPaciente && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ maxWidth: 420 }}>
+            <div style={{ width:48, height:48, borderRadius:12, background:'var(--danger-bg)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 14px' }}>
+              <XCircle size={24} color="var(--danger)" />
+            </div>
+            <h2 className="modal-title" style={{ textAlign:'center' }}>Cancelar Cita</h2>
+            <p style={{ textAlign:'center', fontSize:13.5, color:'var(--text-secondary)', margin:'0 0 16px' }}>
+              Cita con <b>{modalCancelarPaciente.psicologo?.nombres} {modalCancelarPaciente.psicologo?.apellidos}</b><br/>
+              {new Date(modalCancelarPaciente.programada_para).toLocaleDateString('es-PE', { weekday:'long', year:'numeric', month:'long', day:'numeric' })}
+            </p>
+            {getFactura(modalCancelarPaciente)?.estado === 'pagada' && (
+              <div style={{ padding:'12px 16px', background:'var(--warning-bg)', borderRadius:10, border:'1px solid var(--warning)', fontSize:13, marginBottom:16, color:'var(--text-primary)' }}>
+                ⚠️ Tu pago está registrado. Al cancelar, se enviará automáticamente una <b>solicitud de reembolso</b> al consultorio para revisión.
+              </div>
+            )}
+            <div className="form-group" style={{ marginBottom:20 }}>
+              <label className="form-label">Motivo de la cancelación <span className="required">*</span></label>
+              <textarea className="form-control" rows={3} value={motivoCancelarPaciente}
+                onChange={e => setMotivoCancelarPaciente(e.target.value)}
+                placeholder="Ej: Me surgió un imprevisto, no puedo asistir..." />
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={() => setModalCancelarPaciente(null)}>Volver</button>
+              <button className="btn btn-danger" onClick={confirmarCancelacionPaciente} disabled={guardandoCancelacion}>
+                {guardandoCancelacion ? 'Cancelando...' : 'Confirmar Cancelación'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {imagenExpandida && (
+        <div className="modal-overlay" onClick={() => setImagenExpandida(null)} style={{ zIndex: 999999, background: 'rgba(0,0,0,0.85)' }}>
+          <div style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
+            <button onClick={() => setImagenExpandida(null)} style={{
+              position: 'absolute', top: -40, right: -40, background: 'none', border: 'none',
+              color: 'white', cursor: 'pointer', padding: 8,
+            }}><X size={32} /></button>
+            <img src={imagenExpandida} alt="Ampliada" style={{ maxWidth: '100%', maxHeight: '90vh', objectFit: 'contain', borderRadius: 12, boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }} />
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
@@ -1053,7 +1668,7 @@ function DashboardStaff() {
 
   // Cargar lista de psicólogos (para selector de Admin/Staff)
   useEffect(() => {
-    if (usuario?.rol !== 'Paciente') {
+    if (getRol(usuario) !== 'paciente') {
       psicologosApi.listar()
         .then(res => {
           const lista = res.data.datos ?? []
@@ -1114,7 +1729,7 @@ function DashboardStaff() {
 
   // Convertir citas a eventos del calendarios
   const eventosSemanales = citasSemana.map(c => {
-    const col = colorPago(c.factura || c.facturas?.[0])
+    const col = colorPago(getFactura(c))
     const inicio = new Date(c.programada_para)
     const fin = new Date(inicio)
     fin.setMinutes(fin.getMinutes() + (c.duracion_minutos || 60))
@@ -1217,7 +1832,7 @@ function DashboardStaff() {
             </div>
 
             {/* Selector de Psicólogo */}
-            {usuario?.rol !== 'Psicologo' && psicologos.length > 0 && (
+            {getRol(usuario) !== 'psicologo' && psicologos.length > 0 && (
               <select
                 className="form-control"
                 value={psicologoId}
@@ -1232,7 +1847,7 @@ function DashboardStaff() {
               </select>
             )}
 
-            {usuario?.rol === 'Psicologo' && (
+            {getRol(usuario) === 'psicologo' && (
               <div style={{ fontSize: 13, color: 'var(--text-secondary)', padding: '6px 14px', background: 'var(--surface-2)', borderRadius: 8, border: '1px solid var(--border)' }}>
                 Dr(a). {usuario.correo.split('@')[0]}
               </div>
@@ -1281,7 +1896,7 @@ function DashboardStaff() {
                   .filter(c => new Date(c.programada_para).toISOString().slice(0, 10) === fecha)
                   .sort((a, b) => new Date(a.programada_para) - new Date(b.programada_para))
                   .map(c => {
-                    const col = colorPago(c.factura || c.facturas?.[0])
+                    const col = colorPago(getFactura(c))
                     return (
                       <div key={c.id} style={{
                         padding: '14px 18px', borderRadius: 12,
@@ -1297,9 +1912,20 @@ function DashboardStaff() {
                             {c.modalidad} • {c.duracion_minutos ?? 60} min • Sesión #{c.numero_sesion}
                           </div>
                         </div>
-                        <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 20, background: `${col.dot}18`, color: col.text, fontWeight: 600, border: `1px solid ${col.border}` }}>
-                          {col.label}
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 20, background: `${col.dot}18`, color: col.text, fontWeight: 600, border: `1px solid ${col.border}` }}>
+                            {col.label}
+                          </span>
+                          {c.modalidad === 'virtual' && c.enlace_reunion && (() => {
+                            const enlace = c.enlace_reunion.includes('::') ? c.enlace_reunion.split('::')[1] : c.enlace_reunion;
+                            return (
+                              <a href={enlace.startsWith('http') ? enlace : `https://${enlace}`} target="_blank" rel="noreferrer"
+                                style={{ padding: '4px 10px', borderRadius: 16, background: 'linear-gradient(135deg, var(--info), var(--celeste-dark))', color: 'white', border: 'none', fontSize: 11, fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <Smartphone size={11} /> Unirse
+                              </a>
+                            )
+                          })()}
+                        </div>
                       </div>
                     )
                   })}
@@ -1308,6 +1934,7 @@ function DashboardStaff() {
           </div>
         )}
       </div>
+
     </div>
   )
 }
@@ -1315,5 +1942,6 @@ function DashboardStaff() {
 // ── Root ───────────────────────────────────────────────────────────────────────
 export default function Dashboard() {
   const { usuario } = useAuth()
-  return usuario?.rol === 'Paciente' ? <DashboardPaciente /> : <DashboardStaff />
+  const rolActual = getRol(usuario)
+  return rolActual === 'paciente' ? <DashboardPaciente /> : <DashboardStaff />
 }

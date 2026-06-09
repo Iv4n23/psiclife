@@ -1,7 +1,7 @@
 // src/pacientes/dto/pacientes.dto.ts
 import {
   IsString, IsOptional, IsEmail, IsBoolean,
-  IsDateString, IsEnum, MaxLength,
+  IsDateString, IsEnum, MaxLength, Matches,
 } from 'class-validator'
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger'
 import { pacientes_canal_primer_contacto, pacientes_estado_paciente } from '@prisma/client'
@@ -21,7 +21,8 @@ export class CrearPacienteDto {
   tipo_documento?: string
 
   @ApiProperty({ example: '12345678' })
-  @IsString() @MaxLength(20)
+  @IsString() 
+  @Matches(/^[A-Za-z0-9]{8,12}$/, { message: 'El documento debe tener entre 8 y 12 caracteres alfanuméricos' })
   numero_documento: string
 
   @ApiPropertyOptional({ example: '1990-05-15' })
@@ -33,15 +34,17 @@ export class CrearPacienteDto {
   sexo?: string
 
   @ApiPropertyOptional()
-  @IsOptional() @IsString() @MaxLength(20)
+  @IsOptional() @IsString()
+  @Matches(/^\+?[0-9\s-]{9,15}$/, { message: 'Formato de teléfono inválido' })
   telefono?: string
 
   @ApiPropertyOptional()
-  @IsOptional() @IsString() @MaxLength(20)
+  @IsOptional() @IsString()
+  @Matches(/^\+?[0-9\s-]{9,15}$/, { message: 'Formato de WhatsApp inválido' })
   whatsapp?: string
 
   @ApiPropertyOptional()
-  @IsOptional() @IsEmail()
+  @IsOptional() @IsEmail({}, { message: 'Correo electrónico inválido' })
   correo_personal?: string
 
   @ApiPropertyOptional()
@@ -61,7 +64,8 @@ export class CrearPacienteDto {
   contacto_emergencia?: string
 
   @ApiPropertyOptional()
-  @IsOptional() @IsString() @MaxLength(20)
+  @IsOptional() @IsString()
+  @Matches(/^\+?[0-9\s-]{9,15}$/, { message: 'Formato de teléfono de emergencia inválido' })
   telefono_emergencia?: string
 
   @ApiPropertyOptional()

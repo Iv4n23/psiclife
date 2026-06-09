@@ -63,6 +63,25 @@ export class FacturacionService {
     })
   }
 
+  async listarPagosPendientesConfirmacion() {
+    return this.prisma.pagos.findMany({
+      where: {
+        confirmado: false,
+        url_comprobante: { not: null },
+      },
+      include: {
+        factura: {
+          include: {
+            paciente:  { select: { nombres: true, apellidos: true, correo_personal: true } },
+            psicologo: { select: { nombres: true, apellidos: true } },
+            cita:      { select: { programada_para: true, modalidad: true } },
+          },
+        },
+      },
+      orderBy: { pagado_en: 'asc' },
+    })
+  }
+
   // ── Crear factura ──────────────────────────────────────────
   async crear(dto: CrearFacturaDto, usuarioId: string) {
     // Verificar que no exista ya una factura para esta cita
@@ -109,6 +128,15 @@ export class FacturacionService {
   // ── Registrar pago ─────────────────────────────────────────
   async registrarPago(facturaId: string, dto: RegistrarPagoDto, usuarioId: string) {
     const factura = await this.buscarPorId(facturaId)
+
+    if (dto.codigo_referencia && dto.codigo_referencia.trim() !== '') {
+      const existeCodigo = await this.prisma.pagos.findFirst({
+        where: { codigo_referencia: dto.codigo_referencia.trim() }
+      })
+      if (existeCodigo) {
+        throw new ConflictException('El número de operación ya ha sido registrado en otro pago')
+      }
+    }
 
     if (factura.estado === 'anulada')
       throw new BadRequestException('No se puede registrar un pago en una factura anulada')
@@ -250,6 +278,15 @@ export class FacturacionService {
 
   async registrarPagoYapePaciente(facturaId: string, dto: RegistrarPagoYapeDto, urlComprobante: string, usuarioId: string) {
     const factura = await this.buscarPorId(facturaId)
+
+    if (dto.codigo_referencia && dto.codigo_referencia.trim() !== '') {
+      const existeCodigo = await this.prisma.pagos.findFirst({
+        where: { codigo_referencia: dto.codigo_referencia.trim() }
+      })
+      if (existeCodigo) {
+        throw new ConflictException('El número de operación ya ha sido registrado en otro pago')
+      }
+    }
     
     if (factura.estado === 'anulada')
       throw new BadRequestException('No se puede registrar un pago en una factura anulada')
@@ -261,7 +298,7 @@ export class FacturacionService {
       data: {
         factura_id:       facturaId,
         monto:            dto.monto,
-        metodo:           'yape',
+        metodo:           dto.metodo_pago || 'yape',
         codigo_referencia: dto.codigo_referencia,
         url_comprobante:  urlComprobante,
         confirmado:       false,
@@ -272,10 +309,10 @@ export class FacturacionService {
     await this.prisma.auditoria.create({
       data: {
         usuario_id:  usuarioId,
-        accion:      'pago.yape.registrado',
+        accion:      'pago.comprobante.registrado',
         modulo:      'facturacion',
         entidad_id:  facturaId,
-        datos_nuevos: { pago_id: pago.id, monto: dto.monto },
+        datos_nuevos: { pago_id: pago.id, monto: dto.monto, metodo: dto.metodo_pago || 'yape' },
       },
     })
 
@@ -358,6 +395,41 @@ export class FacturacionService {
         modulo:      'facturacion',
         entidad_id:  pago.factura_id,
         datos_nuevos: { pago_id: pagoId, estado_factura: nuevoEstado },
+      },
+    })
+
+    return { pagoId, estado_factura: nuevoEstado }
+  }
+
+  async rechazarPago(pagoId: string, usuarioId: string) {
+    const pago = await this.prisma.pagos.findUnique({
+      where: { id: pagoId },
+      include: { factura: { include: { pagos: true } } },
+    })
+    if (!pago) throw new NotFoundException('Pago no encontrado')
+    if (pago.confirmado) throw new BadRequestException('No se puede rechazar un pago ya confirmado')
+
+    // Eliminar el registro del pago pendiente
+    await this.prisma.pagos.delete({ where: { id: pagoId } })
+
+    // Recalcular el estado de la factura con los pagos restantes confirmados
+    const pagosRestantes = pago.factura.pagos.filter(p => p.id !== pagoId && p.confirmado)
+    const totalPagado = pagosRestantes.reduce((acc, p) => acc + Number(p.monto), 0)
+    const totalFactura = Number(pago.factura.total)
+    const nuevoEstado = (totalPagado <= 0 ? 'pendiente' : totalPagado >= totalFactura - 0.01 ? 'pagada' : 'parcial') as any
+
+    await this.prisma.facturas.update({
+      where: { id: pago.factura_id },
+      data: { estado: nuevoEstado },
+    })
+
+    await this.prisma.auditoria.create({
+      data: {
+        usuario_id:  usuarioId,
+        accion:      'pago.rechazado',
+        modulo:      'facturacion',
+        entidad_id:  pago.factura_id,
+        datos_nuevos: { pago_id: pagoId },
       },
     })
 

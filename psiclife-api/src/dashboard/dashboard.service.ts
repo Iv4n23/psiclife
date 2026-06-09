@@ -50,7 +50,8 @@ export class DashboardService {
           },
           facturas: {
             include: { pagos: true }
-          }
+          },
+          resenas: true
         }
       }),
       this.prisma.eva_aplicaciones.findMany({

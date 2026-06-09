@@ -50,6 +50,14 @@ export class FacturacionController {
     return { mensaje: 'Reporte financiero obtenido', datos }
   }
 
+  @Get('pagos/pendientes')
+  @Permisos('facturacion.ver')
+  @ApiOperation({ summary: 'Listar pagos con comprobante pendientes de confirmación' })
+  async pagosPendientes() {
+    const datos = await this.facturacionService.listarPagosPendientesConfirmacion()
+    return { mensaje: 'Pagos pendientes obtenidos', datos }
+  }
+
   @Get('cita/:citaId')
   @Permisos('facturacion.ver')
   @ApiOperation({ summary: 'Obtener factura por cita' })
@@ -149,7 +157,7 @@ export class FacturacionController {
 
   @Patch('pagos/:pagoId/confirmar')
   @Permisos('facturacion.editar')
-  @ApiOperation({ summary: 'Confirmar un pago Yape' })
+  @ApiOperation({ summary: 'Confirmar un pago Yape/Transferencia' })
   @ApiParam({ name: 'pagoId', format: 'uuid' })
   async confirmarPago(
     @Param('pagoId', ParseUUIDPipe) pagoId: string,
@@ -157,5 +165,17 @@ export class FacturacionController {
   ) {
     const datos = await this.facturacionService.confirmarPago(pagoId, usuarioId)
     return { mensaje: 'Pago confirmado correctamente', datos }
+  }
+
+  @Patch('pagos/:pagoId/rechazar')
+  @Permisos('facturacion.editar')
+  @ApiOperation({ summary: 'Rechazar/eliminar un pago pendiente de confirmacion' })
+  @ApiParam({ name: 'pagoId', format: 'uuid' })
+  async rechazarPago(
+    @Param('pagoId', ParseUUIDPipe) pagoId: string,
+    @UsuarioActual('sub') usuarioId: string,
+  ) {
+    const datos = await this.facturacionService.rechazarPago(pagoId, usuarioId)
+    return { mensaje: 'Pago rechazado y eliminado correctamente', datos }
   }
 }

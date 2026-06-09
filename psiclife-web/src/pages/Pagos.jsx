@@ -1,9 +1,9 @@
-// src/pages/Facturacion.jsx
+// src/pages/Pagos.jsx
 import { useState, useEffect } from 'react'
 import { facturacionApi, pacientesApi, psicologosApi, citasApi, configuracionApi } from '../services/api'
 import { EmptyState, Spinner } from '../components/ui/index.jsx'
 import toast from 'react-hot-toast'
-import { Plus, X, Save, Eye, DollarSign, TrendingUp, CheckCircle, AlertTriangle, ImageOff, Trash2 } from 'lucide-react'
+import { Plus, X, Save, Eye, DollarSign, TrendingUp, CheckCircle, AlertTriangle, ImageOff, Trash2, RefreshCw } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { getImageUrl } from '../utils/image'
 
@@ -18,7 +18,7 @@ const ESTADO_BADGE = {
 const IGV_RATE = 0.18
 const API_BASE = import.meta.env.VITE_API_URL?.replace('/api/v1', '') ?? 'http://localhost:3000'
 
-export default function Facturacion() {
+export default function Pagos() {
   const { puedo } = useAuth()
   const [facturas,   setFacturas]   = useState([])
   const [cargando,   setCargando]   = useState(true)
@@ -46,6 +46,18 @@ export default function Facturacion() {
   const [errPago,  setErrPago]  = useState({})
 
   const [motivoAnular, setMotivoAnular] = useState('')
+  const [imagenExpandida, setImagenExpandida] = useState(null)
+
+  // ── Estados para Reembolsos ────────────────────────────────
+  const [reembolsos,      setReembolsos]      = useState([])
+  const [cargandoReem,    setCargandoReem]    = useState(false)
+  const [filtroReem,      setFiltroReem]      = useState('pendiente')
+  const [resolviendo,     setResolviendo]     = useState(null) // { solicitudId, notas }
+  const [guardandoReem,   setGuardandoReem]   = useState(false)
+
+  // ── Estados para Verificación de Pagos ────────────────────
+  const [pagosPend,       setPagosPend]       = useState([])
+  const [cargandoPend,    setCargandoPend]    = useState(false)
 
   useEffect(() => { cargar() }, [])
 
@@ -83,6 +95,32 @@ export default function Facturacion() {
       setConfig(prev => ({ ...prev, ...cfgObj }))
     } catch {} finally { setCargando(false) }
   }
+
+  const cargarReembolsos = async () => {
+    setCargandoReem(true)
+    try {
+      const { data } = await citasApi.listarReembolsos(filtroReem)
+      setReembolsos(data.datos ?? [])
+    } catch (error) {
+      console.error('Error cargando reembolsos:', error)
+      toast.error('No se pudieron cargar las solicitudes de reembolso. Intenta nuevamente.')
+    } finally { setCargandoReem(false) }
+  }
+
+  useEffect(() => { if (tab === 'reembolsos') cargarReembolsos() }, [tab, filtroReem])
+
+  const cargarPagosPend = async () => {
+    setCargandoPend(true)
+    try {
+      const { data } = await facturacionApi.pagosPendientes()
+      setPagosPend(data.datos ?? [])
+    } catch (err) {
+      console.error('Error cargando pagos pendientes:', err)
+      toast.error('No se pudieron cargar los pagos pendientes de verificación.')
+    } finally { setCargandoPend(false) }
+  }
+
+  useEffect(() => { if (tab === 'facturas') cargarPagosPend() }, [tab])
 
   const verDetalle = async (id) => {
     try {
@@ -123,6 +161,10 @@ export default function Facturacion() {
   const registrarPago = async () => {
     const e = {}
     if (!formPago.monto || Number(formPago.monto) <= 0) e.monto = 'Monto inválido'
+    if ((formPago.metodo === 'yape' || formPago.metodo === 'transferencia') && !formPago.codigo_referencia.trim())
+      e.codigo_referencia = 'El código de operación es requerido para Yape/Transferencia'
+    if ((formPago.metodo === 'yape' || formPago.metodo === 'transferencia') && formPago.codigo_referencia.trim().length < 8)
+      e.codigo_referencia = 'Ingresa al menos 8 dígitos numéricos en el código de operación'
     setErrPago(e)
     if (Object.keys(e).length > 0) return
     setGuardando(true)
@@ -160,11 +202,27 @@ export default function Facturacion() {
     setGuardando(true)
     try {
       await facturacionApi.confirmarPago(pagoId)
-      toast.success('Pago Yape confirmado. Factura actualizada.')
+      toast.success('Pago confirmado. Factura actualizada.')
       await verDetalle(detalle.id)
       await cargar()
     } catch (err) {
       const msg = err.response?.data?.mensaje ?? 'Error al confirmar pago'
+      toast.error(msg)
+    } finally { setGuardando(false) }
+  }
+
+  const rechazarPago = async (pagoId) => {
+    if (!window.confirm('¿Seguro que deseas rechazar este pago? Se notificará al paciente.')) return
+    setGuardando(true)
+    try {
+      // Usar la misma ruta de anular/rechazar si existe, sino eliminar el pago
+      await facturacionApi.rechazarPago(pagoId)
+      toast.success('Pago rechazado correctamente.')
+      await verDetalle(detalle.id)
+      await cargar()
+    } catch (err) {
+      // Si no existe endpoint de rechazo, informar al usuario
+      const msg = err.response?.data?.mensaje ?? 'Error al rechazar pago'
       toast.error(msg)
     } finally { setGuardando(false) }
   }
@@ -240,6 +298,7 @@ export default function Facturacion() {
             </div>
           </div>
 
+        {/* Registro de pago */}
           {puedePagar && (
             <div className="card">
               <div className="card-header"><span className="card-title">Registrar pago</span></div>
@@ -248,8 +307,10 @@ export default function Facturacion() {
                   <div className="form-group">
                     <label className="form-label">Método de pago</label>
                     <select className="form-control" value={formPago.metodo}
-                      onChange={e => setFormPago(p => ({ ...p, metodo: e.target.value }))}>
-                      {['efectivo','yape','transferencia','tarjeta'].map(m => <option key={m}>{m}</option>)}
+                      onChange={e => setFormPago(p => ({ ...p, metodo: e.target.value, codigo_referencia: '' }))}>
+                      {['efectivo','yape','transferencia','tarjeta']
+                        .filter(m => config[`pago_${m}_activo`] === 'true')
+                        .map(m => <option key={m}>{m}</option>)}
                     </select>
                   </div>
                   <div className="form-group">
@@ -261,10 +322,19 @@ export default function Facturacion() {
                     {errPago.monto && <span className="form-error">{errPago.monto}</span>}
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Código / referencia</label>
-                    <input className="form-control" value={formPago.codigo_referencia}
-                      onChange={e => setFormPago(p => ({ ...p, codigo_referencia: e.target.value }))}
-                      placeholder="N° operación Yape / transferencia" />
+                    <label className="form-label">
+                      Código / referencia
+                      {(formPago.metodo === 'yape' || formPago.metodo === 'transferencia') && (
+                        <span style={{ color: 'var(--danger)', marginLeft: 4 }}>*</span>
+                      )}
+                    </label>
+                    <input
+                      className={`form-control ${errPago.codigo_referencia ? 'error' : ''}`}
+                      value={formPago.codigo_referencia}
+                      maxLength={30}
+                      onChange={e => { setFormPago(p => ({ ...p, codigo_referencia: e.target.value.replace(/\D/g, '') })); setErrPago(er => ({...er, codigo_referencia: ''})) }}
+                      placeholder="N° operación (mín. 8 dígitos)" />
+                    {errPago.codigo_referencia && <span className="form-error">{errPago.codigo_referencia}</span>}
                   </div>
                 </div>
                 <div className="form-footer" style={{ marginTop: 14 }}>
@@ -293,8 +363,8 @@ export default function Facturacion() {
           )}
         </div>
 
-        {/* ── Pagos Yape pendientes de confirmación ── */}
-        {detalle.pagos?.some(p => p.metodo === 'yape' && p.confirmado === false) && (
+        {/* ── Pagos pendientes de confirmación (Yape + Transferencia) ── */}
+        {detalle.pagos?.some(p => (p.metodo === 'yape' || p.metodo === 'transferencia') && p.confirmado === false) && (
           <div className="card" style={{
             marginTop: 16,
             border: '2px solid rgba(58,174,216,0.25)',
@@ -303,37 +373,45 @@ export default function Facturacion() {
             <div className="card-header" style={{ background: 'rgba(58,174,216,0.12)', borderBottom: '1px solid rgba(58,174,216,0.2)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <AlertTriangle size={18} color="var(--info)" />
-                <span className="card-title" style={{ color: 'var(--info)' }}>Pago(s) Yape Pendientes de Confirmación</span>
+                <span className="card-title" style={{ color: 'var(--info)' }}>Pagos pendientes de confirmación</span>
+                <span style={{ marginLeft: 'auto', fontSize: 12, background: 'var(--info)', color: '#fff', padding: '2px 10px', borderRadius: 20, fontWeight: 700 }}>
+                  {detalle.pagos.filter(p => (p.metodo === 'yape' || p.metodo === 'transferencia') && p.confirmado === false).length} pendiente(s)
+                </span>
               </div>
             </div>
             <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {detalle.pagos.filter(p => p.metodo === 'yape' && p.confirmado === false).map(p => (
+              {detalle.pagos.filter(p => (p.metodo === 'yape' || p.metodo === 'transferencia') && p.confirmado === false).map(p => (
                 <div key={p.id} style={{
                   display: 'flex', gap: 18, alignItems: 'flex-start',
                   padding: '16px 18px', borderRadius: 14,
                   background: 'var(--surface)', border: '1.5px solid rgba(58,174,216,0.22)',
                   boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+                  flexWrap: 'wrap',
                 }}>
                   {/* Comprobante */}
                   <div style={{ flexShrink: 0 }}>
                     {p.url_comprobante ? (
-                      <a href={getImageUrl(p.url_comprobante)} target="_blank" rel="noopener noreferrer">
+                      <div
+                        onClick={() => setImagenExpandida(getImageUrl(p.url_comprobante))}
+                        title="Click para ampliar"
+                        style={{ cursor: 'zoom-in' }}
+                      >
                         <img
                           src={getImageUrl(p.url_comprobante)}
-                          alt="Comprobante Yape"
+                          alt="Comprobante"
                           style={{
-                            width: 100, height: 100, objectFit: 'cover',
+                            width: 110, height: 110, objectFit: 'cover',
                             borderRadius: 10, border: '2px solid rgba(58,174,216,0.4)',
-                            cursor: 'pointer', transition: 'transform 0.2s',
+                            transition: 'transform 0.2s, box-shadow 0.2s',
                           }}
-                          onMouseOver={e => e.currentTarget.style.transform='scale(1.05)'}
-                          onMouseOut={e => e.currentTarget.style.transform='scale(1)'}
+                          onMouseOver={e => { e.currentTarget.style.transform='scale(1.06)'; e.currentTarget.style.boxShadow='0 6px 20px rgba(0,0,0,0.18)' }}
+                          onMouseOut={e => { e.currentTarget.style.transform='scale(1)'; e.currentTarget.style.boxShadow='none' }}
                         />
-                        <div style={{ fontSize: 11, color: 'var(--info)', textAlign: 'center', marginTop: 4 }}>Ver completo</div>
-                      </a>
+                        <div style={{ fontSize: 11, color: 'var(--info)', textAlign: 'center', marginTop: 4, fontWeight: 600 }}>🔍 Ver completo</div>
+                      </div>
                     ) : (
                       <div style={{
-                        width: 100, height: 100, borderRadius: 10,
+                        width: 110, height: 110, borderRadius: 10,
                         background: 'var(--info-bg)', border: '2px dashed rgba(58,174,216,0.4)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 6,
                       }}>
@@ -344,42 +422,48 @@ export default function Facturacion() {
                   </div>
 
                   {/* Datos */}
-                  <div style={{ flex: 1, fontSize: 13 }}>
-                    <div style={{ fontWeight: 700, color: 'var(--info)', marginBottom: 8, fontSize: 14 }}>Detalle del pago Yape</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                  <div style={{ flex: 1, fontSize: 13, minWidth: 180 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <span style={{ fontWeight: 700, color: 'var(--info)', fontSize: 14 }}>Pago por {p.metodo}</span>
+                      <span style={{ fontSize: 11, padding: '2px 10px', borderRadius: 20, background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid rgba(58,174,216,0.35)', fontWeight: 600 }}>⏳ Pendiente</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px' }}>
                       <div><span style={{ color: 'var(--text-muted)' }}>Monto:</span> <strong>S/ {Number(p.monto).toFixed(2)}</strong></div>
-                      <div><span style={{ color: 'var(--text-muted)' }}>Código:</span> <strong style={{ fontFamily: 'monospace' }}>{p.codigo_referencia ?? '—'}</strong></div>
-                      <div><span style={{ color: 'var(--text-muted)' }}>Enviado:</span> {new Date(p.pagado_en).toLocaleString('es-PE')}</div>
-                      <div>
-                        <span style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 4,
-                          padding: '2px 10px', borderRadius: 20, fontSize: 11.5, fontWeight: 600,
-                          background: 'var(--info-bg)', color: 'var(--info)',
-                          border: '1px solid rgba(58,174,216,0.35)',
-                        }}>
-                          ⏳ Pendiente de revisión
-                        </span>
-                      </div>
+                      <div><span style={{ color: 'var(--text-muted)' }}>Código op.:</span> <strong style={{ fontFamily: 'monospace' }}>{p.codigo_referencia || '—'}</strong></div>
+                      <div style={{ gridColumn: '1/-1' }}><span style={{ color: 'var(--text-muted)' }}>Enviado:</span> {new Date(p.pagado_en).toLocaleString('es-PE')}</div>
                     </div>
                   </div>
 
-                  {/* Botón confirmar */}
-                  <div style={{ flexShrink: 0 }}>
+                  {/* Acciones */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
                     <button
                       onClick={() => confirmarPagoYape(p.id)}
                       disabled={guardando}
                       style={{
-                        padding: '10px 18px',
-                        background: 'linear-gradient(135deg, rgba(58,174,216,0.95), rgba(58,174,216,0.8))',
-                        color: 'white', border: 'none', borderRadius: 10,
-                        fontSize: 13, fontWeight: 700, cursor: guardando ? 'not-allowed' : 'pointer',
-                        display: 'flex', alignItems: 'center', gap: 7,
+                        padding: '9px 16px', borderRadius: 10,
+                        background: 'linear-gradient(135deg, #10b981, #059669)',
+                        color: 'white', border: 'none', fontSize: 13, fontWeight: 700,
+                        cursor: guardando ? 'not-allowed' : 'pointer',
+                        display: 'flex', alignItems: 'center', gap: 6,
                         opacity: guardando ? 0.7 : 1, transition: 'all 0.2s',
-                        boxShadow: '0 4px 14px rgba(58,174,216,0.25)',
+                        boxShadow: '0 4px 14px rgba(16,185,129,0.3)',
                       }}
                     >
-                      <CheckCircle size={16} />
-                      {guardando ? 'Confirmando...' : 'Confirmar Pago'}
+                      <CheckCircle size={15} /> Aprobar
+                    </button>
+                    <button
+                      onClick={() => rechazarPago(p.id)}
+                      disabled={guardando}
+                      style={{
+                        padding: '9px 16px', borderRadius: 10,
+                        background: 'rgba(224,48,80,0.1)', color: 'var(--danger)',
+                        border: '1.5px solid rgba(224,48,80,0.3)', fontSize: 13, fontWeight: 700,
+                        cursor: guardando ? 'not-allowed' : 'pointer',
+                        display: 'flex', alignItems: 'center', gap: 6,
+                        opacity: guardando ? 0.7 : 1, transition: 'all 0.2s',
+                      }}
+                    >
+                      <X size={14} /> Rechazar
                     </button>
                   </div>
                 </div>
@@ -484,7 +568,7 @@ export default function Facturacion() {
         </div>
         <div className="form-footer">
           <button type="button" className="btn btn-ghost" onClick={() => setVista('lista')}>Cancelar</button>
-          <button type="submit" className="btn btn-primary" disabled={guardando}>
+          <button type="submit" className="btn btn-primary" disabled={guardando || !form.subtotal || Number(form.subtotal) <= 0}>
             <Save size={14}/> {guardando ? 'Creando...' : 'Crear factura'}
           </button>
         </div>
@@ -497,26 +581,158 @@ export default function Facturacion() {
     <div className="page-enter">
       <div className="section-header">
         <div>
-          <div className="section-title">Facturación</div>
+          <div className="section-title">Pagos</div>
           <div className="section-subtitle">Facturas, pagos y reporte financiero</div>
         </div>
         {tab === 'facturas' && <button className="btn btn-primary" onClick={() => setVista('form')}><Plus size={15}/> Nueva factura</button>}
       </div>
 
       <div style={{ display:'flex', borderBottom:'1px solid var(--border)', marginBottom: 20 }}>
-        {['facturas','configuracion'].map(t => (
+        {['facturas','reembolsos','configuracion'].map(t => (
           <button key={t} onClick={() => setTab(t)}
             style={{ padding:'10px 20px', fontSize:13.5, background:'none', border:'none', cursor:'pointer',
               borderBottom: tab===t ? '2.5px solid var(--celeste)' : '2.5px solid transparent',
               color: tab===t ? 'var(--text-primary)' : 'var(--text-muted)',
-              fontWeight: tab===t ? 500 : 400 }}>
-            {t === 'facturas' ? 'Facturas y Reportes' : 'Configuración de Pagos'}
+              fontWeight: tab===t ? 500 : 400, display:'flex', alignItems:'center', gap:6 }}>
+            {t === 'facturas' ? (<>Facturas y Reportes{pagosPend.length > 0 && <span style={{ background:'var(--danger)', color:'white', fontSize:10, borderRadius:20, padding:'1px 7px', fontWeight:700 }}>{pagosPend.length} pendientes</span>}</>) 
+             : t === 'reembolsos' ? 'Solicitudes de Reembolso' : 'Configuración de Pagos'}
           </button>
         ))}
       </div>
 
       {tab === 'facturas' ? (
         <>
+          {/* SECCIÓN: VOUCHERS PENDIENTES */}
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+            <div>
+              <div style={{ fontWeight:700, fontSize:15 }}>Vouchers pendientes de verificación</div>
+              <div style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:2 }}>Revisa cada comprobante y aprueba o rechaza el pago.</div>
+            </div>
+            <button className="btn btn-ghost btn-sm" onClick={cargarPagosPend} style={{ display:'flex', alignItems:'center', gap:6 }}>
+              <RefreshCw size={14} /> Actualizar
+            </button>
+          </div>
+
+          {cargandoPend ? <Spinner /> : pagosPend.length > 0 && (
+            <div style={{ display:'flex', flexDirection:'column', gap:16, marginBottom: 32 }}>
+              {pagosPend.map(p => {
+                const factura = p.factura
+                const paciente = factura?.paciente
+                const psicologo = factura?.psicologo
+                const citaFecha = factura?.cita?.programada_para
+                const imgUrl = p.url_comprobante ? `${API_BASE}${p.url_comprobante}` : null
+                return (
+                  <div key={p.id} style={{
+                    background:'var(--card)', border:'1.5px solid var(--border)', borderRadius:16,
+                    overflow:'hidden', boxShadow:'0 2px 12px rgba(0,0,0,0.05)',
+                  }}>
+                    {/* Color bar by method */}
+                    <div style={{ height:3, background: p.metodo === 'yape' ? 'linear-gradient(90deg,#7c3aed,#9333ea)' : 'linear-gradient(90deg,#2563eb,#0ea5e9)' }} />
+                    <div style={{ padding:'18px 20px', display:'flex', gap:20, flexWrap:'wrap', alignItems:'flex-start' }}>
+
+                      {/* Voucher image */}
+                      <div style={{ flexShrink:0 }}>
+                        {imgUrl ? (
+                          <div style={{ cursor:'zoom-in', textAlign:'center' }} onClick={() => setImagenExpandida(imgUrl)}>
+                            <img src={imgUrl} alt="Voucher"
+                              style={{ width:140, height:140, objectFit:'cover', borderRadius:12,
+                                border:'2px solid var(--border)', transition:'transform 0.2s, box-shadow 0.2s',
+                                display:'block',
+                              }}
+                              onMouseOver={e => { e.currentTarget.style.transform='scale(1.05)'; e.currentTarget.style.boxShadow='0 8px 24px rgba(0,0,0,0.2)' }}
+                              onMouseOut={e => { e.currentTarget.style.transform='scale(1)'; e.currentTarget.style.boxShadow='none' }}
+                            />
+                            <div style={{ fontSize:11, color:'var(--info)', marginTop:5, fontWeight:600 }}>🔍 Ampliar</div>
+                          </div>
+                        ) : (
+                          <div style={{ width:140, height:140, borderRadius:12, background:'var(--surface-2)',
+                            border:'2px dashed var(--border)', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:6 }}>
+                            <ImageOff size={28} color="var(--text-muted)" />
+                            <span style={{ fontSize:11, color:'var(--text-muted)' }}>Sin imagen</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Info */}
+                      <div style={{ flex:1, minWidth:200 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', marginBottom:8 }}>
+                          <span style={{ fontWeight:700, fontSize:15.5, color:'var(--text-primary)' }}>
+                            {paciente?.apellidos}, {paciente?.nombres}
+                          </span>
+                          <span style={{
+                            fontSize:11, padding:'2px 10px', borderRadius:20, fontWeight:700,
+                            background: p.metodo === 'yape' ? 'rgba(124,58,237,0.1)' : 'rgba(37,99,235,0.1)',
+                            color: p.metodo === 'yape' ? '#7c3aed' : '#2563eb',
+                            border: `1px solid ${p.metodo === 'yape' ? 'rgba(124,58,237,0.3)' : 'rgba(37,99,235,0.3)'}`,
+                            textTransform:'capitalize',
+                          }}>
+                            {p.metodo === 'yape' ? '📱 Yape' : '🏦 Transferencia'}
+                          </span>
+                          <span style={{ fontSize:11, padding:'2px 10px', borderRadius:20, fontWeight:700,
+                            background:'var(--info-bg)', color:'var(--info)', border:'1px solid var(--info)' }}>
+                            ⏳ Pendiente
+                          </span>
+                        </div>
+
+                        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(200px, 1fr))', gap:'6px 16px', fontSize:13 }}>
+                          <div><span style={{ color:'var(--text-muted)' }}>Psicólogo:</span> {psicologo?.nombres} {psicologo?.apellidos}</div>
+                          <div><span style={{ color:'var(--text-muted)' }}>Factura:</span> <span style={{ fontFamily:'monospace', fontWeight:600 }}>{factura?.numero_factura}</span></div>
+                          <div><span style={{ color:'var(--text-muted)' }}>Cita:</span> {citaFecha ? new Date(citaFecha).toLocaleString('es-PE', { dateStyle:'medium', timeStyle:'short' }) : '—'}</div>
+                          <div><span style={{ color:'var(--text-muted)' }}>Total factura:</span> <strong>S/ {Number(factura?.total ?? 0).toFixed(2)}</strong></div>
+                          <div><span style={{ color:'var(--text-muted)' }}>Monto voucher:</span> <strong style={{ fontSize:15, color:'var(--success)' }}>S/ {Number(p.monto).toFixed(2)}</strong></div>
+                          <div><span style={{ color:'var(--text-muted)' }}>N° Operación:</span> <code style={{ background:'var(--surface-2)', padding:'2px 6px', borderRadius:4, fontSize:12 }}>{p.codigo_referencia || '—'}</code></div>
+                          <div><span style={{ color:'var(--text-muted)' }}>Enviado:</span> {new Date(p.pagado_en).toLocaleString('es-PE', { dateStyle:'short', timeStyle:'short' })}</div>
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div style={{ display:'flex', flexDirection:'column', gap:8, flexShrink:0, minWidth:130 }}>
+                        <button
+                          onClick={async () => { await confirmarPagoYape(p.id); await cargarPagosPend() }}
+                          disabled={guardando}
+                          style={{
+                            padding:'10px 18px', borderRadius:10,
+                            background:'linear-gradient(135deg,#10b981,#059669)', color:'white',
+                            border:'none', fontSize:13, fontWeight:700, cursor: guardando ? 'not-allowed' : 'pointer',
+                            display:'flex', alignItems:'center', gap:6, justifyContent:'center',
+                            opacity: guardando ? 0.7 : 1, boxShadow:'0 4px 14px rgba(16,185,129,0.3)',
+                          }}>
+                          <CheckCircle size={15}/> Aprobar
+                        </button>
+                        <button
+                          onClick={async () => { await rechazarPago(p.id); await cargarPagosPend() }}
+                          disabled={guardando}
+                          style={{
+                            padding:'10px 18px', borderRadius:10,
+                            background:'rgba(224,48,80,0.08)', color:'var(--danger)',
+                            border:'1.5px solid rgba(224,48,80,0.3)', fontSize:13, fontWeight:700,
+                            cursor: guardando ? 'not-allowed' : 'pointer',
+                            display:'flex', alignItems:'center', gap:6, justifyContent:'center',
+                            opacity: guardando ? 0.7 : 1,
+                          }}>
+                          <X size={14}/> Rechazar
+                        </button>
+                        {imgUrl && (
+                          <a href={imgUrl} download target="_blank" rel="noreferrer"
+                            style={{
+                              padding:'8px 18px', borderRadius:10,
+                              background:'var(--surface-2)', color:'var(--text-secondary)',
+                              border:'1.5px solid var(--border)', fontSize:12, fontWeight:600,
+                              display:'flex', alignItems:'center', gap:5, justifyContent:'center', textDecoration:'none',
+                            }}>
+                            ⬇ Descargar
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+          
+          <hr style={{ border:'none', borderTop:'1px solid var(--border)', margin:'10px 0 24px' }} />
+
           {reporte && (
         <div className="stats-grid" style={{ marginBottom: 20 }}>
           <div className="stat-card">
@@ -578,6 +794,116 @@ export default function Facturacion() {
           )}
       </div>
         </>
+      ) : tab === 'reembolsos' ? (
+        <div>
+          {/* Filtros */}
+          <div style={{ display:'flex', gap:10, marginBottom:16, alignItems:'center', flexWrap:'wrap' }}>
+            {[['pendiente','⏳ Pendientes'],['aprobado','✓ Aprobados'],['rechazado','✗ Rechazados'],['','Todos']].map(([f, label]) => (
+              <button key={f||'todos'}
+                onClick={() => setFiltroReem(f)}
+                className={`btn btn-sm ${filtroReem===f ? 'btn-primary' : 'btn-ghost'}`}>
+                {label}
+              </button>
+            ))}
+            <button className="btn btn-ghost btn-sm" onClick={cargarReembolsos} style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:6 }}>
+              <RefreshCw size={14} /> Actualizar
+            </button>
+          </div>
+
+          {cargandoReem ? <Spinner /> : reembolsos.length === 0
+            ? <EmptyState titulo="Sin solicitudes" descripcion={`No hay solicitudes${filtroReem ? ' ' + filtroReem + 's' : ''} de reembolso.`} />
+            : (
+            <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+              {reembolsos.map(r => (
+                <div key={r.id} style={{
+                  background:'var(--card)', border:'1px solid var(--border)', borderRadius:14,
+                  padding:'18px 20px', display:'flex', flexDirection:'column', gap:12
+                }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:10 }}>
+                    <div>
+                      <div style={{ fontWeight:700, fontSize:15 }}>
+                        {r.cita?.paciente?.nombres} {r.cita?.paciente?.apellidos}
+                      </div>
+                      <div style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:3 }}>
+                        Cita: {r.cita?.programada_para ? new Date(r.cita.programada_para).toLocaleString('es-PE', { dateStyle:'medium', timeStyle:'short' }) : '—'}
+                        {' · '} Psicólogo: {r.cita?.psicologo?.nombres} {r.cita?.psicologo?.apellidos}
+                      </div>
+                      <div style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:2 }}>
+                        Tipo: <b>{r.tipo_solicitud}</b>{r.monto_solicitado ? ` · Monto solicitado: S/ ${Number(r.monto_solicitado).toFixed(2)}` : ''}
+                      </div>
+                      <div style={{ fontSize:12.5, color:'var(--text-secondary)', marginTop:4, fontStyle:'italic' }}>
+                        Motivo: {r.motivo}
+                      </div>
+                    </div>
+                    <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:8 }}>
+                      <span className={`badge ${r.estado==='aprobado'?'badge-success':r.estado==='rechazado'?'badge-danger':'badge-warning'}`} style={{ fontSize:13, padding:'5px 12px' }}>
+                        {r.estado === 'pendiente' ? '⏳ Pendiente' : r.estado === 'aprobado' ? '✓ Aprobado' : '✗ Rechazado'}
+                      </span>
+                      <div style={{ fontSize:11.5, color:'var(--text-muted)' }}>
+                        {new Date(r.solicitado_en).toLocaleDateString('es-PE')}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Notas de resolución */}
+                  {r.estado !== 'pendiente' && r.notas_resolucion && (
+                    <div style={{ padding:'10px 14px', background:'var(--surface-2)', borderRadius:8, fontSize:13, borderLeft:'3px solid var(--border)' }}>
+                      <b>Notas:</b> {r.notas_resolucion}
+                      {r.resolutor && <span style={{ color:'var(--text-muted)', marginLeft:8 }}>— {r.resolutor.correo}</span>}
+                    </div>
+                  )}
+
+                  {/* Acciones (solo si pendiente y tiene permisos) */}
+                  {r.estado === 'pendiente' && puedo('citas.editar') && (
+                    resolviendo?.solicitudId === r.id ? (
+                      <div style={{ display:'flex', flexDirection:'column', gap:10, padding:'12px 14px', background:'var(--surface-2)', borderRadius:10 }}>
+                        <label className="form-label">Notas de resolución (opcional)</label>
+                        <textarea className="form-control" rows={2}
+                          value={resolviendo.notas}
+                          onChange={e => setResolviendo(rv => ({ ...rv, notas: e.target.value }))}
+                          placeholder="Ej: Reembolso aprobado, se procesará en 3-5 días hábiles..." />
+                        <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+                          <button className="btn btn-ghost btn-sm" onClick={() => setResolviendo(null)}>Cancelar</button>
+                          <button className="btn btn-danger btn-sm" disabled={guardandoReem}
+                            onClick={async () => {
+                              setGuardandoReem(true)
+                              try {
+                                await citasApi.resolverReembolso(r.id, { estado:'rechazado', notas: resolviendo.notas })
+                                toast.success('Solicitud rechazada')
+                                setResolviendo(null)
+                                cargarReembolsos()
+                              } catch {} finally { setGuardandoReem(false) }
+                            }}>
+                            Rechazar solicitud
+                          </button>
+                          <button className="btn btn-primary btn-sm" disabled={guardandoReem}
+                            onClick={async () => {
+                              setGuardandoReem(true)
+                              try {
+                                await citasApi.resolverReembolso(r.id, { estado:'aprobado', notas: resolviendo.notas })
+                                toast.success('¡Solicitud aprobada!')
+                                setResolviendo(null)
+                                cargarReembolsos()
+                              } catch {} finally { setGuardandoReem(false) }
+                            }}>
+                            <CheckCircle size={13} /> Aprobar reembolso
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display:'flex', gap:10 }}>
+                        <button className="btn btn-sm btn-primary"
+                          onClick={() => setResolviendo({ solicitudId: r.id, notas: '' })}>
+                          Revisar y resolver
+                        </button>
+                      </div>
+                    )
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       ) : (
         <form onSubmit={guardarConfig} className="card">
           <div className="card-header"><span className="card-title">Configuración de Cuentas y Yape</span></div>
@@ -654,6 +980,20 @@ export default function Facturacion() {
             </button>
           </div>
         </form>
+      )}
+
+      {imagenExpandida && (
+        <div className="modal-overlay" onClick={() => setImagenExpandida(null)} style={{ zIndex: 2000, background: 'rgba(0,0,0,0.85)' }}>
+          <div style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
+            <button
+              onClick={() => setImagenExpandida(null)}
+              style={{ position: 'absolute', top: -40, right: 0, background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}
+            >
+              <X size={24} />
+            </button>
+            <img src={imagenExpandida} alt="Comprobante ampliado" style={{ maxWidth: '100%', maxHeight: '90vh', objectFit: 'contain', borderRadius: 8 }} />
+          </div>
+        </div>
       )}
     </div>
   )

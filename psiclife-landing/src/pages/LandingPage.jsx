@@ -56,6 +56,7 @@ export default function LandingPage() {
   const [pagosConfig, setPagosConfig] = useState({})
   const [mostrarHorarios, setMostrarHorarios] = useState(false)
   const [cargando, setCargando] = useState(true)
+  const [testimoniosDinamicos, setTestimoniosDinamicos] = useState([])
 
   // useReveal con dependencias se llamará más abajo
 
@@ -64,13 +65,19 @@ export default function LandingPage() {
   useEffect(() => {
     const cargarDatos = async () => {
       try {
-        const [resWeb, resPsi, resProd, resConfig] = await Promise.all([
+        const [resWeb, resPsi, resProd, resConfig, resResenas] = await Promise.all([
           landingApi.getWebMedica(),
           landingApi.getPsicologos(),
           landingApi.getServicios(),
-          landingApi.getPagosConfig()
+          landingApi.getPagosConfig(),
+          landingApi.getResenasPublicas().catch(() => ({ data: { datos: [] } }))
         ])
         setInfo(resWeb.data.datos)
+        
+        const dataResenas = resResenas.data?.datos || []
+        if (dataResenas.length > 0) {
+          setTestimoniosDinamicos(dataResenas)
+        }
         
         // Procesar config de pagos
         setPagosConfig(resConfig.data.datos || {})
@@ -155,7 +162,7 @@ export default function LandingPage() {
           || null,
       }))
     : servicios
-  const testimonios  = parseJsonField(info?.testimonios_json)  ?? TESTIMONIOS_DEFAULT
+  const testimonios  = testimoniosDinamicos.length > 0 ? testimoniosDinamicos : (parseJsonField(info?.testimonios_json) ?? TESTIMONIOS_DEFAULT)
   const faqs         = parseJsonField(info?.faq_json)          ?? FAQS_DEFAULT
   const procesoPasos = parseJsonField(info?.proceso_json)      ?? PROCESO_DEFAULT
   const paraQuien    = parseJsonField(info?.para_quien_json)   ?? PARA_QUIEN_DEFAULT
@@ -595,8 +602,11 @@ export default function LandingPage() {
           <h2 className="sec-title">Lo que dicen<br /><i>nuestros pacientes.</i></h2>
           <div className={styles.testGrid}>
             {testimonios.map((t, i) => {
-              const initials = t.init || (t.nombre ? t.nombre.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() : '?')
-              const stars = '★'.repeat(Math.min(5, Math.max(1, t.rating || 5)))
+              const nombre = t.autor || t.nombre || 'Paciente'
+              const initials = t.init || (nombre ? nombre.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() : '?')
+              const rating = t.calificacion || t.rating || 5
+              const stars = '★'.repeat(Math.min(5, Math.max(1, rating)))
+              const rol = t.psicologo ? `Atendido por ${t.psicologo}` : (t.rol || t.cargo)
               return (
                 <div key={i} className={`${styles.testCard} reveal d${i+1}`}>
                   <div className={styles.testStars}>{stars}</div>
@@ -604,8 +614,8 @@ export default function LandingPage() {
                   <div className={styles.testAuthor}>
                     <div className={styles.testAvatar}>{initials}</div>
                     <div>
-                      <div className={styles.testNombre}>{t.nombre}</div>
-                      <div className={styles.testRol}>{t.rol || t.cargo}</div>
+                      <div className={styles.testNombre}>{nombre}</div>
+                      <div className={styles.testRol}>{rol}</div>
                     </div>
                   </div>
                 </div>

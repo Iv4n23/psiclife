@@ -60,5 +60,9 @@ export class RegistrarPagoYapeDto {
   @ApiProperty({ example: 'OP-123456' })
   @IsString() @MaxLength(100)
   codigo_referencia: string
+
+  @ApiPropertyOptional({ enum: pagos_metodo, example: 'yape' })
+  @IsOptional() @IsEnum(pagos_metodo)
+  metodo_pago?: pagos_metodo
 }
 

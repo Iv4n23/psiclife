@@ -4,6 +4,7 @@ import {
   Body, Param, Query, ParseUUIDPipe,
   UseGuards, HttpCode, HttpStatus,
   UseInterceptors, UploadedFile,
+  ForbiddenException,
 } from '@nestjs/common'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { diskStorage } from 'multer'
@@ -70,6 +71,30 @@ export class CitasController {
     return { mensaje: 'Citas de hoy obtenidas correctamente', datos }
   }
 
+  @Get('reembolsos')
+  @Permisos('citas.ver')
+  @ApiOperation({ summary: 'Listar solicitudes de reembolso' })
+  @ApiQuery({ name: 'estado', required: false, description: 'pendiente | aprobado | rechazado' })
+  async listarReembolsos(@Query('estado') estado?: string) {
+    const datos = await this.citasService.listarReembolsos(estado)
+    return { mensaje: 'Solicitudes de reembolso obtenidas correctamente', datos }
+  }
+
+  @Patch('reembolsos/:solicitudId/resolver')
+  @Permisos('citas.editar')
+  @ApiOperation({ summary: 'Aprobar o rechazar solicitud de reembolso' })
+  @ApiParam({ name: 'solicitudId', format: 'uuid' })
+  async resolverReembolso(
+    @Param('solicitudId', ParseUUIDPipe) solicitudId: string,
+    @Body() dto: ResolverReembolsoDto,
+    @UsuarioActual('sub') usuarioId: string,
+  ) {
+    const datos = await this.citasService.resolverReembolso(
+      solicitudId, dto.estado, dto.notas ?? '', usuarioId,
+    )
+    return { mensaje: `Solicitud ${dto.estado} correctamente`, datos }
+  }
+
   @Get(':id')
   @Permisos('citas.ver')
   @ApiOperation({ summary: 'Obtener cita por ID' })
@@ -100,13 +125,30 @@ export class CitasController {
   }
 
   @Patch(':id/cancelar')
-  @Permisos('citas.editar')
   @ApiOperation({ summary: 'Cancelar cita' })
   @ApiParam({ name: 'id', format: 'uuid' })
   async cancelar(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CancelarCitaDto,
+    @UsuarioActual() usuario,
   ) {
+    const cita = await this.citasService.buscarPorId(id)
+
+    if (dto.cancelado_por === 'paciente') {
+      if (cita.paciente_id !== usuario.sub) {
+        throw new ForbiddenException('Solo el paciente dueño puede cancelar esta cita')
+      }
+    } else if (dto.cancelado_por === 'psicologo') {
+      if (cita.psicologo_id !== usuario.sub) {
+        throw new ForbiddenException('Solo el psicólogo responsable puede cancelar esta cita')
+      }
+    } else {
+      const puedeEditar = usuario.permisos?.citas?.editar === true
+      if (!puedeEditar) {
+        throw new ForbiddenException('No tienes permisos para cancelar la cita')
+      }
+    }
+
     const datos = await this.citasService.cancelar(id, dto)
     return { mensaje: 'Cita cancelada correctamente', datos }
   }
@@ -151,20 +193,7 @@ export class CitasController {
     return { mensaje: 'Solicitud registrada correctamente', datos }
   }
 
-  @Patch('reembolsos/:solicitudId/resolver')
-  @Permisos('citas.editar')
-  @ApiOperation({ summary: 'Aprobar o rechazar solicitud de reembolso' })
-  @ApiParam({ name: 'solicitudId', format: 'uuid' })
-  async resolverReembolso(
-    @Param('solicitudId', ParseUUIDPipe) solicitudId: string,
-    @Body() dto: ResolverReembolsoDto,
-    @UsuarioActual('sub') usuarioId: string,
-  ) {
-    const datos = await this.citasService.resolverReembolso(
-      solicitudId, dto.estado, dto.notas ?? '', usuarioId,
-    )
-    return { mensaje: `Solicitud ${dto.estado} correctamente`, datos }
-  }
+
 
   @Delete(':id')
   @Permisos('citas.eliminar')

@@ -23,6 +23,9 @@ export class RegistroDto {
   @ApiProperty({ example: 'Usuario123!' })
   @IsString()
   @MinLength(8, { message: 'La contraseña debe tener al menos 8 caracteres' })
+  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/, {
+    message: 'La contraseña debe incluir mayúscula, minúscula, número y símbolo',
+  })
   contrasena: string
 }
 
@@ -68,6 +71,9 @@ export class CompletarRegistroDto {
   @ApiProperty({ example: 'Paciente123!' })
   @IsString()
   @MinLength(8, { message: 'La contraseña debe tener al menos 8 caracteres' })
+  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/, {
+    message: 'La contraseña debe incluir mayúscula, minúscula, número y símbolo',
+  })
   contrasena: string
 
   @ApiProperty({ example: '12345678', required: false })

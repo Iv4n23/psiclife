@@ -86,15 +86,8 @@ export class CorreosService {
     const asunto = this.reemplazar(plantilla.asunto, varsConGlobales)
     let cuerpo = this.reemplazar(plantilla.cuerpo_html, varsConGlobales)
 
-    // Si la web médica tiene `logo_url`, reemplazar el bloque .logo por una imagen
-    try {
-      if (web && web.logo_url) {
-        const logoHtml = `<div class="logo"><img src="${web.logo_url}" alt="${(web.nombre_consultorio || '').replace(/\"/g, '')}" style="max-height:48px;object-fit:contain"/></div>`
-        cuerpo = cuerpo.replace(/<div class="logo">[\s\S]*?<\/div>/i, logoHtml)
-      }
-    } catch (e) {
-      this.logger.warn('No se pudo inyectar logo en plantilla: ' + (e?.message || e))
-    }
+    // La inyección de la imagen del logo fue retirada temporalmente por solicitud
+    // Aquí iría el código para reemplazar el bloque .logo
 
     return this.enviar({
       destinatario, asunto, cuerpoHtml: cuerpo,

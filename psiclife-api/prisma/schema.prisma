@@ -109,6 +109,7 @@ model pacientes {
   dx_diagnosticos        dx_diagnosticos[]
   eva_aplicaciones       eva_aplicaciones[]
   facturas               facturas[]
+  resenas                resenas[]
   usuario                usuarios?                        @relation(fields: [usuario_id], references: [id], onUpdate: NoAction, map: "fk_pacientes_usuario")
 
   @@index([usuario_id], map: "fk_pacientes_usuario")
@@ -197,6 +198,7 @@ model citas {
   dx_diagnosticos       dx_diagnosticos[]
   eva_aplicaciones      eva_aplicaciones[]
   facturas              facturas?
+  resenas               resenas?
   solicitudes_reembolso solicitudes_reembolso[]
 
   @@index([cita_original_id], map: "fk_citas_original")
@@ -536,42 +538,42 @@ model cor_cola {
 }
 
 model web_medica {
-  id                     String   @id @default(dbgenerated("(uuid())")) @db.Char(36)
-  nombre_consultorio     String   @default("PsicLife") @db.VarChar(150)
-  titulo_principal       String?  @db.VarChar(255)
-  slogan                 String?  @db.VarChar(255)
-  descripcion            String?  @db.Text
-  etiqueta_hero          String?  @db.VarChar(100)
-  direccion              String?  @db.VarChar(255)
-  telefono               String?  @db.VarChar(20)
-  whatsapp               String?  @db.VarChar(20)
-  correo_contacto        String?  @db.VarChar(255)
-  logo_url               String?  @db.Text
-  mision                 String?  @db.Text
-  vision                 String?  @db.Text
+  id                     String  @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  nombre_consultorio     String  @default("PsicLife") @db.VarChar(150)
+  titulo_principal       String? @db.VarChar(255)
+  slogan                 String? @db.VarChar(255)
+  descripcion            String? @db.Text
+  etiqueta_hero          String? @db.VarChar(100)
+  direccion              String? @db.VarChar(255)
+  telefono               String? @db.VarChar(20)
+  whatsapp               String? @db.VarChar(20)
+  correo_contacto        String? @db.VarChar(255)
+  logo_url               String? @db.Text
+  mision                 String? @db.Text
+  vision                 String? @db.Text
   redes_sociales_json    Json?
-  director_foto          String?  @db.Text
-  director_nombre        String?  @db.VarChar(150)
-  director_rol           String?  @db.VarChar(150)
-  director_frase         String?  @db.VarChar(255)
-  director_bio           String?  @db.Text
-  mostrar_equipo         Boolean  @default(true)
-  mostrar_especialidades Boolean  @default(true)
-  mostrar_horarios       Boolean  @default(true)
-  
-  proceso_json           Json?
-  testimonios_json       Json?
-  faq_json               Json?
-  para_quien_json        Json?
-  servicios_sub          String?  @db.VarChar(255)
-  
-  mostrar_proceso        Boolean  @default(true)
-  mostrar_para_quien     Boolean  @default(true)
-  mostrar_testimonios    Boolean  @default(true)
-  mostrar_faq            Boolean  @default(true)
-  especialidades_json    Json?
+  director_foto          String? @db.Text
+  director_nombre        String? @db.VarChar(150)
+  director_rol           String? @db.VarChar(150)
+  director_frase         String? @db.VarChar(255)
+  director_bio           String? @db.Text
+  mostrar_equipo         Boolean @default(true)
+  mostrar_especialidades Boolean @default(true)
+  mostrar_horarios       Boolean @default(true)
 
-  actualizado_en         DateTime @default(now()) @updatedAt @db.DateTime(0)
+  proceso_json     Json?
+  testimonios_json Json?
+  faq_json         Json?
+  para_quien_json  Json?
+  servicios_sub    String? @db.VarChar(255)
+
+  mostrar_proceso     Boolean @default(true)
+  mostrar_para_quien  Boolean @default(true)
+  mostrar_testimonios Boolean @default(true)
+  mostrar_faq         Boolean @default(true)
+  especialidades_json Json?
+
+  actualizado_en DateTime @default(now()) @updatedAt @db.DateTime(0)
 }
 
 model auditoria {
@@ -736,4 +738,19 @@ enum pacientes_estado_paciente {
   inactivo
   alta
   derivado
+}
+
+model resenas {
+  id           String    @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  cita_id      String    @unique(map: "uq_resenas_cita") @db.Char(36)
+  paciente_id  String    @db.Char(36)
+  calificacion Int       @db.TinyInt
+  texto        String?   @db.Text
+  es_anonima   Boolean   @default(false)
+  aprobada     Boolean   @default(true)
+  creado_en    DateTime  @default(now()) @db.DateTime(0)
+  cita         citas     @relation(fields: [cita_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_resenas_cita")
+  paciente     pacientes @relation(fields: [paciente_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_resenas_paciente")
+
+  @@index([paciente_id], map: "idx_resenas_paciente")
 }

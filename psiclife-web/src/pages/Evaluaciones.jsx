@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { evaluacionesApi, pacientesApi, psicologosApi } from '../services/api'
 import { Confirm, EmptyState, Spinner } from '../components/ui/index.jsx'
 import toast from 'react-hot-toast'
-import { Plus, X, Save, Eye, CheckCircle, Trash2, Ban, Edit2 } from 'lucide-react'
+import { Plus, X, Save, Eye, CheckCircle, Trash2, Ban, Edit2, Search } from 'lucide-react'
 import { cleanPayload } from '../utils/payload'
 
 const ESTADO_BADGE = {
@@ -33,6 +33,8 @@ export default function Evaluaciones() {
   
   const [modoInst, setModoInst] = useState('crear')
   const [instId, setInstId]     = useState(null)
+  const [busqAplicaciones, setBusqAplicaciones] = useState('')
+  const [busqInstrumentos, setBusqInstrumentos] = useState('')
 
   const [formAp, setFormAp] = useState({
     paciente_id: '', psicologo_id: '', instrumento_id: '',
@@ -227,6 +229,16 @@ export default function Evaluaciones() {
   }
 
   const setAp = (k) => (e) => { setFormAp(f => ({ ...f, [k]: e.target.value })); setErrores(er => ({ ...er, [k]: '' })) }
+
+  const aplicacionesFiltradas = aplicaciones.filter(a => {
+    const texto = `${a.paciente?.nombres || ''} ${a.paciente?.apellidos || ''} ${a.instrumento?.nombre || ''} ${a.instrumento?.codigo_instrumento || ''} ${a.estado || ''} ${new Date(a.fecha_aplicacion).toLocaleDateString('es-PE')}`.toLowerCase()
+    return texto.includes(busqAplicaciones.toLowerCase())
+  })
+
+  const instrumentosFiltrados = instrumentos.filter(i => {
+    const texto = `${i.nombre || ''} ${i.codigo_instrumento || ''} ${i.area_evaluada || ''} ${i.tipo || ''}`.toLowerCase()
+    return texto.includes(busqInstrumentos.toLowerCase())
+  })
 
   // ── Detalle de aplicación ──────────────────────────────────
   if (vista === 'detalle' && detalle) return (
@@ -549,13 +561,20 @@ export default function Evaluaciones() {
         </div>
 
         {cargando ? <Spinner /> : tab === 'aplicaciones' ? (
-          aplicaciones.length === 0
+          aplicacionesFiltradas.length === 0
             ? <EmptyState titulo="Sin evaluaciones" descripcion="Asigna una evaluación con el botón de arriba." />
-            : <div className="table-wrap">
+            : <>
+                <div className="search-box" style={{ maxWidth: 360, margin: '16px 0' }}>
+                  <Search className="search-icon" />
+                  <input className="form-control" style={{ paddingLeft: 34 }}
+                    placeholder="Buscar aplicaciones..."
+                    value={busqAplicaciones} onChange={e => setBusqAplicaciones(e.target.value)} />
+                </div>
+                <div className="table-wrap">
                 <table>
                   <thead><tr><th>Paciente</th><th>Instrumento</th><th>Fecha</th><th>Estado</th><th></th></tr></thead>
                   <tbody>
-                    {aplicaciones.map(a => (
+                    {aplicacionesFiltradas.map(a => (
                       <tr key={a.id}>
                         <td style={{ fontWeight: 500 }}>{a.paciente?.apellidos}, {a.paciente?.nombres}</td>
                         <td>{a.instrumento?.nombre}</td>
@@ -585,14 +604,22 @@ export default function Evaluaciones() {
                   </tbody>
                 </table>
               </div>
+            </>
         ) : (
           instrumentos.length === 0
             ? <EmptyState titulo="Sin instrumentos" descripcion="No hay instrumentos registrados." />
-            : <div className="table-wrap">
+            : <>
+                <div className="search-box" style={{ maxWidth: 360, margin: '16px 0' }}>
+                  <Search className="search-icon" />
+                  <input className="form-control" style={{ paddingLeft: 34 }}
+                    placeholder="Buscar instrumentos..."
+                    value={busqInstrumentos} onChange={e => setBusqInstrumentos(e.target.value)} />
+                </div>
+                <div className="table-wrap">
                 <table>
                   <thead><tr><th>Código</th><th>Nombre</th><th>Tipo</th><th>Área</th><th>Ítems</th></tr></thead>
                   <tbody>
-                    {instrumentos.map(i => (
+                    {instrumentosFiltrados.map(i => (
                       <tr key={i.id}>
                         <td style={{ fontFamily: 'monospace', fontWeight: 600 }}>{i.codigo_instrumento}</td>
                         <td style={{ fontWeight: 500 }}>{i.nombre}</td>
@@ -615,6 +642,7 @@ export default function Evaluaciones() {
                   </tbody>
                 </table>
               </div>
+            </>
         )}
       </div>
 

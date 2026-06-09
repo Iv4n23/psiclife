@@ -73,6 +73,7 @@ async function bootstrap() {
       }
     },
     credentials: true,
+    exposedHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset', 'Retry-After'],
   })
 
   app.setGlobalPrefix('api/v1')

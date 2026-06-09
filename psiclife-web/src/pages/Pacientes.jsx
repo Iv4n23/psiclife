@@ -26,6 +26,7 @@ export default function Pacientes() {
   const [form,           setForm]           = useState(FORM_VACIO)
   const [editId,         setEditId]         = useState(null)
   const [confirmar,      setConfirmar]      = useState(null)
+  const [buscandoDni,    setBuscandoDni]    = useState(false)
   const [errores,        setErrores]        = useState({})
   const [detalle,        setDetalle]        = useState(null)
   const [formCuenta,     setFormCuenta]     = useState(CUENTA_VACIO)
@@ -76,11 +77,51 @@ export default function Pacientes() {
 
   const abrirNuevo = () => { setEditId(null); setForm(FORM_VACIO); setErrores({}); setVista('form') }
 
+  const buscarDni = async () => {
+    if (form.tipo_documento !== 'DNI') return;
+    if (!form.numero_documento || form.numero_documento.length !== 8) {
+      toast.error('Ingrese un DNI válido de 8 dígitos');
+      return;
+    }
+    
+    setBuscandoDni(true);
+    try {
+      const res = await fetch(`https://api.apis.net.pe/v1/dni?numero=${form.numero_documento}`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setForm(f => ({ ...f, nombres: data.nombres, apellidos: `${data.apellidoPaterno} ${data.apellidoMaterno}` }));
+      setErrores(e => ({ ...e, nombres: '', apellidos: '' }));
+      toast.success('Datos de RENIEC obtenidos');
+    } catch (error) {
+      toast.error('No se pudo encontrar el DNI o el servicio no responde');
+    } finally {
+      setBuscandoDni(false);
+    }
+  }
+
   const validar = () => {
     const e = {}
     if (!form.nombres.trim())          e.nombres          = 'Requerido'
     if (!form.apellidos.trim())        e.apellidos        = 'Requerido'
-    if (!form.numero_documento.trim()) e.numero_documento = 'Requerido'
+    
+    if (!form.numero_documento.trim()) {
+      e.numero_documento = 'Requerido'
+    } else if (!/^[A-Za-z0-9]{8,12}$/.test(form.numero_documento)) {
+      e.numero_documento = 'Debe tener entre 8 y 12 caracteres alfanuméricos'
+    }
+
+    if (form.correo_personal && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.correo_personal)) {
+      e.correo_personal = 'Formato de correo inválido'
+    }
+
+    if (form.telefono && !/^\+?[0-9\s-]{9,15}$/.test(form.telefono)) {
+      e.telefono = 'Formato inválido'
+    }
+
+    if (form.whatsapp && !/^\+?[0-9\s-]{9,15}$/.test(form.whatsapp)) {
+      e.whatsapp = 'Formato inválido'
+    }
+
     setErrores(e)
     return Object.keys(e).length === 0
   }
@@ -125,11 +166,21 @@ export default function Pacientes() {
   // ── Vincular cuenta de usuario ─────────────────────────────
   const validarCuenta = () => {
     const e = {}
-    if (!formCuenta.correo.trim())     e.correo     = 'El correo es requerido'
-    if (!formCuenta.contrasena.trim()) e.contrasena = 'La contraseña es requerida'
-    if (formCuenta.contrasena.length < 6) e.contrasena = 'Mínimo 6 caracteres'
-    if (!formCuenta.numero_documento.trim() && !formCuenta.codigo_referencia.trim())
+    if (!formCuenta.correo.trim()) {
+      e.correo = 'El correo es requerido'
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formCuenta.correo)) {
+      e.correo = 'Formato de correo inválido'
+    }
+
+    if (!formCuenta.contrasena.trim()) {
+      e.contrasena = 'La contraseña es requerida'
+    } else if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/.test(formCuenta.contrasena)) {
+      e.contrasena = 'Mínimo 8 caracteres, incluye mayúscula, minúscula, número y símbolo'
+    }
+
+    if (!formCuenta.numero_documento.trim() && !formCuenta.codigo_referencia.trim()) {
       e.numero_documento = 'Ingresa el DNI o código Yape'
+    }
     setErroresCuenta(e)
     return Object.keys(e).length === 0
   }
@@ -209,22 +260,22 @@ export default function Pacientes() {
       <div className="card" style={{
         marginTop: 16,
         border: detalle.usuario_id
-          ? '1.5px solid hsl(145,60%,55%)'
-          : '1.5px solid hsl(38,80%,65%)',
+          ? '1.5px solid var(--success)'
+          : '1.5px solid var(--warning)',
         background: detalle.usuario_id
-          ? 'linear-gradient(135deg, hsl(145,60%,97%), hsl(160,50%,96%))'
-          : 'linear-gradient(135deg, hsl(38,90%,97%), hsl(28,80%,95%))',
+          ? 'linear-gradient(135deg, var(--success-bg), var(--surface))'
+          : 'linear-gradient(135deg, var(--warning-bg), var(--surface))',
       }}>
         <div className="card-header" style={{
-          background: detalle.usuario_id ? 'hsl(145,55%,92%)' : 'hsl(38,85%,90%)',
-          borderBottom: `1px solid ${detalle.usuario_id ? 'hsl(145,50%,78%)' : 'hsl(38,70%,75%)'}`,
+          background: detalle.usuario_id ? 'var(--success-bg)' : 'var(--warning-bg)',
+          borderBottom: `1px solid ${detalle.usuario_id ? 'var(--success)' : 'var(--warning)'}`,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {detalle.usuario_id
-              ? <UserCheck size={18} color="hsl(145,55%,38%)" />
-              : <UserX size={18} color="hsl(28,80%,42%)" />
+              ? <UserCheck size={18} color="var(--success)" />
+              : <UserX size={18} color="var(--warning)" />
             }
-            <span className="card-title" style={{ color: detalle.usuario_id ? 'hsl(145,55%,30%)' : 'hsl(28,75%,32%)' }}>
+            <span className="card-title" style={{ color: detalle.usuario_id ? 'var(--success)' : 'var(--warning)' }}>
               {detalle.usuario_id ? 'Cuenta de acceso vinculada' : 'Sin cuenta de acceso'}
             </span>
           </div>
@@ -242,17 +293,17 @@ export default function Pacientes() {
           <div className="card-body" style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 13.5 }}>
             <div style={{
               width: 40, height: 40, borderRadius: '50%',
-              background: 'linear-gradient(135deg, hsl(145,55%,45%), hsl(160,50%,42%))',
+              background: 'linear-gradient(135deg, var(--success), var(--success-bg))',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               color: 'white', fontWeight: 700, fontSize: 15, flexShrink: 0,
             }}>
               ✓
             </div>
             <div>
-              <div style={{ fontWeight: 600, color: 'hsl(145,55%,28%)' }}>
+              <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
                 El paciente tiene acceso al portal PsicLife
               </div>
-              <div style={{ fontSize: 12.5, color: 'hsl(145,40%,42%)', marginTop: 2 }}>
+              <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 2 }}>
                 Puede iniciar sesión y revisar sus citas, evaluaciones y actividades.
               </div>
             </div>
@@ -260,13 +311,13 @@ export default function Pacientes() {
         ) : (
           <div className="card-body">
             {!mostrarCuenta ? (
-              <p style={{ color: 'hsl(28,70%,42%)', fontSize: 13.5, lineHeight: 1.6, margin: 0 }}>
+              <p style={{ color: 'var(--text-primary)', fontSize: 13.5, lineHeight: 1.6, margin: 0 }}>
                 Este paciente aún no tiene una cuenta de usuario. Puedes crearla para que pueda
                 acceder al portal PsicLife y revisar sus citas, evaluaciones y actividades asignadas.
               </p>
             ) : (
               <form onSubmit={vincularCuenta} noValidate>
-                <div style={{ fontSize: 13, color: 'hsl(28,65%,40%)', marginBottom: 16, lineHeight: 1.6 }}>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16, lineHeight: 1.6 }}>
                   Completa los datos para crear la cuenta del paciente. Se usará el <b>DNI</b> o el
                   <b> código de operación Yape</b> para verificar la identidad.
                 </div>
@@ -346,7 +397,14 @@ export default function Pacientes() {
               </div>
               <div className="form-group">
                 <label className="form-label">Número documento <span className="required">*</span></label>
-                <input className={`form-control ${errores.numero_documento?'error':''}`} value={form.numero_documento} onChange={set('numero_documento')} />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input className={`form-control ${errores.numero_documento?'error':''}`} value={form.numero_documento} onChange={set('numero_documento')} style={{ flex: 1 }} />
+                  {form.tipo_documento === 'DNI' && (
+                    <button type="button" className="btn btn-ghost" onClick={buscarDni} disabled={buscandoDni} style={{ padding: '0 12px', background: 'var(--celeste-light)', color: 'var(--celeste-dark)', border: '1px solid var(--celeste-soft)' }} title="Buscar en RENIEC">
+                      <Search size={16} />
+                    </button>
+                  )}
+                </div>
                 {errores.numero_documento && <span className="form-error">{errores.numero_documento}</span>}
               </div>
               <div className="form-group">
@@ -404,7 +462,7 @@ export default function Pacientes() {
 
         <div className="form-footer">
           <button type="button" className="btn btn-ghost" onClick={() => setVista('lista')}>Cancelar</button>
-          <button type="submit" className="btn btn-primary" disabled={guardando}>
+          <button type="submit" className="btn btn-primary" disabled={guardando || !form.nombres.trim() || !form.apellidos.trim() || !form.numero_documento.trim()}>
             <Save size={14} /> {guardando ? 'Guardando...' : 'Guardar paciente'}
           </button>
         </div>

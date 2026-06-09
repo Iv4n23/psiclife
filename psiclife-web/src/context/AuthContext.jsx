@@ -43,9 +43,13 @@ export function AuthProvider({ children }) {
   const login = async ({ correo, contrasena }) => {
     const { data } = await api.post('/auth/login', { correo, contrasena })
     const { accessToken, usuario: user } = data.datos
+    const storedUser = {
+      ...user,
+      rolNombre: user.rol ?? user.rolNombre,
+    }
 
     localStorage.setItem('psiclife_token', accessToken)
-    localStorage.setItem('psiclife_user',  JSON.stringify(user))
+    localStorage.setItem('psiclife_user',  JSON.stringify(storedUser))
     // Sincronizar cookie para la landing
     document.cookie = `psiclife_session=${encodeURIComponent(JSON.stringify(user))}; path=/; max-age=86400; SameSite=Lax`
 
@@ -69,7 +73,12 @@ export function AuthProvider({ children }) {
   // Verificar permiso del usuario actual
   // permisos vienen como objeto: { usuarios: { ver: true }, roles: ... }
   const puedo = (permiso) => {
-    const rol = typeof usuario?.rol === 'string' ? usuario.rol.toLowerCase() : ''
+    const rawRol = typeof usuario?.rol === 'string'
+      ? usuario.rol
+      : typeof usuario?.rolNombre === 'string'
+        ? usuario.rolNombre
+        : ''
+    const rol = rawRol.trim().toLowerCase()
     const esAdmin = rol.includes('admin') || rol.includes('administrador')
     if (esAdmin) return true
 

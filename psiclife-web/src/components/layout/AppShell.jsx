@@ -31,7 +31,7 @@ const NAV_STAFF = [
     { label: 'Diagnósticos',   path: '/diagnosticos',   icon: Brain,        permiso: 'diagnosticos.ver' },
     { label: 'Evaluaciones',   path: '/evaluaciones',   icon: ClipboardList,permiso: 'evaluaciones.ver' },
     { label: 'Actividades',    path: '/actividades',    icon: Activity,     permiso: 'actividades.ver' },
-    { label: 'Facturación',    path: '/facturacion',    icon: FileText,     permiso: 'facturacion.ver' },
+    { label: 'Pagos',          path: '/pagos',          icon: FileText,     permiso: 'facturacion.ver' },
   ]},
 ]
 
@@ -61,7 +61,7 @@ const TITULOS = {
   '/diagnosticos':   'Diagnósticos',
   '/evaluaciones':   'Evaluaciones',
   '/actividades':    'Actividades',
-  '/facturacion':    'Facturación',
+  '/pagos':          'Pagos',
   '/mi-perfil':      'Mi Perfil',
 }
 
@@ -85,7 +85,9 @@ export default function AppShell() {
       .catch(console.error)
   }, [])
 
-  const esPaciente = usuario?.rol === 'Paciente'
+  const rawRol = typeof usuario?.rol === 'string' ? usuario.rol : typeof usuario?.rolNombre === 'string' ? usuario.rolNombre : ''
+  const rolActual = rawRol.toLowerCase()
+  const esPaciente = rolActual === 'paciente'
   const nav = esPaciente ? NAV_PACIENTE : NAV_STAFF
 
   const iniciales = usuario?.correo?.slice(0, 2).toUpperCase() ?? 'PS'
@@ -166,7 +168,7 @@ export default function AppShell() {
             <div className="sidebar-avatar" style={esPaciente ? { background: 'linear-gradient(135deg, hsl(262,80%,58%), hsl(220,80%,58%))' } : {}}>{iniciales}</div>
             <div className="sidebar-user-info">
               <div className="sidebar-user-name" title={usuario?.correo}>{usuario?.correo}</div>
-              <div className="sidebar-user-role">{usuario?.rol ?? 'Usuario'}</div>
+              <div className="sidebar-user-role">{usuario?.rol ?? usuario?.rolNombre ?? 'Usuario'}</div>
             </div>
             <button className="btn-logout" onClick={handleLogout} title="Cerrar sesión">
               <LogOut size={14} />

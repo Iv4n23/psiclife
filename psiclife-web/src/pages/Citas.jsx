@@ -32,6 +32,14 @@ const FORM_VACIO = {
   metodo_pago: 'efectivo', codigo_referencia: '', comprobanteFile: null,
 }
 
+const getFactura = (c) => {
+  if (!c) return null
+  if (c.factura) return c.factura
+  if (Array.isArray(c.facturas)) return c.facturas[0] ?? null
+  if (c.facturas && typeof c.facturas === 'object') return c.facturas
+  return null
+}
+
 /** Devuelve color basado en el estado de pago del día */
 function colorDia(citasDelDia) {
   if (!citasDelDia || citasDelDia.length === 0) return null
@@ -39,11 +47,11 @@ function colorDia(citasDelDia) {
   if (activas.length === 0) return null
 
   const tienePagada = activas.some(c => {
-    const f = c.factura || c.facturas?.[0]
+    const f = getFactura(c)
     return f?.estado === 'pagada'
   })
   const tienePendiente = activas.some(c => {
-    const f = c.factura || c.facturas?.[0]
+    const f = getFactura(c)
     return !f?.estado || f?.estado === 'pendiente' || f?.estado === 'parcial'
   })
 
@@ -57,7 +65,7 @@ function colorCita(c) {
   if (c.estado === 'cancelada') {
     return { bg: 'var(--danger-bg)', border: 'rgba(224,48,80,0.2)', text: 'var(--text-primary)', dot: 'var(--danger)' }
   }
-  const f = c.factura || c.facturas?.[0]
+  const f = getFactura(c)
   const e = f?.estado
   if (!e || e === 'pendiente' || e === 'parcial') {
     return { bg: 'var(--warning-bg)', border: 'rgba(217,119,6,0.2)', text: 'var(--text-primary)', dot: 'var(--warning)' }
@@ -110,6 +118,9 @@ export default function Citas() {
   const [modalReprogramar, setModalReprogramar] = useState(null)
   const [formReprogramar, setFormReprogramar] = useState({ programada_para: '', modalidad: 'presencial', plataforma_virtual: 'zoom', enlace_reunion: '' })
   const [detalleCita,     setDetalleCita]     = useState(null)
+  
+  const [modalEnlace,     setModalEnlace]     = useState(null)
+  const [formEnlace,      setFormEnlace]      = useState({ plataforma: 'zoom', enlace: '' })
 
   const { puedo } = useAuth()
 
@@ -278,6 +289,7 @@ export default function Citas() {
     }
     if (form.metodo_pago !== 'efectivo') {
       if (!form.codigo_referencia) e.codigo_referencia = 'Requerido'
+      else if (form.codigo_referencia.trim().length < 8) e.codigo_referencia = 'Ingresa al menos 8 dígitos'
       if (!form.comprobanteFile)   e.comprobanteFile = 'Debe adjuntar el comprobante'
     }
     setErrores(e)
@@ -318,6 +330,7 @@ export default function Citas() {
         const formData = new FormData()
         formData.append('monto', montoFactura)
         formData.append('codigo_referencia', codigo_referencia)
+        formData.append('metodo_pago', metodo_pago)
         formData.append('archivo', comprobanteFile)
         await facturacionApi.subirComprobanteYape(facturaId, formData)
       }
@@ -366,6 +379,21 @@ export default function Citas() {
       setModalCancelar(null); setMotivoCancelar('')
       await cargar()
     } catch {} finally { setGuardando(false) }
+  }
+
+  const guardarEnlace = async (e) => {
+    e.preventDefault()
+    if (!formEnlace.enlace.trim()) return toast.error('El enlace es obligatorio')
+    setGuardando(true)
+    try {
+      await citasApi.actualizar(modalEnlace.id, {
+        enlace_reunion: `${formEnlace.plataforma}::${formEnlace.enlace}`
+      })
+      toast.success('Enlace de reunión actualizado')
+      setModalEnlace(null)
+      if (detalleCita?.id === modalEnlace.id) setDetalleCita(null) // Cerrar detalle para que se refresque si se vuelve a abrir
+      cargar()
+    } catch { toast.error('Error al actualizar el enlace') } finally { setGuardando(false) }
   }
 
   const registrarAsistencia = async () => {
@@ -493,16 +521,21 @@ export default function Citas() {
                 <div className="form-group">
                   <label className="form-label">Método de Pago <span className="required">*</span></label>
                   <select className="form-control" value={form.metodo_pago} onChange={set('metodo_pago')}>
-                    <option value="efectivo">Efectivo (Presencial)</option>
-                    <option value="yape">Yape / Plin</option>
-                    <option value="transferencia">Transferencia Bancaria</option>
+                    {config.pago_efectivo_activo === 'true' && <option value="efectivo">Efectivo (Presencial)</option>}
+                    {config.pago_yape_activo === 'true' && <option value="yape">Yape / Plin</option>}
+                    {config.pago_transferencia_activo === 'true' && <option value="transferencia">Transferencia Bancaria</option>}
                   </select>
                 </div>
 
                 {form.metodo_pago !== 'efectivo' && (
                   <div className="form-group">
                     <label className="form-label">Código de Operación / Ref. <span className="required">*</span></label>
-                    <input className={`form-control ${errores.codigo_referencia ? 'error' : ''}`} value={form.codigo_referencia} onChange={set('codigo_referencia')} />
+                    <input className={`form-control ${errores.codigo_referencia ? 'error' : ''}`} value={form.codigo_referencia} maxLength={30}
+                      placeholder="Ej. 987654321 (mín. 8 dígitos)"
+                      onChange={e => {
+                        setForm(f => ({ ...f, codigo_referencia: e.target.value.replace(/\D/g, '') }))
+                        setErrores(er => ({ ...er, codigo_referencia: '' }))
+                      }} />
                     {errores.codigo_referencia && <span className="form-error">{errores.codigo_referencia}</span>}
                   </div>
                 )}
@@ -606,6 +639,15 @@ export default function Citas() {
               // Prellenar fecha y hora para nueva cita
               setForm(f => ({ ...FORM_VACIO, fecha, hora }))
               setVista('form')
+            }}
+            onClickEvento={(ev) => {
+              const d = new Date(ev.inicio)
+              if (d.getMonth() !== mesActual || d.getFullYear() !== añoActual) {
+                setMesActual(d.getMonth())
+                setAñoActual(d.getFullYear())
+              }
+              setDiaSelec(d.getDate())
+              setTimeout(() => setDetalleCita(ev.raw), 50)
             }}
           />
         ) : (
@@ -906,7 +948,22 @@ export default function Citas() {
                     return (
                       <>
                         <div><b>Plataforma:</b> {plataforma}</div>
-                        <div><b>Enlace / contacto:</b> {enlace || '—'}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <b>Enlace / contacto:</b> 
+                          {enlace ? (
+                            <a href={enlace.startsWith('http') ? enlace : `https://${enlace}`} target="_blank" rel="noreferrer" style={{ color: 'var(--celeste-dark)', textDecoration: 'underline' }}>
+                              {enlace}
+                            </a>
+                          ) : '—'}
+                          {puedo('citas.editar') && (
+                            <button className="btn btn-ghost btn-sm" onClick={() => {
+                              setFormEnlace({ plataforma, enlace: enlace || '' })
+                              setModalEnlace(detalleCita)
+                            }} style={{ padding: '2px 8px', fontSize: 11, height: 'auto', minHeight: 0 }}>
+                              ✏️ Editar
+                            </button>
+                          )}
+                        </div>
                       </>
                     )
                   })()}
@@ -982,12 +1039,13 @@ export default function Citas() {
             </p>
             <div className="form-group" style={{ marginBottom: 20 }}>
               <label className="form-label">Motivo <span className="required">*</span></label>
-              <textarea className="form-control" rows={3} value={motivoCancelar}
+              <textarea className={`form-control ${!motivoCancelar.trim() ? 'error' : ''}`} rows={3} value={motivoCancelar}
                 onChange={e => setMotivoCancelar(e.target.value)} placeholder="Escribe el motivo..." />
+              {!motivoCancelar.trim() && <span className="form-error">El motivo es requerido</span>}
             </div>
             <div className="modal-actions">
               <button className="btn btn-ghost" onClick={() => setModalCancelar(null)}>Cancelar</button>
-              <button className="btn btn-danger" onClick={cancelar} disabled={guardando}>
+              <button className="btn btn-danger" onClick={cancelar} disabled={guardando || !motivoCancelar.trim()}>
                 {guardando ? 'Cancelando...' : 'Confirmar cancelación'}
               </button>
             </div>
@@ -1073,6 +1131,41 @@ export default function Citas() {
           </div>
         </div>
       )}
+      {/* Modal Asignar/Editar Enlace */}
+      {modalEnlace && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ maxWidth: 400 }}>
+            <div className="modal-title">Asignar Enlace de Reunión</div>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
+              Para la cita virtual con <b>{modalEnlace.paciente?.nombres} {modalEnlace.paciente?.apellidos}</b>
+            </p>
+            <form onSubmit={guardarEnlace}>
+              <div className="form-group" style={{ marginBottom: 14 }}>
+                <label className="form-label">Plataforma</label>
+                <select className="form-control" value={formEnlace.plataforma} onChange={e => setFormEnlace({...formEnlace, plataforma: e.target.value})}>
+                  <option value="zoom">Zoom</option>
+                  <option value="meet">Google Meet</option>
+                  <option value="teams">Microsoft Teams</option>
+                  <option value="whatsapp">Videollamada WhatsApp</option>
+                  <option value="otro">Otro</option>
+                </select>
+              </div>
+              <div className="form-group" style={{ marginBottom: 20 }}>
+                <label className="form-label">Enlace o Número <span className="required">*</span></label>
+                <input className="form-control" required placeholder="https://zoom.us/j/..."
+                  value={formEnlace.enlace} onChange={e => setFormEnlace({...formEnlace, enlace: e.target.value})} />
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn btn-ghost" onClick={() => setModalEnlace(null)}>Cancelar</button>
+                <button type="submit" className="btn btn-primary" disabled={guardando}>
+                  {guardando ? 'Guardando...' : 'Guardar Enlace'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }

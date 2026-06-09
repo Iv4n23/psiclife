@@ -60,6 +60,14 @@ export class DiagnosticosController {
 
   // ── Diagnósticos ──────────────────────────────────────────
 
+  @Get()
+  @Permisos('diagnosticos.ver')
+  @ApiOperation({ summary: 'Listar todos los diagnósticos registrados' })
+  async listarTodos() {
+    const datos = await this.diagnosticosService.listarTodos()
+    return { mensaje: 'Diagnósticos obtenidos correctamente', datos }
+  }
+
   @Get('paciente/:pacienteId')
   @Permisos('diagnosticos.ver')
   @ApiOperation({ summary: 'Diagnósticos de un paciente' })
