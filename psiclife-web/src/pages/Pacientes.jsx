@@ -106,6 +106,10 @@ export default function Pacientes() {
     
     if (!form.numero_documento.trim()) {
       e.numero_documento = 'Requerido'
+    } else if (form.tipo_documento === 'DNI') {
+      if (!/^\d{8}$/.test(form.numero_documento)) {
+        e.numero_documento = 'El DNI debe contener exactamente 8 dígitos'
+      }
     } else if (!/^[A-Za-z0-9]{8,12}$/.test(form.numero_documento)) {
       e.numero_documento = 'Debe tener entre 8 y 12 caracteres alfanuméricos'
     }
@@ -180,6 +184,8 @@ export default function Pacientes() {
 
     if (!formCuenta.numero_documento.trim() && !formCuenta.codigo_referencia.trim()) {
       e.numero_documento = 'Ingresa el DNI o código Yape'
+    } else if (formCuenta.numero_documento && !/^\d+$/.test(formCuenta.numero_documento)) {
+      e.numero_documento = 'El DNI debe contener solo números'
     }
     setErroresCuenta(e)
     return Object.keys(e).length === 0
@@ -339,7 +345,16 @@ export default function Pacientes() {
                   <div className="form-group">
                     <label className="form-label">DNI del paciente</label>
                     <input className={`form-control ${erroresCuenta.numero_documento ? 'error' : ''}`}
-                      value={formCuenta.numero_documento} onChange={setCuenta('numero_documento')}
+                      type="text"
+                      inputMode="numeric"
+                      pattern="\d*"
+                      maxLength={8}
+                      value={formCuenta.numero_documento}
+                      onChange={e => {
+                        const value = e.target.value.replace(/\D/g, '')
+                        setFormCuenta(f => ({ ...f, numero_documento: value }))
+                        setErroresCuenta(er => ({ ...er, numero_documento: '' }))
+                      }}
                       placeholder={detalle.numero_documento ?? 'Número de documento'} />
                     {erroresCuenta.numero_documento && <span className="form-error">{erroresCuenta.numero_documento}</span>}
                   </div>
@@ -398,7 +413,23 @@ export default function Pacientes() {
               <div className="form-group">
                 <label className="form-label">Número documento <span className="required">*</span></label>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <input className={`form-control ${errores.numero_documento?'error':''}`} value={form.numero_documento} onChange={set('numero_documento')} style={{ flex: 1 }} />
+                  <input className={`form-control ${errores.numero_documento?'error':''}`}
+                    type="text"
+                    inputMode="numeric"
+                    pattern="\d*"
+                    maxLength={8}
+                    value={form.numero_documento}
+                    onChange={e => {
+                      const valor = e.target.value
+                      setForm(f => ({
+                        ...f,
+                        numero_documento: f.tipo_documento === 'DNI'
+                          ? valor.replace(/\D/g, '').slice(0, 8)
+                          : valor
+                      }))
+                      setErrores(er => ({ ...er, numero_documento: '' }))
+                    }}
+                    style={{ flex: 1 }} />
                   {form.tipo_documento === 'DNI' && (
                     <button type="button" className="btn btn-ghost" onClick={buscarDni} disabled={buscandoDni} style={{ padding: '0 12px', background: 'var(--celeste-light)', color: 'var(--celeste-dark)', border: '1px solid var(--celeste-soft)' }} title="Buscar en RENIEC">
                       <Search size={16} />

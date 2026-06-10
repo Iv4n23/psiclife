@@ -45,6 +45,8 @@ export default function LoginPage() {
       if (!form.numero_documento && !form.codigo_referencia) {
         e.numero_documento = 'Debes ingresar tu DNI o tu código de Yape'
         e.codigo_referencia = 'Debes ingresar tu DNI o tu código de Yape'
+      } else if (form.numero_documento && !/^\d+$/.test(form.numero_documento)) {
+        e.numero_documento = 'El DNI debe contener solo números'
       }
     }
     
@@ -104,7 +106,10 @@ export default function LoginPage() {
   }
 
   const set = (campo) => (e) => {
-    setForm(f => ({ ...f, [campo]: e.target.value }))
+    const value = campo === 'numero_documento'
+      ? e.target.value.replace(/\D/g, '')
+      : e.target.value
+    setForm(f => ({ ...f, [campo]: value }))
     setErrores(er => ({ ...er, [campo]: '' }))
   }
 
@@ -263,6 +268,9 @@ export default function LoginPage() {
                     </label>
                     <input
                       type="text"
+                      inputMode="numeric"
+                      pattern="\d*"
+                      maxLength={8}
                       className={`form-control ${errores.numero_documento ? 'error' : ''}`}
                       placeholder="Ej. 12345678"
                       value={form.numero_documento}

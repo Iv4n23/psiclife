@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { facturacionApi, pacientesApi, psicologosApi, citasApi, configuracionApi } from '../services/api'
 import { EmptyState, Spinner } from '../components/ui/index.jsx'
 import toast from 'react-hot-toast'
-import { Plus, X, Save, Eye, DollarSign, TrendingUp, CheckCircle, AlertTriangle, ImageOff, Trash2, RefreshCw } from 'lucide-react'
+import { Plus, X, Save, Eye, DollarSign, TrendingUp, CheckCircle, AlertTriangle, Image, ImageOff, Trash2, RefreshCw } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { getImageUrl } from '../utils/image'
 
@@ -164,7 +164,9 @@ export default function Pagos() {
     if ((formPago.metodo === 'yape' || formPago.metodo === 'transferencia') && !formPago.codigo_referencia.trim())
       e.codigo_referencia = 'El código de operación es requerido para Yape/Transferencia'
     if ((formPago.metodo === 'yape' || formPago.metodo === 'transferencia') && formPago.codigo_referencia.trim().length < 8)
-      e.codigo_referencia = 'Ingresa al menos 8 dígitos numéricos en el código de operación'
+      e.codigo_referencia = 'Ingresa al menos 8 dígitos en el código de operación'
+    if ((formPago.metodo === 'yape' || formPago.metodo === 'transferencia') && /\D/.test(formPago.codigo_referencia))
+      e.codigo_referencia = 'El código de operación solo puede contener números'
     setErrPago(e)
     if (Object.keys(e).length > 0) return
     setGuardando(true)
@@ -225,6 +227,15 @@ export default function Pagos() {
       const msg = err.response?.data?.mensaje ?? 'Error al rechazar pago'
       toast.error(msg)
     } finally { setGuardando(false) }
+  }
+
+  const abrirComprobanteFactura = (factura) => {
+    const pago = factura.pagos?.find(p => (p.metodo === 'yape' || p.metodo === 'transferencia') && p.url_comprobante)
+    if (pago?.url_comprobante) {
+      setImagenExpandida(getImageUrl(pago.url_comprobante))
+      return
+    }
+    verDetalle(factura.id)
   }
 
   const guardarConfig = async (e) => {
@@ -332,7 +343,11 @@ export default function Pagos() {
                       className={`form-control ${errPago.codigo_referencia ? 'error' : ''}`}
                       value={formPago.codigo_referencia}
                       maxLength={30}
-                      onChange={e => { setFormPago(p => ({ ...p, codigo_referencia: e.target.value.replace(/\D/g, '') })); setErrPago(er => ({...er, codigo_referencia: ''})) }}
+                      onChange={e => {
+                        const soloNumeros = e.target.value.replace(/\D/g, '')
+                        setFormPago(p => ({ ...p, codigo_referencia: soloNumeros }))
+                        setErrPago(er => ({ ...er, codigo_referencia: '' }))
+                      }}
                       placeholder="N° operación (mín. 8 dígitos)" />
                     {errPago.codigo_referencia && <span className="form-error">{errPago.codigo_referencia}</span>}
                   </div>
@@ -777,9 +792,14 @@ export default function Pagos() {
                       <td style={{ fontWeight: 600 }}>S/ {Number(f.total).toFixed(2)}</td>
                       <td><span className={`badge ${ESTADO_BADGE[f.estado]}`}>{f.estado}</span></td>
                       <td>
-                        <button className="btn btn-ghost btn-icon btn-sm" onClick={() => verDetalle(f.id)}>
+                        <button className="btn btn-ghost btn-icon btn-sm" onClick={() => verDetalle(f.id)} title="Ver detalle">
                           <Eye size={13}/>
                         </button>
+                        {f.pagos?.some(p => (p.metodo === 'yape' || p.metodo === 'transferencia') && p.url_comprobante) && (
+                          <button className="btn btn-ghost btn-icon btn-sm" onClick={() => abrirComprobanteFactura(f)} title="Ver comprobante">
+                            <Image size={13} />
+                          </button>
+                        )}
                         {puedo('facturacion.eliminar') && (
                           <button className="btn btn-ghost btn-icon btn-sm" onClick={() => eliminarFactura(f.id)} style={{ color: 'var(--danger)' }} title="Eliminar factura">
                             <Trash2 size={13}/>

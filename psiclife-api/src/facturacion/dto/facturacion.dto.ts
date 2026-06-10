@@ -1,7 +1,7 @@
 // src/facturacion/dto/facturacion.dto.ts
 import {
   IsString, IsUUID, IsOptional, IsNumber,
-  IsPositive, IsEnum, MaxLength,
+  IsPositive, IsEnum, MaxLength, Min,
 } from 'class-validator'
 import { Type } from 'class-transformer'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
@@ -53,8 +53,8 @@ export class AnularFacturaDto {
 }
 
 export class RegistrarPagoYapeDto {
-  @ApiProperty({ example: 150.00 })
-  @IsNumber() @IsPositive() @Type(() => Number)
+  @ApiProperty({ example: 150.00, description: 'Monto estimado o 0 si será confirmado más tarde' })
+  @IsNumber() @Min(0) @Type(() => Number)
   monto: number
 
   @ApiProperty({ example: 'OP-123456' })

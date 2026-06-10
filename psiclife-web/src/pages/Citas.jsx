@@ -124,6 +124,34 @@ export default function Citas() {
 
   const { puedo } = useAuth()
 
+  const normalizePhone = (value) => String(value || '').replace(/[\s()+.-]/g, '')
+  const esTelefonoWhatsappValido = (value) => {
+    const cleaned = normalizePhone(value)
+    return /^\+?\d{8,15}$/.test(cleaned)
+  }
+
+  const esUrlValida = (value) => {
+    const raw = String(value || '').trim()
+    if (!raw) return false
+    try {
+      const url = new URL(raw.startsWith('http://') || raw.startsWith('https://') ? raw : `https://${raw}`)
+      return ['http:', 'https:'].includes(url.protocol)
+    } catch {
+      return false
+    }
+  }
+
+  const validarEnlaceReunion = (plataforma, enlace) => {
+    const valor = String(enlace || '').trim()
+    if (!valor) return 'El enlace o número es obligatorio'
+    if (plataforma === 'whatsapp') {
+      if (!esTelefonoWhatsappValido(valor)) return 'Ingresa un número de WhatsApp válido'
+      return ''
+    }
+    if (!esUrlValida(valor)) return 'Ingresa un enlace de reunión válido'
+    return ''
+  }
+
   useEffect(() => { cargar() }, [mesActual, añoActual])
   useEffect(() => { setDetalleCita(null) }, [diaSelec])
 
@@ -198,7 +226,13 @@ export default function Citas() {
       setPsicologos(dps.datos ?? [])
 
       const cfgObj = {}
-      if(dcfg.datos) dcfg.datos.forEach(c => cfgObj[c.clave] = c.valor)
+      if (dcfg.datos) {
+        if (Array.isArray(dcfg.datos)) {
+          dcfg.datos.forEach(c => cfgObj[c.clave] = c.valor)
+        } else if (typeof dcfg.datos === 'object') {
+          Object.assign(cfgObj, dcfg.datos)
+        }
+      }
       setConfig(cfgObj)
     } catch (err) {
       console.error(err)
@@ -287,9 +321,13 @@ export default function Citas() {
       if (fechaCita < ahora)    e.fecha = 'No puedes reservar en fechas pasadas'
       if (fechaCita > maxFecha) e.fecha = 'No puedes reservar con más de 1 mes de anticipación'
     }
+    if (form.modalidad === 'virtual') {
+      const enlaceError = validarEnlaceReunion(form.plataforma_virtual, form.enlace_reunion)
+      if (enlaceError) e.enlace_reunion = enlaceError
+    }
     if (form.metodo_pago !== 'efectivo') {
       if (!form.codigo_referencia) e.codigo_referencia = 'Requerido'
-      else if (form.codigo_referencia.trim().length < 8) e.codigo_referencia = 'Ingresa al menos 8 dígitos'
+      else if (form.codigo_referencia.trim().length < 8) e.codigo_referencia = 'Ingresa al menos 8 caracteres'
       if (!form.comprobanteFile)   e.comprobanteFile = 'Debe adjuntar el comprobante'
     }
     setErrores(e)
@@ -353,6 +391,13 @@ export default function Citas() {
 
   const reprogramar = async (ev) => {
     ev.preventDefault()
+    if (formReprogramar.modalidad === 'virtual') {
+      const error = validarEnlaceReunion(formReprogramar.plataforma_virtual, formReprogramar.enlace_reunion)
+      if (error) {
+        toast.error(error)
+        return
+      }
+    }
     setGuardando(true)
     try {
       const payload = { ...formReprogramar }
@@ -383,7 +428,8 @@ export default function Citas() {
 
   const guardarEnlace = async (e) => {
     e.preventDefault()
-    if (!formEnlace.enlace.trim()) return toast.error('El enlace es obligatorio')
+    const error = validarEnlaceReunion(formEnlace.plataforma, formEnlace.enlace)
+    if (error) return toast.error(error)
     setGuardando(true)
     try {
       await citasApi.actualizar(modalEnlace.id, {
@@ -531,9 +577,9 @@ export default function Citas() {
                   <div className="form-group">
                     <label className="form-label">Código de Operación / Ref. <span className="required">*</span></label>
                     <input className={`form-control ${errores.codigo_referencia ? 'error' : ''}`} value={form.codigo_referencia} maxLength={30}
-                      placeholder="Ej. 987654321 (mín. 8 dígitos)"
+                      placeholder="Ej. 987654321 (mín. 8 caracteres)"
                       onChange={e => {
-                        setForm(f => ({ ...f, codigo_referencia: e.target.value.replace(/\D/g, '') }))
+                        setForm(f => ({ ...f, codigo_referencia: e.target.value }))
                         setErrores(er => ({ ...er, codigo_referencia: '' }))
                       }} />
                     {errores.codigo_referencia && <span className="form-error">{errores.codigo_referencia}</span>}

@@ -116,8 +116,8 @@ export const serviciosApi = {
   crear:               (data)      => api.post('/servicios', data),
   actualizar:          (id, d)     => api.patch(`/servicios/${id}`, d),
   eliminar:            (id)        => api.delete(`/servicios/${id}`),
-  subirFotoPrincipal:  (id, form)  => api.post(`/servicios/${id}/foto-principal`, form, { headers: { 'Content-Type': 'multipart/form-data' } }),
-  subirFotoSecundaria: (id, form)  => api.post(`/servicios/${id}/fotos`, form, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  subirFotoPrincipal:  (id, form)  => api.post(`/servicios/${id}/foto-principal`, form),
+  subirFotoSecundaria: (id, form)  => api.post(`/servicios/${id}/fotos`, form),
   eliminarFoto:        (id, fid)   => api.delete(`/servicios/${id}/fotos/${fid}`),
   agregarPresentacion: (id, data)  => api.post(`/servicios/${id}/presentaciones`, data),
   eliminarPresentacion:(id, pid)   => api.delete(`/servicios/${id}/presentaciones/${pid}`),
@@ -126,9 +126,9 @@ export const serviciosApi = {
 export const webMedicaApi = {
   obtener:           ()      => api.get('/web-medica'),
   actualizar:        (data)  => api.patch('/web-medica', data),
-  subirLogo:         (form)  => api.post('/web-medica/logo', form, { headers: { 'Content-Type': 'multipart/form-data' } }),
-  subirDirectorFoto: (form)  => api.post('/web-medica/director-foto', form, { headers: { 'Content-Type': 'multipart/form-data' } }),
-  subirEspecialidadImagen: (form) => api.post('/web-medica/archivo', form, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  subirLogo:         (form)  => api.post('/web-medica/logo', form),
+  subirDirectorFoto: (form)  => api.post('/web-medica/director-foto', form),
+  subirEspecialidadImagen: (form) => api.post('/web-medica/archivo', form),
 }
 
 export const disponibilidadApi = {
@@ -231,9 +231,7 @@ export const actividadesApi = {
   asignar:             (data)   => api.post('/actividades/asignaciones', data),
   actualizarAsignacion:(id, d)  => api.patch(`/actividades/asignaciones/${id}`, d),
   eliminarAsignacion:  (id)     => api.delete(`/actividades/asignaciones/${id}`),
-  responder:           (id, d)  => api.post(`/actividades/asignaciones/${id}/responder`, d, {
-    headers: d instanceof FormData ? { 'Content-Type': 'multipart/form-data' } : undefined
-  }),
+  responder:           (id, d)  => api.post(`/actividades/asignaciones/${id}/responder`, d),
   retroalimentar:      (id, d)  => api.patch(`/actividades/asignaciones/${id}/retroalimentacion`, d),
   reporte:             (pid)    => api.get(`/actividades/reporte/${pid}`),
 }
@@ -248,7 +246,7 @@ export const facturacionApi = {
   registrarPago:        (id, d)   => api.post(`/facturacion/${id}/pagos`, d),
   anular:               (id, d)   => api.patch(`/facturacion/${id}/anular`, d),
   eliminar:             (id)      => api.delete(`/facturacion/${id}`),
-  subirComprobanteYape: (id, form) => api.post(`/facturacion/${id}/yape-comprobante`, form, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  subirComprobanteYape: (id, form) => api.post(`/facturacion/${id}/yape-comprobante`, form),
   confirmarPago:        (pagoId)  => api.patch(`/facturacion/pagos/${pagoId}/confirmar`),
   rechazarPago:         (pagoId)  => api.patch(`/facturacion/pagos/${pagoId}/rechazar`),
 }
@@ -262,7 +260,7 @@ export const configuracionApi = {
   obtener:     (clave) => api.get(`/configuracion/${clave}`),
   listar:      ()      => api.get('/configuracion'),
   upsert:      (data)  => api.post('/configuracion', data),
-  subirQrYape: (data)  => api.post('/configuracion/qr-yape', data, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  subirQrYape: (data)  => api.post('/configuracion/qr-yape', data),
 }
 
 export const resenasApi = {

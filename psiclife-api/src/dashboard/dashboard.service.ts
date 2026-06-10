@@ -74,7 +74,9 @@ export class DashboardService {
           psicologo: {
             select: { nombres: true, apellidos: true }
           },
-          act_respuestas: true
+          act_respuestas: {
+            orderBy: { enviado_en: 'desc' }
+          }
         }
       })
     ])

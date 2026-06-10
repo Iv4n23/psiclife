@@ -2,7 +2,7 @@
 import {
   Controller, Get, Post, Patch, Delete,
   Body, Param, Query, ParseUUIDPipe,
-  UseGuards, HttpCode, HttpStatus,
+  UseGuards, HttpCode, HttpStatus, BadRequestException,
 } from '@nestjs/common'
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger'
 import { EvaluacionesService } from './evaluaciones.service'
@@ -97,9 +97,17 @@ export class EvaluacionesController {
   @ApiParam({ name: 'id', format: 'uuid' })
   async completarPaciente(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: { respuestas: any[] },
+    @Body() body: any,
   ) {
-    const datos = await this.evaluacionesService.completarPaciente(id, body.respuestas)
+    const respuestas = Array.isArray(body)
+      ? body
+      : body?.respuestas
+
+    if (!Array.isArray(respuestas)) {
+      throw new BadRequestException('El campo respuestas debe ser un arreglo')
+    }
+
+    const datos = await this.evaluacionesService.completarPaciente(id, respuestas)
     return { mensaje: 'Evaluación enviada con éxito', datos }
   }
 

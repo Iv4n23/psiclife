@@ -282,6 +282,10 @@ export class EvaluacionesService {
   }
 
   async completarPaciente(aplicacionId: string, respuestas: any[]) {
+    if (!Array.isArray(respuestas)) {
+      throw new BadRequestException('El campo respuestas debe ser un arreglo')
+    }
+
     const aplicacion = await this.buscarAplicacion(aplicacionId)
     if (aplicacion.estado === 'completado') throw new BadRequestException('La evaluación ya fue completada')
 

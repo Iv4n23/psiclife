@@ -95,7 +95,7 @@ function ModalYape({ facturaId, total, config, onClose, onSuccess }) {
 
   const handleEnviar = async () => {
     if (!monto || Number(monto) <= 0) { toast.error('Ingresa el monto'); return }
-    if (codigo.trim().length < 8)     { toast.error('Ingresa un número de operación válido (mínimo 8 dígitos numéricos)'); return }
+    if (codigo.trim().length < 8)     { toast.error('Ingresa un número de operación válido (mínimo 8 caracteres)'); return }
     if (!archivo)                     { toast.error('Sube la captura de tu Yape'); return }
     setEnviando(true)
     try {
@@ -166,7 +166,7 @@ function ModalYape({ facturaId, total, config, onClose, onSuccess }) {
             <div key={label}>
               <label style={{ display:'block', fontSize:11, color:'rgba(255,255,255,0.45)', marginBottom:6, textTransform:'uppercase', letterSpacing:0.5 }}>{label}</label>
               <input type={type} value={val} onChange={e => {
-                if (key === 'codigo') set(e.target.value.replace(/\D/g, '').slice(0, 20))
+                if (key === 'codigo') set(e.target.value.slice(0, 20))
                 else set(e.target.value)
               }} placeholder={ph}
                 style={{ width:'100%', padding:'10px 14px', borderRadius:10, background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.14)', color:'white', fontSize:14, outline:'none', boxSizing:'border-box' }} />
@@ -299,7 +299,7 @@ function DashboardPaciente() {
         return respuesta
       })
 
-      await evaluacionesApi.completarPaciente(datosEvaluacion.id, payload)
+      await evaluacionesApi.completarPaciente(datosEvaluacion.id, { respuestas: payload })
       toast.success('Evaluación enviada correctamente')
       setEvaluacionActiva(null)
       setDatosEvaluacion(null)
@@ -1124,17 +1124,32 @@ function DashboardPaciente() {
                   </div>
                 ) : (
                   <div style={{ marginTop: 12, padding: 10, background: 'var(--success-bg)', borderRadius: 8, fontSize: 13, color: 'var(--text-secondary)' }}>
-                    {act.act_respuestas?.[0]?.contenido && (
-                      <div style={{ marginBottom: 4 }}><strong>Tu respuesta:</strong> {act.act_respuestas[0].contenido}</div>
-                    )}
-                    {act.act_respuestas?.[0]?.archivos_adjuntos?.[0] && (
-                      <div style={{ marginBottom: 4 }}>
-                        <strong>Archivo adjunto:</strong> <a href={`${API_BASE}${act.act_respuestas[0].archivos_adjuntos[0]}`} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>Ver archivo</a>
-                      </div>
-                    )}
-                    {!act.act_respuestas?.[0]?.contenido && !act.act_respuestas?.[0]?.archivos_adjuntos?.[0] && (
-                      <div style={{ marginBottom: 4 }}><strong>Tu respuesta:</strong> Actividad completada sin texto ni archivos.</div>
-                    )}
+                    {(() => {
+                      const ultimaRespuesta = (act.act_respuestas ?? []).slice().sort((a, b) => new Date(b.enviado_en) - new Date(a.enviado_en))[0]
+                      const respuestaContenido = ultimaRespuesta?.contenido
+                      const archivoAdjunto = ultimaRespuesta?.archivos_adjuntos?.[0]
+                      if (respuestaContenido) {
+                        return <div style={{ marginBottom: 4 }}><strong>Tu respuesta:</strong> {respuestaContenido}</div>
+                      }
+                      return null
+                    })()}
+                    {(() => {
+                      const ultimaRespuesta = (act.act_respuestas ?? []).slice().sort((a, b) => new Date(b.enviado_en) - new Date(a.enviado_en))[0]
+                      const archivoAdjunto = ultimaRespuesta?.archivos_adjuntos?.[0]
+                      return archivoAdjunto ? (
+                        <div style={{ marginBottom: 4 }}>
+                          <strong>Archivo adjunto:</strong> <a href={`${API_BASE}${archivoAdjunto}`} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>Ver archivo</a>
+                        </div>
+                      ) : null
+                    })()}
+                    {(() => {
+                      const ultimaRespuesta = (act.act_respuestas ?? []).slice().sort((a, b) => new Date(b.enviado_en) - new Date(a.enviado_en))[0]
+                      const respuestaContenido = ultimaRespuesta?.contenido
+                      const archivoAdjunto = ultimaRespuesta?.archivos_adjuntos?.[0]
+                      return !respuestaContenido && !archivoAdjunto ? (
+                        <div style={{ marginBottom: 4 }}><strong>Tu respuesta:</strong> Actividad completada sin texto ni archivos.</div>
+                      ) : null
+                    })()}
                     {act.retroalimentacion && (
                       <div style={{ marginTop: 8, borderTop: '1px solid var(--success)', paddingTop: 8, color: 'var(--text-primary)' }}>
                         <strong>Feedback del psicólogo:</strong> {act.retroalimentacion}
@@ -1438,7 +1453,7 @@ function DashboardPaciente() {
                           </label>
                           <input
                             className="form-control"
-                            placeholder="Ej. 987654321 (mín. 8 dígitos)"
+                            placeholder="Ej. 987654321 (mín. 8 caracteres)"
                             value={formPago.codigo}
                             maxLength={30}
                             onChange={e => setFormPago(p => ({ ...p, codigo: e.target.value.replace(/\D/g, '') }))}
@@ -1452,7 +1467,7 @@ function DashboardPaciente() {
                           />
                           {formPago.codigo.trim().length > 0 && formPago.codigo.trim().length < 8 && (
                             <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 4 }}>
-                              ⚠ Ingresa al menos 8 dígitos numéricos
+                              ⚠ Ingresa al menos 8 caracteres
                             </div>
                           )}
                         </div>
@@ -1504,7 +1519,7 @@ function DashboardPaciente() {
                   {pasoAgendar === 3 && (formPago.metodo === 'yape' || formPago.metodo === 'transferencia') && (
                     <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right' }}>
                       {!formPago.archivo && '📎 Falta adjuntar el comprobante'}
-                      {formPago.archivo && formPago.codigo.trim().length < 8 && '🔢 Falta el número de operación (mín. 8 dígitos)'}
+                      {formPago.archivo && formPago.codigo.trim().length < 8 && '🔢 Falta el número de operación (mín. 8 caracteres)'}
                     </div>
                   )}
                   <button className="btn btn-primary"

@@ -171,6 +171,7 @@ export default function FormAgendarCita({ psicologos = [], pagosConfig = {} }) {
     if (!datos.apellidos.trim()) e.apellidos = 'Requerido'
     else if (!validarNombre(datos.apellidos)) e.apellidos = 'Solo se permiten letras'
     if (!datos.numero_documento.trim()) e.numero_documento = 'Requerido'
+    else if (!/^\d+$/.test(datos.numero_documento)) e.numero_documento = 'Solo se permiten números'
     if (!datos.correo.trim() || !/\S+@\S+\.\S+/.test(datos.correo)) e.correo = 'Correo inválido'
     if (!datos.whatsapp.trim()) e.whatsapp = 'Requerido'
     else if (!validarWhatsapp(datos.whatsapp)) e.whatsapp = 'Ingresa un número WhatsApp válido'
@@ -236,7 +237,7 @@ export default function FormAgendarCita({ psicologos = [], pagosConfig = {} }) {
     
     if (metodo === 'yape' || metodo === 'transferencia') {
       if (!datos.codigo_referencia) e.codigo_referencia = 'Requerido'
-      else if (datos.codigo_referencia.trim().length < 8) e.codigo_referencia = 'Ingresa al menos 8 dígitos'
+      else if (datos.codigo_referencia.trim().length < 8) e.codigo_referencia = 'Ingresa al menos 8 caracteres'
       
       if (!datos.comprobante) {
         e.comprobante = 'Debes subir tu comprobante de pago para continuar'
@@ -362,8 +363,12 @@ export default function FormAgendarCita({ psicologos = [], pagosConfig = {} }) {
           <div className={styles.fGroup}>
             <label className={styles.fLabel}>DNI o Carnet Ext. <span>*</span></label>
             <input className={`${styles.fInput} ${errores.numero_documento ? styles.error : ''}`}
-              value={datos.numero_documento} onChange={e => set('numero_documento', e.target.value.replace(/[^0-9A-Z]/gi, ''))}
-              placeholder="12345678" maxLength={15} />
+              type="text"
+              inputMode="numeric"
+              pattern="\d*"
+              maxLength={8}
+              value={datos.numero_documento} onChange={e => set('numero_documento', e.target.value.replace(/\D/g, ''))}
+              placeholder="12345678" />
             {errores.numero_documento && <span className={styles.fError}>{errores.numero_documento}</span>}
           </div>
           <div className={styles.fGroup}>
@@ -546,9 +551,9 @@ export default function FormAgendarCita({ psicologos = [], pagosConfig = {} }) {
                     <input className={`${styles.fInput} ${errores.codigo_referencia ? styles.error : ''}`}
                       value={datos.codigo_referencia}
                       maxLength={30}
-                      placeholder="Mín. 8 dígitos"
+                      placeholder="Mín. 8 caracteres"
                       onChange={e => {
-                        set('codigo_referencia', e.target.value.replace(/\D/g, ''))
+                        set('codigo_referencia', e.target.value)
                       }} />
                     {errores.codigo_referencia && <span className={styles.fError}>{errores.codigo_referencia}</span>}
                   </div>
