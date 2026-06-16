@@ -1,6 +1,6 @@
 // src/pages/Sesiones.jsx
 import { useState, useEffect } from 'react'
-import { citasApi, diagnosticosApi, evaluacionesApi, actividadesApi } from '../services/api'
+import { citasApi, diagnosticosApi, evaluacionesApi, actividadesApi, pacientesApi } from '../services/api'
 import { Spinner, EmptyState } from '../components/ui/index.jsx'
 import toast from 'react-hot-toast'
 import { Calendar, User, Save, FileText, CheckCircle, Brain, ClipboardList, Activity, ExternalLink, Search, X, Pencil, Trash2, AlertTriangle } from 'lucide-react'
@@ -12,6 +12,8 @@ export default function Sesiones() {
   const [guardando, setGuardando] = useState(false)
   const [detalle, setDetalle] = useState(null)
   const [notasSesion, setNotasSesion] = useState('')
+  const [historialPaciente, setHistorialPaciente] = useState(null)
+  const [cargandoHistorial, setCargandoHistorial] = useState(false)
   const [busqSesion, setBusqSesion] = useState('')
   const [busqDx, setBusqDx] = useState('')
   const [busqEva, setBusqEva] = useState('')
@@ -42,6 +44,33 @@ export default function Sesiones() {
     d.codigo.toLowerCase().includes(busqDx.toLowerCase()) ||
     d.nombre.toLowerCase().includes(busqDx.toLowerCase())
   )
+
+  const historialEventos = historialPaciente ? [
+    ...(historialPaciente.citas || []).map(c => ({
+      id: `cita-${c.id}`,
+      fecha: c.programada_para,
+      tipo: 'cita',
+      titulo: `Sesión ${c.numero_sesion || ''}`.trim(),
+      resumen: `${c.modalidad || 'Sesión'} · ${c.estado || 'estado desconocido'}`,
+    })),
+    ...(historialPaciente.dx_diagnosticos || []).map(dx => ({
+      id: `dx-${dx.id}`,
+      fecha: dx.fecha_diagnostico,
+      tipo: 'diagnostico',
+      titulo: dx.catalogo?.codigo || 'Diagnóstico',
+      resumen: dx.catalogo?.nombre || 'Sin descripción',
+      meta: dx.tipo,
+    })),
+    ...(historialPaciente.act_asignaciones || []).map(act => ({
+      id: `act-${act.id}`,
+      fecha: act.creado_en || act.fecha_limite,
+      tipo: 'actividad',
+      titulo: act.actividad?.titulo || 'Actividad asignada',
+      resumen: `Estado: ${act.estado}${act.fecha_limite ? ` · Límite: ${new Date(act.fecha_limite).toLocaleDateString('es-PE')}` : ''}`,
+    })),
+  ].sort((a,b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()) : []
+
+  const formatFechaTimeline = (fecha) => fecha ? new Date(fecha).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' }) : '—'
   const instrumentosFiltrados = instrumentos.filter(i =>
     i.nombre.toLowerCase().includes(busqEva.toLowerCase()) ||
     i.codigo_instrumento.toLowerCase().includes(busqEva.toLowerCase()) ||
@@ -84,6 +113,7 @@ export default function Sesiones() {
       setNotasSesion(data.datos.notas_sesion || '')
       // Cargar diagnósticos asociados a este paciente y filtrar por cita
       await cargarDxSesion(data.datos.paciente_id, id)
+      await cargarHistorialPaciente(data.datos.paciente_id)
     } catch {
       toast.error('Error al cargar detalle')
     }
@@ -97,6 +127,19 @@ export default function Sesiones() {
       setDxSesion(todos.filter(d => d.cita_id === citaId))
     } catch {
       setDxSesion([])
+    }
+  }
+
+  const cargarHistorialPaciente = async (pacienteId) => {
+    if (!pacienteId) return
+    setCargandoHistorial(true)
+    try {
+      const { data } = await pacientesApi.historial(pacienteId)
+      setHistorialPaciente(data.datos)
+    } catch {
+      setHistorialPaciente(null)
+    } finally {
+      setCargandoHistorial(false)
     }
   }
 
@@ -376,6 +419,41 @@ export default function Sesiones() {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignSelf: 'stretch' }}>
+                  <div className="card" style={{ padding: 14, border: '1px solid var(--border)', background: 'var(--surface-2)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 700 }}>Historial del Paciente</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Línea de tiempo de citas, diagnósticos y actividades recientes</div>
+                      </div>
+                      {cargandoHistorial && <Spinner size={18} />}
+                    </div>
+                    {historialPaciente ? (
+                      historialEventos.length > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          {historialEventos.slice(0, 6).map(evento => (
+                            <div key={evento.id} style={{ padding: 10, borderRadius: 10, background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: 13, fontWeight: 700 }}>{evento.titulo}</span>
+                                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{formatFechaTimeline(evento.fecha)}</span>
+                              </div>
+                              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>{evento.resumen}</div>
+                              {evento.meta && <div style={{ marginTop: 4, fontSize: 11, color: 'var(--text-muted)' }}>{evento.meta}</div>}
+                            </div>
+                          ))}
+                          {historialEventos.length > 6 && (
+                            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
+                              Mostrando los 6 eventos más recientes de {historialEventos.length}.
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No hay eventos clínicos registrados aún para este paciente.</div>
+                      )
+                    ) : (
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Selecciona una sesión para cargar el historial del paciente.</div>
+                    )}
+                  </div>
+
                   {/* Modal Confirmar Eliminación Diagnóstico */}
                   {confirmElimDx && (
                     <div className="modal-overlay">

@@ -1,7 +1,7 @@
 // src/facturacion/dto/facturacion.dto.ts
 import {
   IsString, IsUUID, IsOptional, IsNumber,
-  IsPositive, IsEnum, MaxLength, Min,
+  IsPositive, IsEnum, MaxLength, Min, Matches,
 } from 'class-validator'
 import { Type } from 'class-transformer'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
@@ -41,8 +41,9 @@ export class RegistrarPagoDto {
   @IsNumber() @IsPositive() @Type(() => Number)
   monto: number
 
-  @ApiPropertyOptional({ example: 'OP-123456' })
-  @IsOptional() @IsString() @MaxLength(100)
+  @ApiPropertyOptional({ example: '12345678' })
+  @IsOptional() @IsString() @MaxLength(16)
+  @Matches(/^[0-9\-]*$/, { message: 'El código de referencia solo puede contener números y guiones' })
   codigo_referencia?: string
 }
 
@@ -57,12 +58,12 @@ export class RegistrarPagoYapeDto {
   @IsNumber() @Min(0) @Type(() => Number)
   monto: number
 
-  @ApiProperty({ example: 'OP-123456' })
-  @IsString() @MaxLength(100)
-  codigo_referencia: string
+  @ApiProperty({ example: '12345678' })
+  @IsString() @MaxLength(16)
+  @Matches(/^[0-9\-]+$/, { message: 'El número de operación debe contener solo números y guiones' })
+  codigo_referencia?: string
 
   @ApiPropertyOptional({ enum: pagos_metodo, example: 'yape' })
   @IsOptional() @IsEnum(pagos_metodo)
   metodo_pago?: pagos_metodo
 }
-

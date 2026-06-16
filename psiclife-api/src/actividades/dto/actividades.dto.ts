@@ -1,7 +1,7 @@
 // src/actividades/dto/actividades.dto.ts
 import {
   IsString, IsUUID, IsOptional, IsDateString,
-  IsInt, Min, Max, MaxLength,
+  IsInt, Min, Max, MaxLength, IsNotEmpty,
 } from 'class-validator'
 import { Type } from 'class-transformer'
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger'
@@ -43,8 +43,8 @@ export class CrearAsignacionDto {
   @ApiProperty() @IsUUID()
   actividad_id: string
 
-  @ApiPropertyOptional() @IsOptional() @IsUUID()
-  cita_id?: string
+  @ApiProperty() @IsNotEmpty() @IsUUID()
+  cita_id: string
 
   @ApiPropertyOptional()
   @IsOptional() @IsString()
@@ -59,7 +59,11 @@ export class CrearAsignacionDto {
   fecha_limite?: string
 }
 
-export class ActualizarAsignacionDto extends PartialType(CrearAsignacionDto) {}
+export class ActualizarAsignacionDto extends PartialType(CrearAsignacionDto) {
+  @ApiPropertyOptional({ enum: act_asignaciones_estado })
+  @IsOptional() @IsString()
+  estado?: act_asignaciones_estado
+}
 
 export class ResponderActividadDto {
   @ApiPropertyOptional()

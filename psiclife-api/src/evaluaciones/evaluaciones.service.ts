@@ -176,6 +176,15 @@ export class EvaluacionesService {
     })
     if (!instrumento) throw new NotFoundException('Instrumento no encontrado')
 
+    if (dto.cita_id) {
+      const existeAplicacion = await this.prisma.eva_aplicaciones.findFirst({
+        where: { cita_id: dto.cita_id, instrumento_id: dto.instrumento_id, estado: { not: 'anulado' } }
+      })
+      if (existeAplicacion) {
+        throw new ConflictException('Este instrumento ya ha sido aplicado o asignado en esta sesión.')
+      }
+    }
+
     const aplicacion = await this.prisma.eva_aplicaciones.create({
       data: {
         paciente_id:     dto.paciente_id,

@@ -180,6 +180,7 @@ model citas {
   duracion_minutos      Int                     @default(60) @db.SmallInt
   modalidad             citas_modalidad         @default(presencial)
   enlace_reunion        String?                 @db.VarChar(500)
+  razon_consulta        String?                 @db.VarChar(255)
   estado                citas_estado            @default(pendiente)
   cancelado_por         citas_cancelado_por?
   motivo_cancelacion    String?                 @db.Text

@@ -53,6 +53,9 @@ export class CitasService {
         psicologo: { select: { id: true, nombres: true, apellidos: true } },
         facturas:  { select: { id: true, numero_factura: true, estado: true, total: true } },
         solicitudes_reembolso: { select: { id: true, estado: true, monto_solicitado: true, tipo_solicitud: true } },
+        dx_diagnosticos: { select: { id: true } },
+        eva_aplicaciones: { select: { id: true } },
+        act_asignaciones: { select: { id: true } },
       },
     })
 
@@ -192,7 +195,11 @@ export class CitasService {
 
     // Calcular número de sesión del paciente
     const totalSesiones = await this.prisma.citas.count({
-      where: { paciente_id: dto.paciente_id, psicologo_id: dto.psicologo_id },
+      where: { 
+        paciente_id: dto.paciente_id, 
+        psicologo_id: dto.psicologo_id,
+        estado: { notIn: ['cancelada', 'no_asistio'] }
+      },
     })
 
     const cita = await this.prisma.citas.create({
@@ -203,6 +210,7 @@ export class CitasService {
         duracion_minutos: duracion,
         modalidad:       dto.modalidad       ?? 'presencial',
         enlace_reunion:  dto.enlace_reunion  ?? null,
+        razon_consulta:  dto.razon_consulta,
         agendado_por:    dto.agendado_por    ?? 'psicologo' as citas_agendado_por,
         numero_sesion:   totalSesiones + 1,
         estado:          'pendiente' as citas_estado,
@@ -222,9 +230,9 @@ export class CitasService {
 
       // Generar número de factura correlativo
       const anioFactura  = new Date().getFullYear()
-      const countFacturas = await this.prisma.facturas.count()
-      const seqFactura   = String(countFacturas + 1).padStart(6, '0')
-      const numeroFactura = `PSIC-${anioFactura}-${seqFactura}`
+      const randomPart = Math.floor(Math.random() * 10000).toString().padStart(4, '0')
+      const timestampPart = Date.now().toString().slice(-6)
+      const numeroFactura = `PSIC-${anioFactura}-${timestampPart}-${randomPart}`
 
       await this.prisma.facturas.create({
         data: {
@@ -232,7 +240,7 @@ export class CitasService {
           paciente_id:         dto.paciente_id,
           psicologo_id:        dto.psicologo_id,
           numero_factura:      numeroFactura,
-          descripcion_servicio: 'Consulta psicológica',
+          descripcion_servicio: dto.descripcion_servicio || 'Consulta psicológica',
           subtotal,
           igv,
           total,
@@ -280,6 +288,13 @@ export class CitasService {
       await this.validarSolapamiento(cita.psicologo_id, programada, duracion, id)
     }
 
+    if (dto.estado === 'completada') {
+      const notas = dto.notas_sesion ?? cita.notas_sesion
+      if (!notas || notas.trim() === '') {
+        throw new BadRequestException('No se puede marcar la cita como completada sin registrar notas clínicas.')
+      }
+    }
+
     return this.prisma.citas.update({
       where: { id },
       data: {
@@ -287,6 +302,19 @@ export class CitasService {
         programada_para: dto.programada_para ? new Date(dto.programada_para) : undefined,
         estado:          dto.estado as citas_estado,
       } as any,
+    })
+  }
+
+  async actualizarNotas(id: string, dto: { notas_sesion: string }) {
+    const cita = await this.buscarPorId(id)
+
+    if (cita.estado === 'completada' || cita.estado === 'cancelada') {
+      throw new BadRequestException(`No se pueden editar las notas de una cita ${cita.estado}`)
+    }
+
+    return this.prisma.citas.update({
+      where: { id },
+      data: { notas_sesion: dto.notas_sesion }
     })
   }
 
@@ -548,6 +576,11 @@ export class CitasService {
       })
     }
 
+    // Restricción: Si el paciente ya tiene una cuenta de usuario, no puede agendar por la landing page
+    if (paciente && paciente.usuario_id) {
+      throw new BadRequestException('Ya tienes una cuenta registrada. Por favor, inicia sesión en el portal para agendar tu cita.')
+    }
+
     if (!paciente) {
       paciente = await this.prisma.pacientes.create({
         data: {
@@ -592,6 +625,8 @@ export class CitasService {
       modalidad:       dto.modalidad ?? 'presencial',
       enlace_reunion:  enlace,
       agendado_por:    'paciente',
+      descripcion_servicio: dto.servicio,
+      razon_consulta:  dto.servicio,
     })
 
     // 5. Registrar el pago Yape si se subió el comprobante y eligió yape

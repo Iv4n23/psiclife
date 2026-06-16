@@ -339,7 +339,7 @@ function DashboardPaciente() {
   const [modalAgendar, setModalAgendar] = useState(false)
   const [pasoAgendar, setPasoAgendar] = useState(1)
   const [psicologos, setPsicologos] = useState([])
-  const [formCita, setFormCita] = useState({ psicologo_id: '', fecha: '', hora: '', modalidad: 'presencial' })
+  const [formCita, setFormCita] = useState({ psicologo_id: '', fecha: '', hora: '', modalidad: 'presencial', servicio: 'Evaluación Psicológica', otro_servicio: '' })
   const [slotsDisponibles, setSlotsDisponibles] = useState([])
   const [cargandoSlots, setCargandoSlots] = useState(false)
   const [guardandoCita, setGuardandoCita] = useState(false)
@@ -348,7 +348,7 @@ function DashboardPaciente() {
   const pagoInputRef = useRef()
 
   const abrirModalAgendar = async () => {
-    setFormCita({ psicologo_id: '', fecha: '', hora: '', modalidad: 'presencial' })
+    setFormCita({ psicologo_id: '', fecha: '', hora: '', modalidad: 'presencial', servicio: 'Evaluación Psicológica', otro_servicio: '' })
     setFormPago({ metodo: 'efectivo', codigo: '', archivo: null, preview: null })
     setSlotsDisponibles([])
     setPasoAgendar(1)
@@ -388,6 +388,8 @@ function DashboardPaciente() {
         slots = slots.filter(slot => {
            const sh = new Date(`${formCita.fecha}T${slot}:00`)
            const sf = new Date(sh); sf.setMinutes(sf.getMinutes() + 60)
+           const ahora = new Date()
+           if (sh.getTime() <= ahora.getTime()) return false
            const chocaCita = citasDia.some(c => {
              const ci = new Date(c.programada_para)
              const cf = new Date(ci); cf.setMinutes(cf.getMinutes() + c.duracion_minutos)
@@ -414,6 +416,10 @@ function DashboardPaciente() {
     if (!formCita.psicologo_id || !formCita.fecha || !formCita.hora) {
       return toast.error('Completa todos los campos requeridos')
     }
+    const programada = new Date(`${formCita.fecha}T${formCita.hora}:00`)
+    if (programada.getTime() <= new Date().getTime()) {
+      return toast.error('Selecciona una fecha y hora futuras para la cita')
+    }
     // Validar comprobante si el método lo requiere
     if ((formPago.metodo === 'yape' || formPago.metodo === 'transferencia') && !formPago.archivo) {
       return toast.error('Debes adjuntar el comprobante de pago')
@@ -430,7 +436,9 @@ function DashboardPaciente() {
         programada_para: `${formCita.fecha}T${formCita.hora}:00`,
         duracion_minutos: 60,
         modalidad: formCita.modalidad || 'presencial',
-        agendado_por: 'paciente'
+        agendado_por: 'paciente',
+        descripcion_servicio: formCita.servicio === 'Otro' ? `Otro: ${formCita.otro_servicio}` : formCita.servicio,
+        razon_consulta: formCita.servicio === 'Otro' ? `Otro: ${formCita.otro_servicio}` : formCita.servicio
       })
       const citaId = citaRes.datos?.id ?? citaRes.id
 
@@ -463,21 +471,7 @@ function DashboardPaciente() {
     }
   }
 
-  const cancelarCitaPaciente = async () => {
-    if (!motivoCancelar.trim()) { return toast.error('Debes indicar un motivo de cancelación') }
-    setCancelando(true)
-    try {
-      await citasApi.cancelar(modalCancelar.id, { cancelado_por: 'paciente', motivo_cancelacion: motivoCancelar })
-      toast.success('Cita cancelada correctamente')
-      setModalCancelar(null)
-      setMotivoCancelar('')
-      await cargar()
-    } catch (err) {
-      toast.error(err.response?.data?.mensaje || 'Error al cancelar la cita')
-    } finally {
-      setCancelando(false)
-    }
-  }
+  // --- Lógica para Cancelar Cita (Eliminada) ---
 
   // --- Lógica para Reseñas ---
   const [modalResena, setModalResena] = useState(null)
@@ -511,43 +505,7 @@ function DashboardPaciente() {
     }
   }
 
-  // --- Lógica para Cancelar Cita (Paciente) ---
-  const [modalCancelarPaciente, setModalCancelarPaciente] = useState(null)
-  const [motivoCancelarPaciente, setMotivoCancelarPaciente] = useState('')
-  const [guardandoCancelacion, setGuardandoCancelacion] = useState(false)
-
-  const confirmarCancelacionPaciente = async () => {
-    if (!motivoCancelarPaciente.trim()) return toast.error('Ingresa un motivo para cancelar')
-    setGuardandoCancelacion(true)
-    try {
-      await citasApi.cancelar(modalCancelarPaciente.id, { 
-        cancelado_por: 'paciente', 
-        motivo_cancelacion: motivoCancelarPaciente 
-      })
-      
-      const f = getFactura(modalCancelarPaciente)
-      if (f?.estado === 'pagada') {
-         // Solicitar reembolso automáticamente
-         try {
-           await citasApi.solicitarReembolso(modalCancelarPaciente.id, { 
-             tipo_solicitud: 'reembolso', 
-             motivo: motivoCancelarPaciente 
-           })
-           toast.success('Cita cancelada. Se ha enviado una solicitud de reembolso.')
-         } catch {
-           toast.error('Cita cancelada, pero hubo un error al solicitar el reembolso automáticamente.')
-         }
-      } else {
-         toast.success('Cita cancelada correctamente')
-      }
-      setModalCancelarPaciente(null)
-      cargarDatos()
-    } catch (err) {
-      toast.error(err.response?.data?.mensaje ?? 'Error al cancelar la cita')
-    } finally {
-      setGuardandoCancelacion(false)
-    }
-  }
+  // Lógica de cancelación eliminada
 
   const { search } = useLocation()
   const navigate = useNavigate()
@@ -782,16 +740,6 @@ function DashboardPaciente() {
                   </button>
                 )}
                 
-                {proximaCita.estado !== 'cancelada' && proximaCita.estado !== 'completada' && (
-                  <button onClick={() => setModalCancelar(proximaCita)}
-                    style={{
-                      width:'100%', padding:'10px', borderRadius:12, marginTop: 8,
-                      background:'var(--danger-bg)', color:'var(--danger)', border:'1.5px solid var(--danger-border)', fontSize:13.5, fontWeight:600,
-                      cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7,
-                    }}>
-                    <X size={15} /> Cancelar Cita
-                  </button>
-                )}
               </div>
             </div>
           )
@@ -850,12 +798,6 @@ function DashboardPaciente() {
                       <button onClick={() => setYape({ facturaId: factura.id, total: factura.total })}
                         style={{ padding:'5px 12px', borderRadius:18, background:'linear-gradient(135deg,#7c3aed,#2563eb)', color:'white', border:'none', fontSize:11.5, fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:4, whiteSpace:'nowrap', flexShrink:0 }}>
                         <Smartphone size={11} /> Yape
-                      </button>
-                    )}
-                    {c.estado !== 'cancelada' && c.estado !== 'completada' && (
-                      <button onClick={() => setModalCancelar(c)}
-                        style={{ padding:'5px 12px', borderRadius:18, background:'var(--danger-bg)', color:'var(--danger)', border:`1px solid var(--danger-border)`, fontSize:11.5, fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:4, whiteSpace:'nowrap', flexShrink:0 }}>
-                        <X size={11} /> Cancelar
                       </button>
                     )}
                   </div>
@@ -1197,21 +1139,63 @@ function DashboardPaciente() {
                       )}
 
                       {(item.tipo_respuesta === 'opcion_multiple' || item.tipo_respuesta === 'si_no') && opciones.length > 0 && (
-                        <select className="form-control" value={valorActual} onChange={e => handleRespuestaChange(item.id, e.target.value)}>
-                          <option value="">Selecciona una opción</option>
-                          {opciones.map((opcion, idx) => (
-                            <option key={`${item.id}-${idx}`} value={typeof opcion === 'string' ? opcion : opcion.valor ?? opcion.id ?? opcion.texto ?? idx}>{typeof opcion === 'string' ? opcion : opcion.label ?? opcion.texto ?? opcion.valor ?? idx}</option>
-                          ))}
-                        </select>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
+                          {opciones.map((opcion, idx) => {
+                            const val = typeof opcion === 'string' ? opcion : opcion.valor ?? opcion.id ?? opcion.texto ?? String(idx)
+                            const lbl = typeof opcion === 'string' ? opcion : opcion.label ?? opcion.texto ?? opcion.valor ?? String(idx)
+                            const activo = valorActual === String(val)
+                            return (
+                              <button
+                                key={`${item.id}-${idx}`}
+                                onClick={() => handleRespuestaChange(item.id, String(val))}
+                                style={{
+                                  padding: '12px',
+                                  borderRadius: '8px',
+                                  border: `2px solid ${activo ? 'var(--celeste)' : 'var(--border)'}`,
+                                  background: activo ? 'var(--celeste-light)' : 'var(--surface)',
+                                  color: activo ? 'var(--celeste-dark)' : 'var(--text-primary)',
+                                  fontWeight: activo ? 600 : 400,
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s',
+                                  textAlign: 'center'
+                                }}
+                              >
+                                {lbl}
+                              </button>
+                            )
+                          })}
+                        </div>
                       )}
 
                       {item.tipo_respuesta === 'likert' && (
-                        <select className="form-control" value={valorActual} onChange={e => handleRespuestaChange(item.id, e.target.value)}>
-                          <option value="">Selecciona una calificación</option>
-                          {Array.from({ length: Number(item.puntaje_maximo) || 5 }, (_, idx) => String(idx + 1)).map(val => (
-                            <option key={`${item.id}-${val}`} value={val}>{val}</option>
-                          ))}
-                        </select>
+                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                          {Array.from({ length: Number(item.puntaje_maximo) || 5 }, (_, idx) => String(idx + 1)).map(val => {
+                            const activo = valorActual === val
+                            return (
+                              <button
+                                key={`${item.id}-${val}`}
+                                onClick={() => handleRespuestaChange(item.id, val)}
+                                style={{
+                                  width: '45px',
+                                  height: '45px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  borderRadius: '12px',
+                                  border: `2px solid ${activo ? 'var(--primary)' : 'var(--border)'}`,
+                                  background: activo ? 'var(--primary)' : 'var(--surface)',
+                                  color: activo ? 'white' : 'var(--text-primary)',
+                                  fontWeight: 600,
+                                  fontSize: 16,
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s',
+                                }}
+                              >
+                                {val}
+                              </button>
+                            )
+                          })}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -1261,7 +1245,23 @@ function DashboardPaciente() {
               {/* Paso 1: Psicólogo y Modalidad */}
               {pasoAgendar === 1 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minHeight: 220 }}>
-                  <h3 style={{ margin: 0, fontSize: 16 }}>1. Selecciona el Profesional</h3>
+                  <h3 style={{ margin: 0, fontSize: 16 }}>1. Detalles de la Cita</h3>
+                  <div className="form-group">
+                    <label className="form-label">Razón de la consulta</label>
+                    <select className="form-control" value={formCita.servicio} onChange={e => setFormCita({...formCita, servicio: e.target.value})}>
+                      <option value="Evaluación Psicológica">Evaluación Psicológica</option>
+                      <option value="Gestión del Estrés / Burnout">Gestión del Estrés / Burnout</option>
+                      <option value="Coaching Ejecutivo">Coaching Ejecutivo</option>
+                      <option value="Terapia Individual">Terapia Individual</option>
+                      <option value="Otro">Otro (Especificar)</option>
+                    </select>
+                  </div>
+                  {formCita.servicio === 'Otro' && (
+                    <div className="form-group">
+                      <label className="form-label">Especifica la razón <span style={{color:'var(--danger)'}}>*</span></label>
+                      <input className="form-control" value={formCita.otro_servicio} onChange={e => setFormCita({...formCita, otro_servicio: e.target.value})} placeholder="Ej. Terapia de pareja" />
+                    </div>
+                  )}
                   <div className="form-group">
                     <label className="form-label">Especialista</label>
                     <select className="form-control" value={formCita.psicologo_id} onChange={e => setFormCita({...formCita, psicologo_id: e.target.value, hora: ''})}>
@@ -1454,9 +1454,11 @@ function DashboardPaciente() {
                           <input
                             className="form-control"
                             placeholder="Ej. 987654321 (mín. 8 caracteres)"
+                            inputMode="numeric"
+                            pattern="\d*"
                             value={formPago.codigo}
-                            maxLength={30}
-                            onChange={e => setFormPago(p => ({ ...p, codigo: e.target.value.replace(/\D/g, '') }))}
+                            maxLength={16}
+                            onChange={e => setFormPago(p => ({ ...p, codigo: e.target.value.replace(/[^\d-]/g, '').slice(0, 16) }))}
                             style={{
                               borderColor: formPago.codigo.trim().length > 0 && formPago.codigo.trim().length < 8
                                 ? 'var(--danger)'
@@ -1485,6 +1487,7 @@ function DashboardPaciente() {
                   <div style={{ background: 'var(--surface-2)', padding: 20, borderRadius: 14, border: '1px solid var(--border)' }}>
                     <div style={{ display: 'grid', gap: 12, fontSize: 14 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><UserCheck size={16} color="var(--celeste)" /> <strong>Especialista:</strong> {psicologos.find(p => p.id === formCita.psicologo_id)?.nombres} {psicologos.find(p => p.id === formCita.psicologo_id)?.apellidos}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Calendar size={16} color="var(--celeste)" /> <strong>Razón de cita:</strong> {formCita.servicio === 'Otro' ? formCita.otro_servicio : formCita.servicio}</div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Calendar size={16} color="var(--celeste)" /> <strong>Fecha:</strong> {new Date(formCita.fecha + 'T00:00:00').toLocaleDateString('es-PE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Clock size={16} color="var(--celeste)" /> <strong>Hora:</strong> {formCita.hora}</div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Smartphone size={16} color="var(--celeste)" /> <strong>Modalidad:</strong> <span style={{ textTransform: 'capitalize' }}>{formCita.modalidad}</span></div>
@@ -1522,10 +1525,14 @@ function DashboardPaciente() {
                       {formPago.archivo && formPago.codigo.trim().length < 8 && '🔢 Falta el número de operación (mín. 8 caracteres)'}
                     </div>
                   )}
+                  {pasoAgendar === 1 && formCita.servicio === 'Otro' && !formCita.otro_servicio.trim() && (
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Especifica la razón de la consulta</div>
+                  )}
                   <button className="btn btn-primary"
                     onClick={() => setPasoAgendar(p => p + 1)}
                     disabled={
                       (pasoAgendar === 1 && !formCita.psicologo_id) ||
+                      (pasoAgendar === 1 && formCita.servicio === 'Otro' && !formCita.otro_servicio.trim()) ||
                       (pasoAgendar === 2 && !formCita.hora) ||
                       (pasoAgendar === 3 && (formPago.metodo === 'yape' || formPago.metodo === 'transferencia') && (!formPago.archivo || formPago.codigo.trim().length < 8))
                     }>
@@ -1609,38 +1616,7 @@ function DashboardPaciente() {
         </div>
       )}
 
-      {/* Modal de Cancelación de Cita (Paciente) */}
-      {modalCancelarPaciente && (
-        <div className="modal-overlay">
-          <div className="modal" style={{ maxWidth: 420 }}>
-            <div style={{ width:48, height:48, borderRadius:12, background:'var(--danger-bg)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 14px' }}>
-              <XCircle size={24} color="var(--danger)" />
-            </div>
-            <h2 className="modal-title" style={{ textAlign:'center' }}>Cancelar Cita</h2>
-            <p style={{ textAlign:'center', fontSize:13.5, color:'var(--text-secondary)', margin:'0 0 16px' }}>
-              Cita con <b>{modalCancelarPaciente.psicologo?.nombres} {modalCancelarPaciente.psicologo?.apellidos}</b><br/>
-              {new Date(modalCancelarPaciente.programada_para).toLocaleDateString('es-PE', { weekday:'long', year:'numeric', month:'long', day:'numeric' })}
-            </p>
-            {getFactura(modalCancelarPaciente)?.estado === 'pagada' && (
-              <div style={{ padding:'12px 16px', background:'var(--warning-bg)', borderRadius:10, border:'1px solid var(--warning)', fontSize:13, marginBottom:16, color:'var(--text-primary)' }}>
-                ⚠️ Tu pago está registrado. Al cancelar, se enviará automáticamente una <b>solicitud de reembolso</b> al consultorio para revisión.
-              </div>
-            )}
-            <div className="form-group" style={{ marginBottom:20 }}>
-              <label className="form-label">Motivo de la cancelación <span className="required">*</span></label>
-              <textarea className="form-control" rows={3} value={motivoCancelarPaciente}
-                onChange={e => setMotivoCancelarPaciente(e.target.value)}
-                placeholder="Ej: Me surgió un imprevisto, no puedo asistir..." />
-            </div>
-            <div className="modal-actions">
-              <button className="btn btn-ghost" onClick={() => setModalCancelarPaciente(null)}>Volver</button>
-              <button className="btn btn-danger" onClick={confirmarCancelacionPaciente} disabled={guardandoCancelacion}>
-                {guardandoCancelacion ? 'Cancelando...' : 'Confirmar Cancelación'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Modal de Cancelación Eliminado */}
       {imagenExpandida && (
         <div className="modal-overlay" onClick={() => setImagenExpandida(null)} style={{ zIndex: 999999, background: 'rgba(0,0,0,0.85)' }}>
           <div style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>

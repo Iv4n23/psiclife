@@ -10,7 +10,7 @@ import { Request, Response } from 'express'
 import { AuthService }     from './auth.service'
 import {
   LoginDto, SolicitarRecuperacionDto,
-  RestablecerContrasenaDto, CambiarContrasenaDto, RegistroDto, CompletarRegistroDto
+  RestablecerContrasenaDto, CambiarContrasenaDto, RegistroDto, CompletarRegistroDto, VerificarRegistroDto
 } from './dto/auth.dto'
 import { JwtAuthGuard }    from './strategies/jwt.strategy'
 import { UsuarioActual }   from 'src/common/decorators/usuario-actual.decorator'
@@ -147,8 +147,14 @@ export class AuthController {
    */
   @Throttle({ default: { ttl: 600_000, limit: 10 } })
   @Post('completar-registro')
-  @ApiOperation({ summary: 'Completar registro de paciente no registrado' })
+  @ApiOperation({ summary: 'Completar registro de paciente no registrado (envía token)' })
   async completarRegistro(@Body() dto: CompletarRegistroDto) {
     return this.authService.completarRegistro(dto)
+  }
+
+  @Post('verificar-registro')
+  @ApiOperation({ summary: 'Verificar token para activar cuenta completada' })
+  async verificarRegistro(@Body() dto: VerificarRegistroDto) {
+    return this.authService.verificarRegistro(dto)
   }
 }

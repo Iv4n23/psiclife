@@ -156,6 +156,7 @@ export const authApi = {
   recuperarContrasena:  (data) => api.post('/auth/recuperar-contrasena', data),
   restablecerContrasena:(data) => api.post('/auth/restablecer-contrasena', data),
   completarRegistro:    (data) => api.post('/auth/completar-registro', data),
+  verificarRegistro:    (data) => api.post('/auth/verificar-registro', data),
 }
 
 export const pacientesApi = {

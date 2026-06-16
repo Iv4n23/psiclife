@@ -48,13 +48,6 @@ export default function Pagos() {
   const [motivoAnular, setMotivoAnular] = useState('')
   const [imagenExpandida, setImagenExpandida] = useState(null)
 
-  // ── Estados para Reembolsos ────────────────────────────────
-  const [reembolsos,      setReembolsos]      = useState([])
-  const [cargandoReem,    setCargandoReem]    = useState(false)
-  const [filtroReem,      setFiltroReem]      = useState('pendiente')
-  const [resolviendo,     setResolviendo]     = useState(null) // { solicitudId, notas }
-  const [guardandoReem,   setGuardandoReem]   = useState(false)
-
   // ── Estados para Verificación de Pagos ────────────────────
   const [pagosPend,       setPagosPend]       = useState([])
   const [cargandoPend,    setCargandoPend]    = useState(false)
@@ -95,19 +88,6 @@ export default function Pagos() {
       setConfig(prev => ({ ...prev, ...cfgObj }))
     } catch {} finally { setCargando(false) }
   }
-
-  const cargarReembolsos = async () => {
-    setCargandoReem(true)
-    try {
-      const { data } = await citasApi.listarReembolsos(filtroReem)
-      setReembolsos(data.datos ?? [])
-    } catch (error) {
-      console.error('Error cargando reembolsos:', error)
-      toast.error('No se pudieron cargar las solicitudes de reembolso. Intenta nuevamente.')
-    } finally { setCargandoReem(false) }
-  }
-
-  useEffect(() => { if (tab === 'reembolsos') cargarReembolsos() }, [tab, filtroReem])
 
   const cargarPagosPend = async () => {
     setCargandoPend(true)
@@ -165,8 +145,8 @@ export default function Pagos() {
       e.codigo_referencia = 'El código de operación es requerido para Yape/Transferencia'
     if ((formPago.metodo === 'yape' || formPago.metodo === 'transferencia') && formPago.codigo_referencia.trim().length < 8)
       e.codigo_referencia = 'Ingresa al menos 8 dígitos en el código de operación'
-    if ((formPago.metodo === 'yape' || formPago.metodo === 'transferencia') && /\D/.test(formPago.codigo_referencia))
-      e.codigo_referencia = 'El código de operación solo puede contener números'
+    if ((formPago.metodo === 'yape' || formPago.metodo === 'transferencia') && formPago.codigo_referencia && !/^[0-9-]+$/.test(formPago.codigo_referencia))
+      e.codigo_referencia = 'El código de operación solo puede contener números y guiones'
     setErrPago(e)
     if (Object.keys(e).length > 0) return
     setGuardando(true)
@@ -341,14 +321,16 @@ export default function Pagos() {
                     </label>
                     <input
                       className={`form-control ${errPago.codigo_referencia ? 'error' : ''}`}
+                      inputMode="numeric"
+                      pattern="\d*"
                       value={formPago.codigo_referencia}
-                      maxLength={30}
+                      maxLength={16}
                       onChange={e => {
-                        const soloNumeros = e.target.value.replace(/\D/g, '')
-                        setFormPago(p => ({ ...p, codigo_referencia: soloNumeros }))
+                        const val = e.target.value.replace(/[^\d-]/g, '').slice(0, 16)
+                        setFormPago(p => ({ ...p, codigo_referencia: val }))
                         setErrPago(er => ({ ...er, codigo_referencia: '' }))
                       }}
-                      placeholder="N° operación (mín. 8 dígitos)" />
+                      placeholder="N° operación (mín. 8 caracteres)" />
                     {errPago.codigo_referencia && <span className="form-error">{errPago.codigo_referencia}</span>}
                   </div>
                 </div>
@@ -603,14 +585,14 @@ export default function Pagos() {
       </div>
 
       <div style={{ display:'flex', borderBottom:'1px solid var(--border)', marginBottom: 20 }}>
-        {['facturas','reembolsos','configuracion'].map(t => (
+        {['facturas','configuracion'].map(t => (
           <button key={t} onClick={() => setTab(t)}
             style={{ padding:'10px 20px', fontSize:13.5, background:'none', border:'none', cursor:'pointer',
               borderBottom: tab===t ? '2.5px solid var(--celeste)' : '2.5px solid transparent',
               color: tab===t ? 'var(--text-primary)' : 'var(--text-muted)',
               fontWeight: tab===t ? 500 : 400, display:'flex', alignItems:'center', gap:6 }}>
             {t === 'facturas' ? (<>Facturas y Reportes{pagosPend.length > 0 && <span style={{ background:'var(--danger)', color:'white', fontSize:10, borderRadius:20, padding:'1px 7px', fontWeight:700 }}>{pagosPend.length} pendientes</span>}</>) 
-             : t === 'reembolsos' ? 'Solicitudes de Reembolso' : 'Configuración de Pagos'}
+             : 'Configuración de Pagos'}
           </button>
         ))}
       </div>
@@ -814,116 +796,6 @@ export default function Pagos() {
           )}
       </div>
         </>
-      ) : tab === 'reembolsos' ? (
-        <div>
-          {/* Filtros */}
-          <div style={{ display:'flex', gap:10, marginBottom:16, alignItems:'center', flexWrap:'wrap' }}>
-            {[['pendiente','⏳ Pendientes'],['aprobado','✓ Aprobados'],['rechazado','✗ Rechazados'],['','Todos']].map(([f, label]) => (
-              <button key={f||'todos'}
-                onClick={() => setFiltroReem(f)}
-                className={`btn btn-sm ${filtroReem===f ? 'btn-primary' : 'btn-ghost'}`}>
-                {label}
-              </button>
-            ))}
-            <button className="btn btn-ghost btn-sm" onClick={cargarReembolsos} style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:6 }}>
-              <RefreshCw size={14} /> Actualizar
-            </button>
-          </div>
-
-          {cargandoReem ? <Spinner /> : reembolsos.length === 0
-            ? <EmptyState titulo="Sin solicitudes" descripcion={`No hay solicitudes${filtroReem ? ' ' + filtroReem + 's' : ''} de reembolso.`} />
-            : (
-            <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-              {reembolsos.map(r => (
-                <div key={r.id} style={{
-                  background:'var(--card)', border:'1px solid var(--border)', borderRadius:14,
-                  padding:'18px 20px', display:'flex', flexDirection:'column', gap:12
-                }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:10 }}>
-                    <div>
-                      <div style={{ fontWeight:700, fontSize:15 }}>
-                        {r.cita?.paciente?.nombres} {r.cita?.paciente?.apellidos}
-                      </div>
-                      <div style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:3 }}>
-                        Cita: {r.cita?.programada_para ? new Date(r.cita.programada_para).toLocaleString('es-PE', { dateStyle:'medium', timeStyle:'short' }) : '—'}
-                        {' · '} Psicólogo: {r.cita?.psicologo?.nombres} {r.cita?.psicologo?.apellidos}
-                      </div>
-                      <div style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:2 }}>
-                        Tipo: <b>{r.tipo_solicitud}</b>{r.monto_solicitado ? ` · Monto solicitado: S/ ${Number(r.monto_solicitado).toFixed(2)}` : ''}
-                      </div>
-                      <div style={{ fontSize:12.5, color:'var(--text-secondary)', marginTop:4, fontStyle:'italic' }}>
-                        Motivo: {r.motivo}
-                      </div>
-                    </div>
-                    <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:8 }}>
-                      <span className={`badge ${r.estado==='aprobado'?'badge-success':r.estado==='rechazado'?'badge-danger':'badge-warning'}`} style={{ fontSize:13, padding:'5px 12px' }}>
-                        {r.estado === 'pendiente' ? '⏳ Pendiente' : r.estado === 'aprobado' ? '✓ Aprobado' : '✗ Rechazado'}
-                      </span>
-                      <div style={{ fontSize:11.5, color:'var(--text-muted)' }}>
-                        {new Date(r.solicitado_en).toLocaleDateString('es-PE')}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Notas de resolución */}
-                  {r.estado !== 'pendiente' && r.notas_resolucion && (
-                    <div style={{ padding:'10px 14px', background:'var(--surface-2)', borderRadius:8, fontSize:13, borderLeft:'3px solid var(--border)' }}>
-                      <b>Notas:</b> {r.notas_resolucion}
-                      {r.resolutor && <span style={{ color:'var(--text-muted)', marginLeft:8 }}>— {r.resolutor.correo}</span>}
-                    </div>
-                  )}
-
-                  {/* Acciones (solo si pendiente y tiene permisos) */}
-                  {r.estado === 'pendiente' && puedo('citas.editar') && (
-                    resolviendo?.solicitudId === r.id ? (
-                      <div style={{ display:'flex', flexDirection:'column', gap:10, padding:'12px 14px', background:'var(--surface-2)', borderRadius:10 }}>
-                        <label className="form-label">Notas de resolución (opcional)</label>
-                        <textarea className="form-control" rows={2}
-                          value={resolviendo.notas}
-                          onChange={e => setResolviendo(rv => ({ ...rv, notas: e.target.value }))}
-                          placeholder="Ej: Reembolso aprobado, se procesará en 3-5 días hábiles..." />
-                        <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
-                          <button className="btn btn-ghost btn-sm" onClick={() => setResolviendo(null)}>Cancelar</button>
-                          <button className="btn btn-danger btn-sm" disabled={guardandoReem}
-                            onClick={async () => {
-                              setGuardandoReem(true)
-                              try {
-                                await citasApi.resolverReembolso(r.id, { estado:'rechazado', notas: resolviendo.notas })
-                                toast.success('Solicitud rechazada')
-                                setResolviendo(null)
-                                cargarReembolsos()
-                              } catch {} finally { setGuardandoReem(false) }
-                            }}>
-                            Rechazar solicitud
-                          </button>
-                          <button className="btn btn-primary btn-sm" disabled={guardandoReem}
-                            onClick={async () => {
-                              setGuardandoReem(true)
-                              try {
-                                await citasApi.resolverReembolso(r.id, { estado:'aprobado', notas: resolviendo.notas })
-                                toast.success('¡Solicitud aprobada!')
-                                setResolviendo(null)
-                                cargarReembolsos()
-                              } catch {} finally { setGuardandoReem(false) }
-                            }}>
-                            <CheckCircle size={13} /> Aprobar reembolso
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={{ display:'flex', gap:10 }}>
-                        <button className="btn btn-sm btn-primary"
-                          onClick={() => setResolviendo({ solicitudId: r.id, notas: '' })}>
-                          Revisar y resolver
-                        </button>
-                      </div>
-                    )
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
       ) : (
         <form onSubmit={guardarConfig} className="card">
           <div className="card-header"><span className="card-title">Configuración de Cuentas y Yape</span></div>

@@ -54,3 +54,7 @@ BIZAGI_PROCESOS.md
 # Temporales
 *.tmp
 *.temp
+
+# Continue Extension
+.continue/
+.continue

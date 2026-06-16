@@ -157,6 +157,17 @@ export default function Psicologos() {
                   {errores.usuario_id && <span className="form-error">{errores.usuario_id}</span>}
                 </div>
               )}
+              {editId && (
+                <div className="form-group" style={{ gridColumn: '1/-1' }}>
+                  <label className="form-label">Usuario vinculado</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={usuarios.find(u => u.id === form.usuario_id)?.correo || 'No disponible'}
+                    readOnly
+                  />
+                </div>
+              )}
               {[['nombres','Nombres'],['apellidos','Apellidos']].map(([k,l]) => (
                 <div className="form-group" key={k}>
                   <label className="form-label">{l} <span className="required">*</span></label>
@@ -233,7 +244,7 @@ export default function Psicologos() {
           : (
             <div className="table-wrap">
               <table>
-                <thead><tr><th>Foto</th><th>ID / UUID</th><th>Nombre</th><th>Colegiatura</th><th>Especialidad</th><th>Sesión</th><th>Estado</th><th></th></tr></thead>
+                <thead><tr><th>Foto</th><th>ID / UUID</th><th>Correo</th><th>Nombre</th><th>Colegiatura</th><th>Especialidad</th><th>Sesión</th><th>Estado</th><th></th></tr></thead>
                 <tbody>
                   {psicologos.map(p => (
                     <tr key={p.id}>
@@ -252,6 +263,7 @@ export default function Psicologos() {
                           </button>
                         </div>
                       </td>
+                      <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{p.usuario?.correo || '—'}</td>
                       <td style={{ fontWeight: 500 }}>{p.apellidos}, {p.nombres}</td>
                       <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{p.numero_colegiatura}</td>
                       <td style={{ color: 'var(--text-muted)' }}>{p.especialidad}</td>

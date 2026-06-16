@@ -92,6 +92,15 @@ export class DiagnosticosService {
     const catalogo = await this.prisma.dx_catalogo.findUnique({ where: { id: dto.catalogo_id } })
     if (!catalogo) throw new NotFoundException('Código diagnóstico no encontrado en el catálogo')
 
+    if (dto.tipo === 'principal' && dto.cita_id) {
+      const existePrincipal = await this.prisma.dx_diagnosticos.findFirst({
+        where: { cita_id: dto.cita_id, tipo: 'principal' }
+      })
+      if (existePrincipal) {
+        throw new ConflictException('Ya existe un diagnóstico principal para esta sesión.')
+      }
+    }
+
     return this.prisma.dx_diagnosticos.create({
       data: {
         paciente_id:       dto.paciente_id,
@@ -108,7 +117,17 @@ export class DiagnosticosService {
   }
 
   async actualizar(id: string, dto: ActualizarDiagnosticoDto) {
-    await this.buscarPorId(id)
+    const dx = await this.buscarPorId(id)
+
+    if (dto.tipo === 'principal' && dx.cita_id) {
+      const existePrincipal = await this.prisma.dx_diagnosticos.findFirst({
+        where: { cita_id: dx.cita_id, tipo: 'principal', id: { not: id } }
+      })
+      if (existePrincipal) {
+        throw new ConflictException('Ya existe un diagnóstico principal para esta sesión.')
+      }
+    }
+
     return this.prisma.dx_diagnosticos.update({
       where: { id },
       data: {

@@ -112,6 +112,20 @@ export class ActividadesService {
     const actividad = await this.prisma.act_biblioteca.findUnique({ where: { id: dto.actividad_id } })
     if (!actividad) throw new NotFoundException('Actividad no encontrada en la biblioteca')
 
+    let fecha_sesion = new Date(dto.fecha_asignacion)
+    if (dto.cita_id) {
+      const cita = await this.prisma.citas.findUnique({ where: { id: dto.cita_id } })
+      if (!cita) throw new NotFoundException('La sesión indicada no existe')
+      fecha_sesion = new Date(cita.programada_para)
+    }
+
+    if (dto.fecha_limite) {
+      const fechaLimite = new Date(dto.fecha_limite)
+      if (fechaLimite < fecha_sesion) {
+        throw new BadRequestException('La fecha límite de entrega no puede ser anterior a la fecha de la sesión asignada.')
+      }
+    }
+
     const asignacion = await this.prisma.act_asignaciones.create({
       data: {
         paciente_id:      dto.paciente_id,
@@ -146,10 +160,20 @@ export class ActividadesService {
   }
 
   async actualizarAsignacion(id: string, dto: ActualizarAsignacionDto) {
-    await this.buscarAsignacion(id)
+    const asignacion = await this.buscarAsignacion(id)
+    
+    if (asignacion.estado === 'completada' && dto.estado === 'pendiente') {
+      throw new BadRequestException('No se puede regresar una actividad completada a estado pendiente.')
+    }
+
     const updateData: any = { ...dto }
     if (dto.fecha_asignacion) updateData.fecha_asignacion = new Date(dto.fecha_asignacion)
-    if (dto.fecha_limite)     updateData.fecha_limite     = new Date(dto.fecha_limite)
+    if (dto.fecha_limite) {
+      updateData.fecha_limite = new Date(dto.fecha_limite)
+      if (updateData.fecha_limite < asignacion.fecha_asignacion) {
+        throw new BadRequestException('La fecha límite no puede ser anterior a la fecha de asignación.')
+      }
+    }
     
     return this.prisma.act_asignaciones.update({
       where: { id },
@@ -173,6 +197,10 @@ export class ActividadesService {
 
     if (asig.estado === 'completada')
       throw new BadRequestException('Esta actividad ya fue completada')
+
+    if (!dto.contenido && !rutaArchivo) {
+      throw new BadRequestException('Debes proporcionar una respuesta en texto o adjuntar un archivo.')
+    }
 
     // Crear respuesta
     await this.prisma.act_respuestas.create({

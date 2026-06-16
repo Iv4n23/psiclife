@@ -9,6 +9,11 @@ export function AuthProvider({ children }) {
   const [usuario, setUsuario]   = useState(null)
   const [cargando, setCargando] = useState(true)
 
+  const normalizarUsuario = (user) => ({
+    ...user,
+    rolNombre: user?.rol ?? user?.rolNombre,
+  })
+
   // Al montar, intentar restaurar sesión desde localStorage
   useEffect(() => {
     // Interceptar acción de logout desde la URL antes de que el router intervenga
@@ -32,10 +37,11 @@ export function AuthProvider({ children }) {
     const token    = localStorage.getItem('psiclife_token')
     const userData = localStorage.getItem('psiclife_user')
     if (token && userData) {
+      const parsedUser = JSON.parse(userData)
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`
-      setUsuario(JSON.parse(userData))
+      setUsuario(normalizarUsuario(parsedUser))
       // Sincronizar cookie para la landing
-      document.cookie = `psiclife_session=${encodeURIComponent(userData)}; path=/; max-age=86400; SameSite=Lax`
+      document.cookie = `psiclife_session=${encodeURIComponent(JSON.stringify(normalizarUsuario(parsedUser)))}; path=/; max-age=86400; SameSite=Lax`
     }
     setCargando(false)
   }, [])
@@ -43,19 +49,19 @@ export function AuthProvider({ children }) {
   const login = async ({ correo, contrasena }) => {
     const { data } = await api.post('/auth/login', { correo, contrasena })
     const { accessToken, usuario: user } = data.datos
-    const storedUser = {
+    const storedUser = normalizarUsuario({
       ...user,
       rolNombre: user.rol ?? user.rolNombre,
-    }
+    })
 
     localStorage.setItem('psiclife_token', accessToken)
     localStorage.setItem('psiclife_user',  JSON.stringify(storedUser))
     // Sincronizar cookie para la landing
-    document.cookie = `psiclife_session=${encodeURIComponent(JSON.stringify(user))}; path=/; max-age=86400; SameSite=Lax`
+    document.cookie = `psiclife_session=${encodeURIComponent(JSON.stringify(storedUser))}; path=/; max-age=86400; SameSite=Lax`
 
     api.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`
-    setUsuario(user)
-    return user
+    setUsuario(storedUser)
+    return storedUser
   }
 
   const logout = async () => {

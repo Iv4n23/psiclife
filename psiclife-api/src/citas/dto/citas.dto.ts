@@ -1,7 +1,7 @@
 // src/citas/dto/citas.dto.ts
 import {
   IsString, IsUUID, IsOptional, IsDateString,
-  IsInt, IsBoolean, Min,
+  IsInt, IsBoolean, Min, IsNotEmpty, ValidateIf, MaxLength,
 } from 'class-validator'
 import { Type } from 'class-transformer'
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger'
@@ -32,13 +32,23 @@ export class CrearCitaDto {
 
 
   @ApiPropertyOptional()
-  @IsOptional() @IsString()
+  @ValidateIf(o => o.modalidad === 'virtual')
+  @IsNotEmpty({ message: 'El enlace de reunión es obligatorio si la modalidad es virtual' })
+  @IsString()
   enlace_reunion?: string
 
   @ApiPropertyOptional({ enum: citas_agendado_por })
   @IsOptional() @IsString()
   agendado_por?: citas_agendado_por
 
+  @ApiPropertyOptional()
+  @IsOptional() @IsString()
+  descripcion_servicio?: string
+
+  @ApiProperty({ description: 'Razón principal de la sesión' })
+  @IsNotEmpty({ message: 'La razón de la consulta es obligatoria' })
+  @IsString()
+  razon_consulta: string
 }
 
 export class ActualizarCitaDto extends PartialType(CrearCitaDto) {
@@ -50,6 +60,13 @@ export class ActualizarCitaDto extends PartialType(CrearCitaDto) {
   @ApiPropertyOptional()
   @IsOptional() @IsString()
   notas_sesion?: string
+}
+
+export class ActualizarNotasDto {
+  @ApiProperty({ description: 'Notas clínicas de la sesión, max 5000 chars' })
+  @IsString()
+  @MaxLength(5000, { message: 'Las notas no pueden exceder los 5000 caracteres' })
+  notas_sesion: string
 }
 
 export class CancelarCitaDto {

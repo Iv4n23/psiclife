@@ -5,11 +5,11 @@ import { landingApi } from '../services/api'
 import styles from './FormAgendarCita.module.css'
 
 const SERVICIOS = [
-  { id: 's1', emoji: '🧠', nombre: 'Evaluación Psicológica',      sub: 'Diagnóstico inicial · 60 min' },
-  { id: 's2', emoji: '😮‍💨', nombre: 'Gestión del Estrés / Burnout', sub: 'Intervención clínica · 60 min' },
-  { id: 's3', emoji: '🎯', nombre: 'Coaching Ejecutivo',           sub: 'Desarrollo de liderazgo · 60 min' },
-  { id: 's4', emoji: '🤲', nombre: 'Terapia Individual',           sub: 'Acompañamiento psicológico · 60 min' },
-  { id: 's5', emoji: '📊', nombre: 'Clima Organizacional',         sub: 'Para empresas · A coordinar' },
+  { id: 's1', emoji: '🧠', nombre: 'Evaluación Psicológica', sub: 'Diagnóstico inicial · 60 min' },
+  { id: 's2', emoji: '☁️', nombre: 'Gestión del Estrés / Burnout', sub: 'Intervención clínica · 60 min' },
+  { id: 's3', emoji: '🎯', nombre: 'Coaching Ejecutivo', sub: 'Desarrollo de liderazgo · 60 min' },
+  { id: 's4', emoji: '🤲', nombre: 'Terapia Individual', sub: 'Acompañamiento psicológico · 60 min' },
+  { id: 's5', emoji: '📝', nombre: 'Otro', sub: 'Especificar' },
 ]
 
 const hoy = new Date().toISOString().slice(0, 10)
@@ -17,30 +17,31 @@ const maxDateObj = new Date()
 maxDateObj.setMonth(maxDateObj.getMonth() + 1)
 const maxFecha = maxDateObj.toISOString().slice(0, 10)
 
-const PASOS = ['Tus datos', 'Servicio', 'Fecha y hora', 'Pago', 'Confirmar']
+const PASOS = ['Tus datos', 'Razón', 'Fecha y hora', 'Pago', 'Confirmar']
 
 export default function FormAgendarCita({ psicologos = [], pagosConfig = {} }) {
-  const [paso,     setPaso]     = useState(0)
-  const [enviado,  setEnviado]  = useState(false)
+  const [paso, setPaso] = useState(0)
+  const [enviado, setEnviado] = useState(false)
   const [enviando, setEnviando] = useState(false)
-  const [errores,  setErrores]  = useState({})
+  const [errores, setErrores] = useState({})
   const [mostrarOpcionesPago, setMostrarOpcionesPago] = useState(false)
 
   const [datos, setDatos] = useState({
-    nombres:    '',
-    apellidos:  '',
+    nombres: '',
+    apellidos: '',
     numero_documento: '',
-    correo:     '',
-    whatsapp:   '',
-    empresa:    '',
-    servicio:   SERVICIOS[0],
-    modalidad:  'presencial',
-    psicologo:  null,
-    fecha:      hoy,
-    hora:       '9:00 AM',
+    correo: '',
+    whatsapp: '',
+    empresa: '',
+    servicio: SERVICIOS[0],
+    modalidad: 'presencial',
+    psicologo: null,
+    fecha: hoy,
+    hora: '9:00 AM',
     metodo_pago: 'efectivo',
     codigo_referencia: '',
     comprobante: null,
+    otro_servicio: '',
   })
 
   const [horariosDisponibles, setHorariosDisponibles] = useState([])
@@ -51,12 +52,33 @@ export default function FormAgendarCita({ psicologos = [], pagosConfig = {} }) {
     setErrores(e => ({ ...e, [k]: '' }))
   }
 
-  const limpiarTexto = value => value.replace(/[^A-Za-zÀ-ÿ\u00f1\u00d1'\-\s]/g, '')
-  const limpiarWhatsapp = value => value.replace(/[^\d+\s]/g, '')
-  const validarNombre = value => /^[A-Za-zÀ-ÿ\u00f1\u00d1'\-\s]+$/.test(value.trim())
+  const limpiarTexto = value => value.replace(/[^A-Za-zÀ-ÿ'\-\s]/g, '')
+  const limpiarDocumento = value => value.replace(/\D/g, '').slice(0, 9)
+  const limpiarWhatsapp = value => {
+    let digits = 0
+    let result = ''
+    for (const char of value) {
+      if (char === '+' && result.length === 0) {
+        result += char
+        continue
+      }
+      if (/\d/.test(char)) {
+        if (digits < 16) {
+          result += char
+          digits += 1
+        }
+        continue
+      }
+      if (char === ' ') {
+        result += char
+      }
+    }
+    return result
+  }
+  const validarNombre = value => /^[A-Za-zÀ-ÿ'\-\s]+$/.test(value.trim())
   const validarWhatsapp = value => {
     const normalized = value.replace(/[\s-()]/g, '')
-    return /^\+?\d{7,20}$/.test(normalized)
+    return /^\+?\d{7,16}$/.test(normalized)
   }
 
   // When psychologist or date changes, fetch weekly availability
@@ -106,7 +128,7 @@ export default function FormAgendarCita({ psicologos = [], pagosConfig = {} }) {
       if (b.hora_inicio && b.hora_fin) {
         return {
           inicio: new Date(`${fechaBloqueo.toISOString().slice(0, 10)}T${b.hora_inicio}:00`),
-          fin:    new Date(`${fechaBloqueo.toISOString().slice(0, 10)}T${b.hora_fin}:00`),
+          fin: new Date(`${fechaBloqueo.toISOString().slice(0, 10)}T${b.hora_fin}:00`),
         }
       }
       const finDia = new Date(fechaBloqueo)
@@ -181,7 +203,10 @@ export default function FormAgendarCita({ psicologos = [], pagosConfig = {} }) {
 
   const validarPaso1 = () => {
     const e = {}
-    if (!datos.servicio || !datos.servicio.id) e.servicio = 'Selecciona un servicio'
+    if (!datos.servicio || !datos.servicio.id) e.servicio = 'Selecciona una opción'
+    if (datos.servicio?.id === 's5' && !datos.otro_servicio?.trim()) {
+      e.otro_servicio = 'Por favor, especifica la razón de tu consulta'
+    }
     if (!datos.modalidad) e.modalidad = 'Selecciona una modalidad'
     setErrores(e)
     return Object.keys(e).length === 0
@@ -234,16 +259,16 @@ export default function FormAgendarCita({ psicologos = [], pagosConfig = {} }) {
     }
     if (!metodo) e.metodo_pago = 'Selecciona un método de pago'
     else if (!activo[metodo]) e.metodo_pago = 'El método seleccionado no está disponible'
-    
+
     if (metodo === 'yape' || metodo === 'transferencia') {
       if (!datos.codigo_referencia) e.codigo_referencia = 'Requerido'
       else if (datos.codigo_referencia.trim().length < 8) e.codigo_referencia = 'Ingresa al menos 8 caracteres'
-      
+
       if (!datos.comprobante) {
         e.comprobante = 'Debes subir tu comprobante de pago para continuar'
       }
     }
-    
+
     setErrores(e)
     return Object.keys(e).length === 0
   }
@@ -275,13 +300,14 @@ export default function FormAgendarCita({ psicologos = [], pagosConfig = {} }) {
       payload.append('correo', datos.correo)
       payload.append('whatsapp', datos.whatsapp)
       if (datos.empresa) payload.append('empresa_u_organizacion', datos.empresa)
-      payload.append('servicio', datos.servicio.nombre)
+      const razonStr = datos.servicio.id === 's5' ? `Otro: ${datos.otro_servicio}` : datos.servicio.nombre
+      payload.append('servicio', razonStr)
       payload.append('fecha', datos.fecha)
       payload.append('hora', datos.hora)
       payload.append('modalidad', datos.modalidad)
       if (datos.psicologo && datos.psicologo.id) payload.append('psicologo_id', datos.psicologo.id)
       payload.append('metodo_pago', datos.metodo_pago)
-      
+
       if ((datos.metodo_pago === 'yape' || datos.metodo_pago === 'transferencia') && datos.comprobante) {
         payload.append('comprobante', datos.comprobante)
         payload.append('codigo_referencia', datos.codigo_referencia)
@@ -300,7 +326,7 @@ export default function FormAgendarCita({ psicologos = [], pagosConfig = {} }) {
 
   const reset = () => {
     setEnviado(false); setPaso(0)
-    setDatos({ nombres:'', apellidos:'', numero_documento:'', correo:'', whatsapp:'', empresa:'', servicio: SERVICIOS[0], modalidad:'presencial', psicologo:null, fecha:hoy, hora:'9:00 AM', metodo_pago:'efectivo', codigo_referencia:'', comprobante:null })
+    setDatos({ nombres: '', apellidos: '', numero_documento: '', correo: '', whatsapp: '', empresa: '', servicio: SERVICIOS[0], modalidad: 'presencial', psicologo: null, fecha: hoy, hora: '9:00 AM', metodo_pago: 'efectivo', codigo_referencia: '', comprobante: null, otro_servicio: '' })
   }
 
   // ── Éxito ──────────────────────────────────────────────────
@@ -313,9 +339,9 @@ export default function FormAgendarCita({ psicologos = [], pagosConfig = {} }) {
         Nos contactaremos por WhatsApp al <strong>{datos.whatsapp}</strong> para coordinar.
       </p>
       <div className={styles.exitoCard}>
-        <div className={styles.exitoRow}><span>Servicio</span><b>{datos.servicio.nombre}</b></div>
-        <div className={styles.exitoRow}><span>Modalidad</span><b style={{ textTransform:'capitalize' }}>{datos.modalidad}</b></div>
-        <div className={styles.exitoRow}><span>Fecha</span><b>{new Date(datos.fecha + 'T12:00').toLocaleDateString('es-PE', { weekday:'long', year:'numeric', month:'long', day:'numeric' })}</b></div>
+        <div className={styles.exitoRow}><span>Razón de consulta</span><b>{datos.servicio.id === 's5' ? datos.otro_servicio : datos.servicio.nombre}</b></div>
+        <div className={styles.exitoRow}><span>Modalidad</span><b style={{ textTransform: 'capitalize' }}>{datos.modalidad}</b></div>
+        <div className={styles.exitoRow}><span>Fecha</span><b>{new Date(datos.fecha + 'T12:00').toLocaleDateString('es-PE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</b></div>
         <div className={styles.exitoRow}><span>Hora</span><b>{datos.hora}</b></div>
       </div>
       <button className={`btn-p ${styles.exitoBtn}`} onClick={reset}>Agendar otra cita</button>
@@ -366,9 +392,9 @@ export default function FormAgendarCita({ psicologos = [], pagosConfig = {} }) {
               type="text"
               inputMode="numeric"
               pattern="\d*"
-              maxLength={8}
-              value={datos.numero_documento} onChange={e => set('numero_documento', e.target.value.replace(/\D/g, ''))}
-              placeholder="12345678" />
+              maxLength={9}
+              value={datos.numero_documento} onChange={e => set('numero_documento', limpiarDocumento(e.target.value))}
+              placeholder="123456789" />
             {errores.numero_documento && <span className={styles.fError}>{errores.numero_documento}</span>}
           </div>
           <div className={styles.fGroup}>
@@ -394,11 +420,10 @@ export default function FormAgendarCita({ psicologos = [], pagosConfig = {} }) {
         </div>
       )}
 
-      {/* ── PASO 1 — Servicio ── */}
       {paso === 1 && (
         <div className={styles.paso}>
-          <div className={styles.pasoTitle}>Elige el servicio</div>
-          <div className={styles.pasoSub}>Selecciona el servicio para tu sesión.</div>
+          <div className={styles.pasoTitle}>Razón de la consulta</div>
+          <div className={styles.pasoSub}>Selecciona el motivo principal para tu sesión.</div>
           <div className={styles.opciones}>
             {SERVICIOS.map(s => (
               <div key={s.id}
@@ -415,6 +440,15 @@ export default function FormAgendarCita({ psicologos = [], pagosConfig = {} }) {
               </div>
             ))}
           </div>
+          {datos.servicio.id === 's5' && (
+            <div className={styles.fGroup} style={{ marginTop: 16 }}>
+              <label className={styles.fLabel}>Especifica la razón <span>*</span></label>
+              <input className={`${styles.fInput} ${errores.otro_servicio ? styles.error : ''}`}
+                value={datos.otro_servicio} onChange={e => set('otro_servicio', e.target.value)}
+                placeholder="Escribe brevemente el motivo..." />
+              {errores.otro_servicio && <span className={styles.fError}>{errores.otro_servicio}</span>}
+            </div>
+          )}
           <div className={styles.fGroup} style={{ marginTop: 16 }}>
             <label className={styles.fLabel}>Modalidad</label>
             <div className={styles.modalidadBtns}>
@@ -494,8 +528,8 @@ export default function FormAgendarCita({ psicologos = [], pagosConfig = {} }) {
           <div style={{ marginTop: 12, marginBottom: 8 }}>
             <strong>Costo estimado:</strong> {costo ? `S/ ${costo.toFixed(2)}` : 'A coordinar'}
           </div>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:12 }}>
-            <div style={{ fontSize:14 }}>Seleccionado: <strong style={{ textTransform:'capitalize' }}>{datos.metodo_pago}</strong></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+            <div style={{ fontSize: 14 }}>Seleccionado: <strong style={{ textTransform: 'capitalize' }}>{datos.metodo_pago}</strong></div>
             <button type="button" className="btn-s" onClick={() => setMostrarOpcionesPago(s => !s)}>{mostrarOpcionesPago ? 'Cerrar' : 'Cambiar método'}</button>
           </div>
 
@@ -550,10 +584,11 @@ export default function FormAgendarCita({ psicologos = [], pagosConfig = {} }) {
                     <label className={styles.fLabel}>N° de Operación <span>*</span></label>
                     <input className={`${styles.fInput} ${errores.codigo_referencia ? styles.error : ''}`}
                       value={datos.codigo_referencia}
-                      maxLength={30}
+                      maxLength={16}
                       placeholder="Mín. 8 caracteres"
                       onChange={e => {
-                        set('codigo_referencia', e.target.value)
+                        const val = e.target.value.replace(/[^\d-]/g, '').slice(0, 16)
+                        set('codigo_referencia', val)
                       }} />
                     {errores.codigo_referencia && <span className={styles.fError}>{errores.codigo_referencia}</span>}
                   </div>
@@ -592,12 +627,12 @@ export default function FormAgendarCita({ psicologos = [], pagosConfig = {} }) {
             <div className={styles.resRow}><span>Paciente</span><b>{datos.nombres} {datos.apellidos}</b></div>
             <div className={styles.resRow}><span>Correo</span><b>{datos.correo}</b></div>
             <div className={styles.resRow}><span>WhatsApp</span><b>{datos.whatsapp}</b></div>
-            <div className={styles.resRow}><span>Servicio</span><b>{datos.servicio.nombre}</b></div>
-            <div className={styles.resRow}><span>Modalidad</span><b style={{ textTransform:'capitalize' }}>{datos.modalidad}</b></div>
-            <div className={styles.resRow}><span>Método Pago</span><b style={{ textTransform:'capitalize' }}>{datos.metodo_pago}</b></div>
+            <div className={styles.resRow}><span>Razón de consulta</span><b>{datos.servicio.id === 's5' ? `Otro: ${datos.otro_servicio}` : datos.servicio.nombre}</b></div>
+            <div className={styles.resRow}><span>Modalidad</span><b style={{ textTransform: 'capitalize' }}>{datos.modalidad}</b></div>
+            <div className={styles.resRow}><span>Método Pago</span><b style={{ textTransform: 'capitalize' }}>{datos.metodo_pago}</b></div>
             <div className={styles.resRow}>
               <span>Fecha</span>
-              <b>{new Date(datos.fecha + 'T12:00').toLocaleDateString('es-PE', { weekday:'short', year:'numeric', month:'long', day:'numeric' })}</b>
+              <b>{new Date(datos.fecha + 'T12:00').toLocaleDateString('es-PE', { weekday: 'short', year: 'numeric', month: 'long', day: 'numeric' })}</b>
             </div>
             <div className={styles.resRow}><span>Hora</span><b>{datos.hora}</b></div>
             <div className={`${styles.resRow} ${styles.resTotal}`}>
@@ -608,7 +643,7 @@ export default function FormAgendarCita({ psicologos = [], pagosConfig = {} }) {
           <p className={styles.resNota}>Al confirmar recibirás un correo con los detalles y te contactaremos por WhatsApp con las instrucciones de pago para <b>{datos.metodo_pago}</b>.</p>
         </div>
       )}
-          {/* Navegación */}
+      {/* Navegación */}
       <div className={styles.nav}>
         {paso > 0 && (
           <button className={styles.btnBack} onClick={retroceder}>

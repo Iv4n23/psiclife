@@ -86,14 +86,32 @@ export default function Pacientes() {
     
     setBuscandoDni(true);
     try {
-      const res = await fetch(`https://api.apis.net.pe/v1/dni?numero=${form.numero_documento}`);
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      setForm(f => ({ ...f, nombres: data.nombres, apellidos: `${data.apellidoPaterno} ${data.apellidoMaterno}` }));
-      setErrores(e => ({ ...e, nombres: '', apellidos: '' }));
-      toast.success('Datos de RENIEC obtenidos');
+      const res = await pacientesApi.listar(form.numero_documento);
+      const pacientes = res.data?.datos || [];
+      const paciente = pacientes.find(p => p.numero_documento === form.numero_documento);
+
+      if (paciente) {
+        setForm(f => ({ 
+          ...f, 
+          nombres: paciente.nombres, 
+          apellidos: paciente.apellidos,
+          telefono: paciente.telefono ?? '',
+          whatsapp: paciente.whatsapp ?? '',
+          correo_personal: paciente.correo_personal ?? '',
+          empresa_u_organizacion: paciente.empresa_u_organizacion ?? '',
+          cargo: paciente.cargo ?? '',
+        }));
+        // Si tiene un ID, pasamos a modo edición para no duplicar
+        if (paciente.id) {
+          setEditId(paciente.id);
+        }
+        setErrores({});
+        toast.success('Datos del paciente obtenidos del sistema');
+      } else {
+        toast.error('Paciente no encontrado en el sistema');
+      }
     } catch (error) {
-      toast.error('No se pudo encontrar el DNI o el servicio no responde');
+      toast.error('No se pudo realizar la búsqueda');
     } finally {
       setBuscandoDni(false);
     }
@@ -250,11 +268,49 @@ export default function Pacientes() {
               ? <EmptyState titulo="Sin citas" descripcion="No tiene citas registradas." />
               : <table><thead><tr><th>Fecha</th><th>Estado</th><th>Sesión</th></tr></thead>
                 <tbody>
-                  {detalle.citas.map(c => (
+                  {detalle.citas.slice(0, 5).map(c => (
                     <tr key={c.id}>
                       <td>{new Date(c.programada_para).toLocaleDateString('es-PE')}</td>
                       <td><span className="badge badge-info">{c.estado}</span></td>
-                      <td>#{c.numero_sesion}</td>
+                      <td>{c.numero_sesion ? `#${c.numero_sesion}` : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody></table>}
+          </div>
+        </div>
+
+        {/* Diagnósticos */}
+        <div className="card">
+          <div className="card-header"><span className="card-title">Diagnósticos Recientes</span></div>
+          <div className="table-wrap">
+            {!detalle.dx_diagnosticos?.length
+              ? <EmptyState titulo="Sin diagnósticos" descripcion="No hay diagnósticos registrados." />
+              : <table><thead><tr><th>Fecha</th><th>Código</th><th>Tipo</th></tr></thead>
+                <tbody>
+                  {detalle.dx_diagnosticos.slice(0, 5).map(dx => (
+                    <tr key={dx.id}>
+                      <td>{new Date(dx.fecha_diagnostico).toLocaleDateString('es-PE')}</td>
+                      <td>{dx.catalogo?.codigo || 'N/A'}</td>
+                      <td><span className={`badge ${dx.tipo === 'principal' ? 'badge-success' : 'badge-info'}`}>{dx.tipo}</span></td>
+                    </tr>
+                  ))}
+                </tbody></table>}
+          </div>
+        </div>
+
+        {/* Actividades Asignadas */}
+        <div className="card">
+          <div className="card-header"><span className="card-title">Actividades Asignadas</span></div>
+          <div className="table-wrap">
+            {!detalle.act_asignaciones?.length
+              ? <EmptyState titulo="Sin actividades" descripcion="No se han asignado actividades." />
+              : <table><thead><tr><th>Fecha</th><th>Actividad</th><th>Estado</th></tr></thead>
+                <tbody>
+                  {detalle.act_asignaciones.slice(0, 5).map(act => (
+                    <tr key={act.id}>
+                      <td>{new Date(act.creado_en).toLocaleDateString('es-PE')}</td>
+                      <td>{act.actividad?.titulo || 'N/A'}</td>
+                      <td><span className={`badge ${act.estado === 'completado' ? 'badge-success' : 'badge-warning'}`}>{act.estado}</span></td>
                     </tr>
                   ))}
                 </tbody></table>}
@@ -361,7 +417,12 @@ export default function Pacientes() {
                   <div className="form-group">
                     <label className="form-label">Código Yape <span className="form-hint">(alternativo al DNI)</span></label>
                     <input className="form-control"
-                      value={formCuenta.codigo_referencia} onChange={setCuenta('codigo_referencia')}
+                      value={formCuenta.codigo_referencia}
+                      maxLength={16}
+                      onChange={e => {
+                        const val = e.target.value.replace(/[^\d-]/g, '').slice(0, 16)
+                        setFormCuenta(f => ({ ...f, codigo_referencia: val }))
+                      }}
                       placeholder="Código de operación Yape" />
                   </div>
                 </div>

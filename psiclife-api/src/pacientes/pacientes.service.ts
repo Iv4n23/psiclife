@@ -25,9 +25,11 @@ export class PacientesService {
       select: {
         id: true, nombres: true, apellidos: true,
         numero_documento: true, tipo_documento: true,
+        fecha_nacimiento: true, sexo: true,
         telefono: true, whatsapp: true, correo_personal: true,
         empresa_u_organizacion: true, cargo: true,
         estado_paciente: true, canal_primer_contacto: true,
+        notas_generales: true,
         usuario_id: true,
         creado_en: true,
       },
@@ -114,7 +116,7 @@ export class PacientesService {
         act_asignaciones: {
           orderBy: { creado_en: 'desc' },
           take: 5,
-          select: { id: true, estado: true, fecha_limite: true, actividad: { select: { titulo: true } } },
+          select: { id: true, estado: true, creado_en: true, fecha_limite: true, actividad: { select: { titulo: true } } },
         },
       },
     })

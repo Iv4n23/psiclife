@@ -14,7 +14,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiParam, ApiQuery } from '@nestj
 import { CitasService } from './citas.service'
 import {
   CrearCitaDto, ActualizarCitaDto, CancelarCitaDto,
-  RegistrarAsistenciaDto, SolicitarReembolsoDto, SolicitarCitaPublicaDto,
+  RegistrarAsistenciaDto, SolicitarReembolsoDto, SolicitarCitaPublicaDto, ActualizarNotasDto
 } from './dto/citas.dto'
 import { JwtAuthGuard }  from 'src/auth/guards/jwt-auth.guard'
 import { PermisosGuard } from 'src/auth/guards/permisos.guard'
@@ -124,6 +124,18 @@ export class CitasController {
     return { mensaje: 'Cita actualizada correctamente', datos }
   }
 
+  @Patch(':id/notas')
+  @Permisos('citas.editar')
+  @ApiOperation({ summary: 'Actualizar las notas clínicas de una cita (Autosave)' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  async actualizarNotas(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ActualizarNotasDto,
+  ) {
+    const datos = await this.citasService.actualizarNotas(id, dto)
+    return { mensaje: 'Notas clínicas actualizadas correctamente', datos }
+  }
+
   @Patch(':id/cancelar')
   @ApiOperation({ summary: 'Cancelar cita' })
   @ApiParam({ name: 'id', format: 'uuid' })
@@ -135,11 +147,11 @@ export class CitasController {
     const cita = await this.citasService.buscarPorId(id)
 
     if (dto.cancelado_por === 'paciente') {
-      if (cita.paciente_id !== usuario.sub) {
+      if ((cita as any).paciente?.usuario_id !== usuario.sub) {
         throw new ForbiddenException('Solo el paciente dueño puede cancelar esta cita')
       }
     } else if (dto.cancelado_por === 'psicologo') {
-      if (cita.psicologo_id !== usuario.sub) {
+      if ((cita as any).psicologo?.usuario_id !== usuario.sub) {
         throw new ForbiddenException('Solo el psicólogo responsable puede cancelar esta cita')
       }
     } else {

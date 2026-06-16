@@ -2,11 +2,10 @@
 import { Module }        from '@nestjs/common'
 import { CitasController } from './citas.controller'
 import { CitasService }    from './citas.service'
-import { CitasCronService } from './citas.cron'
 
 @Module({
   controllers: [CitasController],
-  providers:   [CitasService, CitasCronService],
+  providers:   [CitasService],
   exports:     [CitasService],
 })
 export class CitasModule {}

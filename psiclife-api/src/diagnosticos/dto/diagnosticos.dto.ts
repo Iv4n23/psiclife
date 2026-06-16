@@ -1,5 +1,5 @@
 // src/diagnosticos/dto/diagnosticos.dto.ts
-import { IsString, IsUUID, IsOptional, IsDateString, MaxLength } from 'class-validator'
+import { IsString, IsUUID, IsOptional, IsDateString, MaxLength, IsNotEmpty } from 'class-validator'
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger'
 import { dx_diagnosticos_tipo, dx_catalogo_sistema } from '@prisma/client'
 
@@ -14,8 +14,8 @@ export class CrearDiagnosticoDto {
   @ApiProperty() @IsUUID()
   catalogo_id: string
 
-  @ApiPropertyOptional() @IsOptional() @IsUUID()
-  cita_id?: string
+  @ApiProperty() @IsNotEmpty() @IsUUID()
+  cita_id: string
 
   @ApiPropertyOptional({ enum: dx_diagnosticos_tipo, default: 'presuntivo' })
   @IsOptional() @IsString()

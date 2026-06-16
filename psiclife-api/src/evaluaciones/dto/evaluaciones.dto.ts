@@ -1,7 +1,7 @@
 // src/evaluaciones/dto/evaluaciones.dto.ts
 import {
   IsString, IsUUID, IsOptional, IsDateString,
-  IsInt, IsNumber, IsArray, IsEnum, ValidateNested, Min, MaxLength,
+  IsInt, IsNumber, IsArray, IsEnum, ValidateNested, Min, MaxLength, IsNotEmpty, ValidateIf
 } from 'class-validator'
 import { Type } from 'class-transformer'
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger'
@@ -83,8 +83,8 @@ export class CrearAplicacionDto {
   @ApiProperty() @IsUUID()
   instrumento_id: string
 
-  @ApiPropertyOptional() @IsOptional() @IsUUID()
-  cita_id?: string
+  @ApiProperty() @IsNotEmpty() @IsUUID()
+  cita_id: string
 
   @ApiProperty({ example: '2025-07-15' })
   @IsDateString()

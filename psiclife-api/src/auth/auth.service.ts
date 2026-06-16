@@ -8,7 +8,7 @@ import { PrismaService } from 'src/common/prisma/prisma.service'
 import { CorreosService } from 'src/correos/correos.service'
 import {
   LoginDto, SolicitarRecuperacionDto,
-  RestablecerContrasenaDto, CambiarContrasenaDto, RegistroDto, CompletarRegistroDto
+  RestablecerContrasenaDto, CambiarContrasenaDto, RegistroDto, CompletarRegistroDto, VerificarRegistroDto
 } from './dto/auth.dto'
 import * as bcrypt from 'bcrypt'
 import { v4 as uuid } from 'uuid'
@@ -315,10 +315,12 @@ export class AuthService {
   }
 
   async completarRegistro(dto: CompletarRegistroDto) {
-    const existeUsuario = await this.prisma.usuarios.findUnique({
+    let usuario = await this.prisma.usuarios.findUnique({
       where: { correo: dto.correo }
     })
-    if (existeUsuario) throw new BadRequestException('El correo ya está registrado en el sistema')
+    
+    // Si existe y ya está activo, no puede completar registro de nuevo
+    if (usuario && usuario.esta_activo) throw new BadRequestException('El correo ya está registrado en el sistema')
 
     let paciente: any = null
 
@@ -362,23 +364,93 @@ export class AuthService {
     }
 
     const hash = await bcrypt.hash(dto.contrasena, 12)
-    const usuario = await this.prisma.usuarios.create({
+    
+    if (!usuario) {
+      usuario = await this.prisma.usuarios.create({
+        data: {
+          correo: dto.correo,
+          contrasena_hash: hash,
+          rol_id: rolPaciente!.id,
+          esta_activo: false // IMPORTANTE: Se activa al verificar el token
+        }
+      })
+
+      await this.prisma.pacientes.update({
+        where: { id: paciente.id },
+        data: { usuario_id: usuario.id }
+      })
+    } else {
+      // Usuario existe pero inactivo (ya intentó antes), actualizar contrasena
+      await this.prisma.usuarios.update({
+        where: { id: usuario.id },
+        data: { contrasena_hash: hash }
+      })
+    }
+
+    // Invalida tokens anteriores
+    await this.prisma.tokens_recuperacion.updateMany({
+      where: { usuario_id: usuario.id, usado: false },
+      data: { usado: true }
+    })
+
+    // Generar nuevo token de 6 dígitos
+    const tokenRaw = Math.floor(100000 + Math.random() * 900000).toString()
+    const tokenHash = await bcrypt.hash(tokenRaw, 10)
+    await this.prisma.tokens_recuperacion.create({
       data: {
-        correo: dto.correo,
-        contrasena_hash: hash,
-        rol_id: rolPaciente!.id,
-        esta_activo: true
+        usuario_id: usuario.id,
+        token_hash: tokenHash,
+        expira_en: new Date(Date.now() + 15 * 60 * 1000) // 15 minutos
       }
     })
 
-    await this.prisma.pacientes.update({
-      where: { id: paciente.id },
-      data: { usuario_id: usuario.id }
+    // Enviar correo (Se asume que la plantilla recuperacion_contrasena o una genérica puede servir.
+    // Usamos enviarCorreo directo o plantilla si existe, aquí reutilizamos el sistema)
+    await this.correos.enviarConPlantilla(
+      'recuperacion_contrasena', // Por defecto se puede usar esta si no hay otra, o enviar el token
+      usuario.correo,
+      {
+        nombres: paciente.nombres || usuario.correo.split('@')[0],
+        enlace_recuperacion: `Token de verificación: ${tokenRaw}`,
+        anio: new Date().getFullYear().toString(),
+      }
+    ).catch(() => {})
+
+    return {
+      mensaje: 'Se ha enviado un token de 6 dígitos a tu correo electrónico para verificar tu cuenta.',
+      datos: { correo: usuario.correo }
+    }
+  }
+
+  async verificarRegistro(dto: VerificarRegistroDto) {
+    const usuario = await this.prisma.usuarios.findUnique({
+      where: { correo: dto.correo }
+    })
+    if (!usuario) throw new NotFoundException('Usuario no encontrado')
+    if (usuario.esta_activo) throw new BadRequestException('Esta cuenta ya se encuentra activa')
+
+    const tokens = await this.prisma.tokens_recuperacion.findMany({
+      where: { usuario_id: usuario.id, usado: false, expira_en: { gt: new Date() } }
+    })
+
+    const registroToken = await this.encontrarToken(tokens, dto.token)
+    if (!registroToken) {
+      throw new BadRequestException('El token es inválido o ha expirado')
+    }
+
+    // Marcar token como usado y activar usuario
+    await this.prisma.tokens_recuperacion.update({
+      where: { id: registroToken.id },
+      data: { usado: true }
+    })
+
+    await this.prisma.usuarios.update({
+      where: { id: usuario.id },
+      data: { esta_activo: true }
     })
 
     return {
-      mensaje: 'Registro completado exitosamente. Ahora puedes iniciar sesión.',
-      datos: { id: usuario.id, correo: usuario.correo, paciente_id: paciente.id }
+      mensaje: '¡Registro completado y verificado exitosamente! Ahora puedes iniciar sesión.'
     }
   }
 }

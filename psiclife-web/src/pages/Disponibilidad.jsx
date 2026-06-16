@@ -7,6 +7,7 @@ import {
   ChevronLeft, ChevronRight, Check, AlertTriangle,
 } from 'lucide-react'
 import { cleanPayload } from '../utils/payload'
+import { useAuth } from '../context/AuthContext'
 
 // ── Constantes ─────────────────────────────────────────────────────────────────
 const DIAS_SEMANA_ES  = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb']
@@ -59,6 +60,20 @@ export default function Disponibilidad() {
   const [erroresH,     setErroresH]     = useState({})
   const [erroresB,     setErroresB]     = useState({})
   const [confirmar,    setConfirmar]    = useState(null)
+
+  const { usuario } = useAuth()
+  const rawRol = typeof usuario?.rol === 'string'
+    ? usuario.rol
+    : typeof usuario?.rolNombre === 'string'
+      ? usuario.rolNombre
+      : ''
+  const esPsicologo = rawRol.trim().toLowerCase().includes('psicolog')
+
+  useEffect(() => {
+    if (esPsicologo && usuario?.psicologoId && !psicologoId) {
+      setPsicologoId(usuario.psicologoId)
+    }
+  }, [esPsicologo, usuario, psicologoId])
 
   useEffect(() => {
     psicologosApi.listar()
@@ -362,7 +377,12 @@ export default function Disponibilidad() {
         <div className="card-body" style={{ padding: '14px 20px' }}>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label className="form-label">Psicólogo</label>
-            <select className="form-control" value={psicologoId} onChange={e => setPsicologoId(e.target.value)}>
+            <select 
+              className="form-control" 
+              value={psicologoId} 
+              onChange={e => setPsicologoId(e.target.value)}
+              disabled={esPsicologo}
+            >
               <option value="">Seleccionar psicólogo...</option>
               {psicologos.map(p => (
                 <option key={p.id} value={p.id}>{p.apellidos}, {p.nombres} — {p.especialidad}</option>

@@ -20,9 +20,9 @@ export class FacturacionService {
   // ── Generar número de factura correlativo ─────────────────
   private async generarNumero(): Promise<string> {
     const anio  = new Date().getFullYear()
-    const count = await this.prisma.facturas.count()
-    const seq   = String(count + 1).padStart(6, '0')
-    return `PSIC-${anio}-${seq}`
+    const randomPart = Math.floor(Math.random() * 10000).toString().padStart(4, '0')
+    const timestampPart = Date.now().toString().slice(-6)
+    return `PSIC-${anio}-${timestampPart}-${randomPart}`
   }
 
   // ── Listar ─────────────────────────────────────────────────
@@ -206,7 +206,7 @@ export class FacturacionService {
       throw new BadRequestException('La factura ya está anulada')
 
     if (factura.estado === 'pagada')
-      throw new BadRequestException('No se puede anular una factura pagada. Gestiona un reembolso.')
+      throw new BadRequestException('No se puede anular una factura pagada.')
 
     const anulada = await this.prisma.facturas.update({
       where: { id },
@@ -348,12 +348,17 @@ export class FacturacionService {
       data: { estado: nuevoEstado }
     })
 
-    // Si la factura está completamente pagada, confirmamos la cita
+    // Si la factura está completamente pagada, confirmamos la cita si estaba pendiente
     if (nuevoEstado === 'pagada') {
-      await this.prisma.citas.update({
-        where: { id: pago.factura.cita_id },
-        data: { estado: 'confirmada' }
-      })
+      if (pago.factura.cita_id) {
+        const cita = await this.prisma.citas.findUnique({ where: { id: pago.factura.cita_id } })
+        if (cita && cita.estado === 'pendiente') {
+          await this.prisma.citas.update({
+            where: { id: pago.factura.cita_id },
+            data: { estado: 'confirmada' }
+          })
+        }
+      }
 
       // Ascenso automático de rol: Usuario -> Paciente
       if (pago.factura.paciente?.usuario_id) {
@@ -422,6 +427,16 @@ export class FacturacionService {
       where: { id: pago.factura_id },
       data: { estado: nuevoEstado },
     })
+
+    if (nuevoEstado !== 'pagada') {
+      const cita = await this.prisma.citas.findUnique({ where: { id: pago.factura.cita_id } })
+      if (cita && cita.estado === 'confirmada') {
+        await this.prisma.citas.update({
+          where: { id: cita.id },
+          data: { estado: 'pendiente' }
+        })
+      }
+    }
 
     await this.prisma.auditoria.create({
       data: {

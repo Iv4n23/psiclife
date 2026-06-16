@@ -13,10 +13,18 @@ export class PsicologosService {
     return this.prisma.psicologos.findMany({
       orderBy: [{ apellidos: 'asc' }, { nombres: 'asc' }],
       select: {
-        id: true, nombres: true, apellidos: true,
-        numero_colegiatura: true, especialidad: true,
-        duracion_sesion_min: true, precio_sesion: true,
-        esta_activo: true, foto_url: true, descripcion_perfil: true,
+        id: true,
+        usuario_id: true,
+        usuario: { select: { correo: true } },
+        nombres: true,
+        apellidos: true,
+        numero_colegiatura: true,
+        especialidad: true,
+        duracion_sesion_min: true,
+        precio_sesion: true,
+        esta_activo: true,
+        foto_url: true,
+        descripcion_perfil: true,
       },
     })
   }
@@ -26,6 +34,7 @@ export class PsicologosService {
       where: { id },
       include: {
         horarios: { orderBy: { dia_semana: 'asc' } },
+        usuario:  { select: { correo: true } },
         _count:   { select: { citas: true } },
       },
     })

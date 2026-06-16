@@ -1,6 +1,6 @@
 // src/auth/dto/auth.dto.ts
 import {
-  IsEmail, IsString, MinLength, Matches, IsOptional,
+  IsEmail, IsString, MinLength, MaxLength, Matches, IsOptional,
 } from 'class-validator'
 import { ApiProperty } from '@nestjs/swagger'
 
@@ -82,10 +82,21 @@ export class CompletarRegistroDto {
   @IsOptional()
   numero_documento?: string
 
-  @ApiProperty({ example: 'OP-998877', required: false })
+  @ApiProperty({ example: '12345678', required: false })
   @IsString()
-  @MinLength(1)
+  @MaxLength(16)
+  @Matches(/^[0-9\-]*$/, { message: 'El código de referencia solo puede contener números y guiones' })
   @IsOptional()
   codigo_referencia?: string
+}
+
+export class VerificarRegistroDto {
+  @ApiProperty({ example: 'paciente@correo.com' })
+  @IsEmail({}, { message: 'El correo no tiene un formato válido' })
+  correo: string
+
+  @ApiProperty({ example: '123456' })
+  @IsString()
+  token: string
 }
 

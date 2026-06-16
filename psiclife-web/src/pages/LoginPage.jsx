@@ -14,7 +14,8 @@ export default function LoginPage() {
   const navigate = useNavigate()
 
   const [tab, setTab]           = useState('login')
-  const [form, setForm]         = useState({ correo: '', contrasena: '', confirmar: '', numero_documento: '', codigo_referencia: '' })
+  const [form, setForm]         = useState({ correo: '', contrasena: '', confirmar: '', numero_documento: '', codigo_referencia: '', token: '' })
+  const [tokenEnviado, setTokenEnviado] = useState(false)
   const [verPass, setVerPass]   = useState(false)
   const [cargando, setCargando] = useState(false)
   const [errores, setErrores]   = useState({})
@@ -42,11 +43,15 @@ export default function LoginPage() {
     }
 
     if (tab === 'completar') {
-      if (!form.numero_documento && !form.codigo_referencia) {
-        e.numero_documento = 'Debes ingresar tu DNI o tu código de Yape'
-        e.codigo_referencia = 'Debes ingresar tu DNI o tu código de Yape'
-      } else if (form.numero_documento && !/^\d+$/.test(form.numero_documento)) {
-        e.numero_documento = 'El DNI debe contener solo números'
+      if (!tokenEnviado) {
+        if (!form.numero_documento && !form.codigo_referencia) {
+          e.numero_documento = 'Debes ingresar tu DNI o tu código de Yape'
+          e.codigo_referencia = 'Debes ingresar tu DNI o tu código de Yape'
+        } else if (form.numero_documento && !/^\d+$/.test(form.numero_documento)) {
+          e.numero_documento = 'El DNI debe contener solo números'
+        }
+      } else {
+        if (!form.token || form.token.trim().length !== 6) e.token = 'Ingresa el token de 6 dígitos'
       }
     }
     
@@ -86,18 +91,26 @@ export default function LoginPage() {
     } else if (tab === 'completar') {
       // Completar registro (cita previa)
       try {
-        const payload = {
-          correo: form.correo,
-          contrasena: form.contrasena,
-          ...(form.numero_documento ? { numero_documento: form.numero_documento } : {}),
-          ...(form.codigo_referencia ? { codigo_referencia: form.codigo_referencia } : {})
+        if (!tokenEnviado) {
+          const payload = {
+            correo: form.correo,
+            contrasena: form.contrasena,
+            ...(form.numero_documento ? { numero_documento: form.numero_documento } : {}),
+            ...(form.codigo_referencia ? { codigo_referencia: form.codigo_referencia } : {})
+          }
+          const res = await authApi.completarRegistro(payload)
+          toast.success(res.data?.mensaje || 'Se ha enviado un token de verificación a tu correo.')
+          setTokenEnviado(true)
+        } else {
+          // Verificar token
+          const res = await authApi.verificarRegistro({ correo: form.correo, token: form.token })
+          toast.success(res.data?.mensaje || '¡Registro completado! Ahora puedes iniciar sesión.')
+          setTab('login')
+          setTokenEnviado(false)
+          setForm({ correo: form.correo, contrasena: '', confirmar: '', numero_documento: '', codigo_referencia: '', token: '' })
         }
-        await authApi.completarRegistro(payload)
-        toast.success('¡Registro completado! Ahora puedes iniciar sesión.')
-        setTab('login')
-        setForm({ correo: form.correo, contrasena: '', confirmar: '', numero_documento: '', codigo_referencia: '' })
       } catch (err) {
-        const msg = err.response?.data?.mensaje ?? 'Error al completar el registro'
+        const msg = err.response?.data?.mensaje ?? 'Error en la operación'
         toast.error(msg)
       } finally {
         setCargando(false)
@@ -142,7 +155,7 @@ export default function LoginPage() {
               type="button"
               className={`btn ${tab === 'login' ? 'btn-primary' : 'btn-ghost'}`}
               style={{ flex: '1 1 100px', justifyContent: 'center', fontSize: 13, padding: '8px 12px' }}
-              onClick={() => { setTab('login'); setErrores({}) }}
+              onClick={() => { setTab('login'); setTokenEnviado(false); setErrores({}) }}
             >
               Iniciar sesión
             </button>
@@ -150,7 +163,7 @@ export default function LoginPage() {
               type="button"
               className={`btn ${tab === 'registro' ? 'btn-primary' : 'btn-ghost'}`}
               style={{ flex: '1 1 100px', justifyContent: 'center', fontSize: 13, padding: '8px 12px' }}
-              onClick={() => { setTab('registro'); setErrores({}) }}
+              onClick={() => { setTab('registro'); setTokenEnviado(false); setErrores({}) }}
             >
               Registrarse
             </button>
@@ -172,7 +185,7 @@ export default function LoginPage() {
               ? 'Ingresa tus credenciales para continuar' 
               : tab === 'registro'
                 ? 'Regístrate como usuario para gestionar tus citas'
-                : 'Asocia tu cita previa de PsicLife usando tu DNI o código Yape'}
+                : tokenEnviado ? 'Ingresa el token que enviamos a tu correo electrónico' : 'Asocia tu cita previa de PsicLife usando tu DNI o código Yape'}
           </p>
 
           <form onSubmit={handleSubmit} noValidate>
@@ -256,42 +269,67 @@ export default function LoginPage() {
                     {errores.confirmar && <span className="form-error">{errores.confirmar}</span>}
                   </div>
 
-                  <div className="form-group" style={{ gridColumn: '1 / -1', marginTop: 8 }}>
-                    <div style={{ padding: '12px', background: 'rgba(235, 140, 0, 0.08)', border: '1px solid rgba(235, 140, 0, 0.2)', borderRadius: '8px', fontSize: '13px', color: '#d97706' }}>
-                      <strong>Validación de Cita:</strong> Ingresa al menos uno de los siguientes campos para buscar tu reserva existente y crear tu cuenta de Paciente.
+                  {!tokenEnviado ? (
+                    <>
+                      <div className="form-group" style={{ gridColumn: '1 / -1', marginTop: 8 }}>
+                        <div style={{ padding: '12px', background: 'rgba(235, 140, 0, 0.08)', border: '1px solid rgba(235, 140, 0, 0.2)', borderRadius: '8px', fontSize: '13px', color: '#d97706' }}>
+                          <strong>Validación de Cita:</strong> Ingresa al menos uno de los siguientes campos para buscar tu reserva existente y crear tu cuenta de Paciente.
+                        </div>
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label">
+                          DNI / Documento Identidad
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          pattern="\d*"
+                          maxLength={8}
+                          className={`form-control ${errores.numero_documento ? 'error' : ''}`}
+                          placeholder="Ej. 12345678"
+                          value={form.numero_documento}
+                          onChange={set('numero_documento')}
+                          disabled={tokenEnviado}
+                        />
+                        {errores.numero_documento && <span className="form-error">{errores.numero_documento}</span>}
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label">
+                          Código de Operación Yape
+                        </label>
+                        <input
+                          type="text"
+                          className={`form-control ${errores.codigo_referencia ? 'error' : ''}`}
+                          placeholder="Ej. 998877"
+                          value={form.codigo_referencia}
+                          maxLength={16}
+                          onChange={e => {
+                            const val = e.target.value.replace(/[^\d-]/g, '').slice(0, 16)
+                            setForm(f => ({ ...f, codigo_referencia: val }))
+                            setErrores(er => ({ ...er, codigo_referencia: '' }))
+                          }}
+                          disabled={tokenEnviado}
+                        />
+                        {errores.codigo_referencia && <span className="form-error">{errores.codigo_referencia}</span>}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="form-group" style={{ gridColumn: '1 / -1', marginTop: 12 }}>
+                      <label className="form-label">Token de Verificación (6 dígitos) <span className="required">*</span></label>
+                      <input
+                        type="text"
+                        maxLength={6}
+                        style={{ textAlign: 'center', fontSize: 24, letterSpacing: 4, height: 60 }}
+                        className={`form-control ${errores.token ? 'error' : ''}`}
+                        placeholder="000000"
+                        value={form.token}
+                        onChange={set('token')}
+                      />
+                      {errores.token && <span className="form-error">{errores.token}</span>}
                     </div>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">
-                      DNI / Documento Identidad
-                    </label>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      pattern="\d*"
-                      maxLength={8}
-                      className={`form-control ${errores.numero_documento ? 'error' : ''}`}
-                      placeholder="Ej. 12345678"
-                      value={form.numero_documento}
-                      onChange={set('numero_documento')}
-                    />
-                    {errores.numero_documento && <span className="form-error">{errores.numero_documento}</span>}
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">
-                      Código de Operación Yape
-                    </label>
-                    <input
-                      type="text"
-                      className={`form-control ${errores.codigo_referencia ? 'error' : ''}`}
-                      placeholder="Ej. OP-998877"
-                      value={form.codigo_referencia}
-                      onChange={set('codigo_referencia')}
-                    />
-                    {errores.codigo_referencia && <span className="form-error">{errores.codigo_referencia}</span>}
-                  </div>
+                  )}
                 </>
               )}
             </div>
@@ -303,8 +341,8 @@ export default function LoginPage() {
               style={{ width: '100%', justifyContent: 'center', padding: '11px', fontSize: 14 }}
             >
               {cargando 
-                ? (tab === 'login' ? 'Ingresando...' : tab === 'registro' ? 'Registrando...' : 'Procesando...') 
-                : (tab === 'login' ? 'Ingresar al sistema' : tab === 'registro' ? 'Crear cuenta' : 'Vincular y Activar Portal')}
+                ? (tab === 'login' ? 'Ingresando...' : tab === 'registro' ? 'Registrando...' : tokenEnviado ? 'Verificando...' : 'Procesando...') 
+                : (tab === 'login' ? 'Ingresar al sistema' : tab === 'registro' ? 'Crear cuenta' : tokenEnviado ? 'Verificar Token y Activar' : 'Vincular y Recibir Token')}
             </button>
           </form>
 
