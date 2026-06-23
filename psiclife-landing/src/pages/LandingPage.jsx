@@ -80,7 +80,11 @@ export default function LandingPage() {
         }
         
         // Procesar config de pagos
-        setPagosConfig(resConfig.data.datos || {})
+        let cfgObj = resConfig.data.datos || {}
+        if (cfgObj.METODOS_PAGO && typeof cfgObj.METODOS_PAGO === 'object') {
+          cfgObj = { ...cfgObj, ...cfgObj.METODOS_PAGO, qr_yape: cfgObj.METODOS_PAGO.qr_yape || cfgObj.qr_yape || '' }
+        }
+        setPagosConfig(cfgObj)
 
         // Psicólogos: si el endpoint no devuelve data, por defecto es array vacío
         const dataPsi = resPsi?.data?.datos || []
@@ -282,7 +286,7 @@ export default function LandingPage() {
         <div className="container">
           <div style={{ textAlign: 'center', marginBottom: 56 }}>
             <span className="sec-label">Proceso</span>
-            <h2 className="sec-title">Cómo empezar <i>tu transformación.</i></h2>
+            <h2 className="sec-title">Cómo empezar <i>tu cambio.</i></h2>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 32 }}>
             {procesoPasos.map((s, i) => (

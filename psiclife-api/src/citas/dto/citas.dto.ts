@@ -7,7 +7,6 @@ import { Type } from 'class-transformer'
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger'
 import {
   citas_modalidad, citas_agendado_por, citas_estado,
-  citas_cancelado_por, solicitudes_reembolso_tipo_solicitud,
 } from '@prisma/client'
 
 
@@ -69,16 +68,7 @@ export class ActualizarNotasDto {
   notas_sesion: string
 }
 
-export class CancelarCitaDto {
-  @ApiProperty({ enum: citas_cancelado_por })
-  @IsString()
-  cancelado_por: citas_cancelado_por
 
-
-  @ApiProperty()
-  @IsString()
-  motivo_cancelacion: string
-}
 
 export class RegistrarAsistenciaDto {
   @ApiProperty()
@@ -98,20 +88,7 @@ export class RegistrarAsistenciaDto {
   justificacion?: string
 }
 
-export class SolicitarReembolsoDto {
-  @ApiProperty({ enum: solicitudes_reembolso_tipo_solicitud })
-  @IsString()
-  tipo_solicitud: solicitudes_reembolso_tipo_solicitud
 
-
-  @ApiProperty()
-  @IsString()
-  motivo: string
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  monto_solicitado?: number
-}
 
 export class SolicitarCitaPublicaDto {
   @ApiProperty() @IsString()
@@ -134,6 +111,10 @@ export class SolicitarCitaPublicaDto {
 
   @ApiPropertyOptional() @IsOptional() @IsString()
   metodo_pago?: string
+
+  @ApiPropertyOptional()
+  @IsOptional() @IsString()
+  codigo_referencia?: string
 
   @ApiProperty() @IsString()
   servicio: string

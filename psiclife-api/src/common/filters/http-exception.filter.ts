@@ -35,7 +35,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
         const body = res as Record<string, unknown>
         if (Array.isArray(body['message'])) {
           errores = body['message'] as string[]
-          mensaje = 'Error de validación'
+          // Mostrar el primer mensaje específico en lugar de un genérico
+          mensaje = errores[0] ?? 'Error de validación'
         } else {
           mensaje = (body['message'] as string) ?? mensaje
         }

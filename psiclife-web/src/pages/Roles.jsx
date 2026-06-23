@@ -77,6 +77,7 @@ export default function Roles() {
   const validar = () => {
     const e = {}
     if (!form.nombre.trim()) e.nombre = 'El nombre es requerido'
+    if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s\-']+$/.test(form.nombre.trim())) e.nombre = 'El nombre solo puede contener letras'
     setErrores(e)
     return Object.keys(e).length === 0
   }

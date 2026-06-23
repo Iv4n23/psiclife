@@ -62,6 +62,7 @@ export default function Servicios() {
     const e = {}
     const precioValue = Number(form.precio)
     if (!form.nombre.trim()) e.nombre = 'El nombre es requerido'
+    else if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s\-'/]+$/.test(form.nombre.trim())) e.nombre = 'El nombre solo puede contener letras'
     if (form.precio === '' || isNaN(precioValue) || precioValue <= 0) e.precio = 'Precio debe ser mayor que cero'
     if (!form.categoria_id) e.categoria_id = 'Selecciona una categoría'
     setErrores(e)

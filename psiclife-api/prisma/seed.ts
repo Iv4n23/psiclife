@@ -8,7 +8,7 @@ const PERMISOS_TOTALES = {
   usuarios:      { ver:true, crear:true, editar:true, eliminar:true },
   roles:         { ver:true, crear:true, editar:true, eliminar:true },
   categorias:    { ver:true, crear:true, editar:true, eliminar:true },
-  productos:     { ver:true, crear:true, editar:true, eliminar:true },
+  servicios:     { ver:true, crear:true, editar:true, eliminar:true },
   web_medica:    { ver:true, crear:true, editar:true, eliminar:true },
   disponibilidad:{ ver:true, crear:true, editar:true, eliminar:true },
   pacientes:     { ver:true, crear:true, editar:true, eliminar:true },
@@ -25,7 +25,7 @@ const PERMISOS_PSICOLOGO = {
   usuarios:      { ver:false,crear:false,editar:false,eliminar:false },
   roles:         { ver:false,crear:false,editar:false,eliminar:false },
   categorias:    { ver:false,crear:false,editar:false,eliminar:false },
-  productos:     { ver:true, crear:false,editar:false,eliminar:false },
+  servicios:     { ver:true, crear:false,editar:false,eliminar:false },
   web_medica:    { ver:true, crear:false,editar:false,eliminar:false },
   disponibilidad:{ ver:true, crear:true, editar:true, eliminar:true  },
   pacientes:     { ver:true, crear:false,editar:true, eliminar:false },
@@ -42,7 +42,7 @@ const PERMISOS_RECEPCIONISTA = {
   usuarios:      { ver:false,crear:false,editar:false,eliminar:false },
   roles:         { ver:false,crear:false,editar:false,eliminar:false },
   categorias:    { ver:true, crear:false,editar:false,eliminar:false },
-  productos:     { ver:true, crear:false,editar:false,eliminar:false },
+  servicios:     { ver:true, crear:false,editar:false,eliminar:false },
   web_medica:    { ver:true, crear:false,editar:false,eliminar:false },
   disponibilidad:{ ver:true, crear:false,editar:false,eliminar:false },
   pacientes:     { ver:true, crear:true, editar:true, eliminar:false },
@@ -59,7 +59,7 @@ const PERMISOS_PACIENTE = {
   usuarios:      { ver:false,crear:false,editar:false,eliminar:false },
   roles:         { ver:false,crear:false,editar:false,eliminar:false },
   categorias:    { ver:false,crear:false,editar:false,eliminar:false },
-  productos:     { ver:true, crear:false,editar:false,eliminar:false },
+  servicios:     { ver:true, crear:false,editar:false,eliminar:false },
   web_medica:    { ver:false,crear:false,editar:false,eliminar:false },
   disponibilidad:{ ver:false,crear:false,editar:false,eliminar:false },
   pacientes:     { ver:false,crear:false,editar:false,eliminar:false },
@@ -415,6 +415,41 @@ p{color:#3d6070;line-height:1.7;font-size:14px;margin:0 0 12px}
 <p>Si tienes dudas, contáctanos.</p>
 </div>
 <div class="footer">PsicLife © {{anio}}</div>
+</div></body></html>`,
+    },
+    {
+      codigo: 'verificacion_cuenta',
+      nombre: 'Verificación de cuenta (completar registro)',
+      asunto: 'Tu código de verificación — PsicLife',
+      cuerpo_html: `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><style>
+body{font-family:"Segoe UI",Arial,sans-serif;background:#f2f9fd;margin:0;padding:0}
+.wrap{max-width:560px;margin:40px auto;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 4px 20px rgba(58,174,216,.12)}
+.header{background:linear-gradient(135deg,#1e5068,#1e8cb5);padding:32px 40px;text-align:center}
+.logo{font-family:Georgia,serif;font-size:28px;color:#fff;font-weight:700}
+.body{padding:32px 40px}
+.icon{text-align:center;font-size:40px;margin-bottom:16px}
+.title{font-size:18px;font-weight:600;color:#0d2d3d;text-align:center;margin-bottom:12px}
+p{color:#3d6070;line-height:1.7;font-size:14px;margin:0 0 12px}
+.token-box{background:#e8f6fc;border:2px solid #3aaed8;border-radius:12px;padding:20px;text-align:center;margin:24px 0}
+.token{font-size:40px;font-weight:700;letter-spacing:10px;color:#1e5068;font-family:"Courier New",monospace}
+.token-label{font-size:12px;color:#5a8fa0;margin-top:8px}
+.warn{background:#fef0f3;border-left:4px solid #e03050;border-radius:0 8px 8px 0;padding:12px 16px;margin:14px 0}
+.warn p{margin:0;color:#8a1030;font-size:13px}
+.footer{background:#f7fbfe;border-top:1px solid #d6edf7;padding:18px 40px;text-align:center;font-size:12px;color:#7aa0b0}
+</style></head><body><div class="wrap">
+<div class="header"><div class="logo">PsicLife</div></div>
+<div class="body">
+<div class="icon">✅</div>
+<div class="title">Verifica tu cuenta</div>
+<p>Hola <strong>{{nombres}}</strong>, ingresa el siguiente código en la aplicación para activar tu cuenta:</p>
+<div class="token-box">
+<div class="token">{{token}}</div>
+<div class="token-label">Válido por 15 minutos</div>
+</div>
+<p style="text-align:center;font-size:13px;color:#5a8fa0">No compartas este código con nadie.</p>
+<div class="warn"><p>⚠️ Si no solicitaste este código, ignora este correo.</p></div>
+</div>
+<div class="footer">PsicLife © {{anio}} — Código expira en 15 minutos</div>
 </div></body></html>`,
     },
     {

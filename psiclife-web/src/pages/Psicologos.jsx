@@ -1,12 +1,11 @@
 // src/pages/Psicologos.jsx
 import { useState, useEffect, useRef } from 'react'
-import { psicologosApi, rolesApi, usuariosApi } from '../services/api'
+import { psicologosApi, usuariosApi } from '../services/api'
 import { Confirm, EmptyState, Spinner } from '../components/ui/index.jsx'
 import toast from 'react-hot-toast'
-import { Plus, Edit2, Trash2, X, Save, ImagePlus, ToggleLeft, ToggleRight } from 'lucide-react'
+import { Plus, Edit2, X, Save, ImagePlus, ToggleLeft, ToggleRight, Trash2 } from 'lucide-react'
 import { getImageUrl } from '../utils/image'
 import { cleanPayload } from '../utils/payload'
-
 
 const FORM_VACIO = {
   usuario_id: '', nombres: '', apellidos: '',
@@ -22,10 +21,10 @@ export default function Psicologos() {
   const [guardando,   setGuardando]   = useState(false)
   const [form,        setForm]        = useState(FORM_VACIO)
   const [editId,      setEditId]      = useState(null)
-  const [confirmar,   setConfirmar]   = useState(null)
   const [errores,     setErrores]     = useState({})
   const [fotoPreview, setFotoPreview] = useState(null)
   const [fotoFile,    setFotoFile]    = useState(null)
+  const [confirmar,   setConfirmar]   = useState(null)
   const inputFoto = useRef()
 
   const usuariosDisponibles = usuarios.filter(u => !psicologos.some(p => p.usuario_id === u.id))
@@ -68,20 +67,18 @@ export default function Psicologos() {
 
   const validar = () => {
     const e = {}
-    if (!form.nombres.trim())           e.nombres           = 'Requerido'
-    if (!form.apellidos.trim())         e.apellidos         = 'Requerido'
+    if (!form.nombres.trim())            e.nombres            = 'Requerido'
+    if (!form.apellidos.trim())          e.apellidos          = 'Requerido'
     if (!form.numero_colegiatura.trim()) e.numero_colegiatura = 'Requerido'
-    if (!editId && !form.usuario_id)    e.usuario_id        = 'Selecciona un usuario'
+    if (!editId && !form.usuario_id)     e.usuario_id         = 'Selecciona un usuario'
 
     const duracionValue = form.duracion_sesion_min === '' ? undefined : Number(form.duracion_sesion_min)
-    if (form.duracion_sesion_min !== '' && (isNaN(duracionValue) || duracionValue <= 0)) {
+    if (form.duracion_sesion_min !== '' && (isNaN(duracionValue) || duracionValue <= 0))
       e.duracion_sesion_min = 'Duración inválida'
-    }
 
     const precioValue = form.precio_sesion === '' ? undefined : Number(form.precio_sesion)
-    if (form.precio_sesion !== '' && (isNaN(precioValue) || precioValue <= 0)) {
+    if (form.precio_sesion !== '' && (isNaN(precioValue) || precioValue <= 0))
       e.precio_sesion = 'Precio debe ser mayor que cero'
-    }
 
     setErrores(e)
     return Object.keys(e).length === 0
@@ -106,7 +103,6 @@ export default function Psicologos() {
         id = data.datos.id
         toast.success('Psicólogo registrado')
       }
-
       if (fotoFile && id) {
         const fd = new FormData(); fd.append('archivo', fotoFile)
         await psicologosApi.subirFoto(id, fd)
@@ -123,12 +119,23 @@ export default function Psicologos() {
     } catch {}
   }
 
+  const eliminar = async () => {
+    if (!confirmar) return
+    try {
+      await psicologosApi.eliminar(confirmar.id)
+      toast.success('Psicólogo eliminado correctamente')
+      setConfirmar(null)
+      await cargar()
+    } catch {}
+  }
+
   const set = (k) => (e) => { setForm(f => ({ ...f, [k]: e.target.value })); setErrores(er => ({ ...er, [k]: '' })) }
   const onFoto = (e) => {
     const f = e.target.files[0]; if (!f) return
     setFotoFile(f); setFotoPreview(URL.createObjectURL(f))
   }
 
+  // ── Formulario ────────────────────────────────────────────
   if (vista === 'form') return (
     <div className="page-enter">
       <div className="section-header">
@@ -160,18 +167,18 @@ export default function Psicologos() {
               {editId && (
                 <div className="form-group" style={{ gridColumn: '1/-1' }}>
                   <label className="form-label">Usuario vinculado</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    value={usuarios.find(u => u.id === form.usuario_id)?.correo || 'No disponible'}
-                    readOnly
-                  />
+                  <input type="text" className="form-control"
+                    value={usuarios.find(u => u.id === form.usuario_id)?.correo || 'No disponible'} readOnly />
                 </div>
               )}
               {[['nombres','Nombres'],['apellidos','Apellidos']].map(([k,l]) => (
                 <div className="form-group" key={k}>
                   <label className="form-label">{l} <span className="required">*</span></label>
-                  <input className={`form-control ${errores[k]?'error':''}`} value={form[k]} onChange={set(k)} />
+                  <input className={`form-control ${errores[k]?'error':''}`} value={form[k]} onChange={e => {
+                    const v = e.target.value.replace(/[^a-záéíóúñA-ZÁÉÍÓÚÑ\s\-']/g, '')
+                    setForm(f => ({ ...f, [k]: v }))
+                    setErrores(er => ({ ...er, [k]: '' }))
+                  }} placeholder={l} />
                   {errores[k] && <span className="form-error">{errores[k]}</span>}
                 </div>
               ))}
@@ -200,13 +207,12 @@ export default function Psicologos() {
               </div>
             </div>
 
-            {/* Foto */}
             <div style={{ marginTop: 20, display: 'flex', alignItems: 'center', gap: 20 }}>
               <div style={{ width: 80, height: 80, borderRadius: '50%', border: '1.5px solid var(--border)', overflow: 'hidden', background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                {fotoPreview ? <img src={getImageUrl(fotoPreview)} alt="foto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                {fotoPreview
+                  ? <img src={getImageUrl(fotoPreview)} alt="foto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   : <span style={{ fontSize: 28 }}>👤</span>}
               </div>
-
               <div>
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => inputFoto.current.click()}>
                   <ImagePlus size={13} /> {fotoPreview ? 'Cambiar foto' : 'Subir foto'}
@@ -228,6 +234,7 @@ export default function Psicologos() {
     </div>
   )
 
+  // ── Lista ─────────────────────────────────────────────────
   return (
     <div className="page-enter">
       <div className="section-header">
@@ -253,14 +260,11 @@ export default function Psicologos() {
                           {p.foto_url ? <img src={getImageUrl(p.foto_url)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '👤'}
                         </div>
                       </td>
-
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <code style={{ fontSize: 10, color: 'var(--text-muted)' }}>{p.id.slice(0,8)}...</code>
-                          <button className="btn btn-ghost btn-sm" style={{ padding: 2, height: 'auto' }} 
-                            onClick={() => { navigator.clipboard.writeText(p.id); toast.success('ID copiado') }}>
-                            📋
-                          </button>
+                          <button className="btn btn-ghost btn-sm" style={{ padding: 2, height: 'auto' }}
+                            onClick={() => { navigator.clipboard.writeText(p.id); toast.success('ID copiado') }}>📋</button>
                         </div>
                       </td>
                       <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{p.usuario?.correo || '—'}</td>
@@ -274,7 +278,8 @@ export default function Psicologos() {
                           <button className="btn btn-ghost btn-icon btn-sm" title={p.esta_activo ? 'Desactivar' : 'Activar'} onClick={() => toggleActivo(p)}>
                             {p.esta_activo ? <ToggleRight size={15} color="var(--success)" /> : <ToggleLeft size={15} />}
                           </button>
-                          <button className="btn btn-ghost btn-icon btn-sm" onClick={() => abrirEditar(p)}><Edit2 size={13} /></button>
+                          <button className="btn btn-ghost btn-icon btn-sm" title="Editar" onClick={() => abrirEditar(p)}><Edit2 size={13} /></button>
+                          <button className="btn btn-danger btn-icon btn-sm" title="Eliminar" onClick={() => setConfirmar({ id: p.id, nombre: `${p.nombres} ${p.apellidos}` })}><Trash2 size={13} /></button>
                         </div>
                       </td>
                     </tr>
@@ -284,6 +289,15 @@ export default function Psicologos() {
             </div>
           )}
       </div>
+
+      {confirmar && (
+        <Confirm
+          titulo="¿Eliminar psicólogo?"
+          descripcion={`¿Seguro que deseas eliminar al psicólogo "${confirmar.nombre}"? Si ya tiene citas u otros registros no se podrá eliminar.`}
+          onConfirm={eliminar}
+          onCancel={() => setConfirmar(null)}
+        />
+      )}
     </div>
   )
 }

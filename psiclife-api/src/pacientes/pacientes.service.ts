@@ -11,16 +11,19 @@ import { CrearPacienteDto, ActualizarPacienteDto } from './dto/pacientes.dto'
 export class PacientesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async listar(busqueda?: string) {
+  async listar(busqueda?: string, pacienteIds?: string[]) {
     return this.prisma.pacientes.findMany({
-      where: busqueda ? {
-        OR: [
-          { nombres:  { contains: busqueda } },
-          { apellidos: { contains: busqueda } },
-          { numero_documento: { contains: busqueda } },
-          { empresa_u_organizacion: { contains: busqueda } },
-        ],
-      } : undefined,
+      where: {
+        ...(pacienteIds ? { id: { in: pacienteIds } } : {}),
+        ...(busqueda ? {
+          OR: [
+            { nombres:  { contains: busqueda } },
+            { apellidos: { contains: busqueda } },
+            { numero_documento: { contains: busqueda } },
+            { empresa_u_organizacion: { contains: busqueda } },
+          ],
+        } : {}),
+      },
       orderBy: [{ apellidos: 'asc' }, { nombres: 'asc' }],
       select: {
         id: true, nombres: true, apellidos: true,

@@ -4,7 +4,7 @@ import {
   Calendar, Clock, CheckCircle, AlertTriangle, BookOpen,
   Activity, Smartphone, X, Upload, Send, TrendingUp,
   Heart, Star, ChevronRight, Users, Shield, Package, Tag,
-  UserCheck, CreditCard, Banknote, XCircle,
+  UserCheck, CreditCard, Banknote,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -57,7 +57,7 @@ function getRol(usuario) {
     : typeof usuario?.rolNombre === 'string'
       ? usuario.rolNombre
       : ''
-  return raw.trim().toLowerCase()
+  return raw.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
 }
 
 function formatFecha(iso) {
@@ -69,12 +69,12 @@ function formatFecha(iso) {
 
 // ── Modal Yape premium ─────────────────────────────────────────────────────────
 function ModalYape({ facturaId, total, config, onClose, onSuccess }) {
-  const [monto,   setMonto]   = useState(total ?? '')
   const [codigo,  setCodigo]  = useState('')
   const [archivo, setArchivo] = useState(null)
   const [preview, setPreview] = useState(null)
   const [drag,    setDrag]    = useState(false)
   const [enviando,setEnviando]= useState(false)
+  const [qrExpandido, setQrExpandido] = useState(false)
   const inputRef = useRef()
 
   const handleFile = (file) => {
@@ -94,13 +94,13 @@ function ModalYape({ facturaId, total, config, onClose, onSuccess }) {
   }
 
   const handleEnviar = async () => {
-    if (!monto || Number(monto) <= 0) { toast.error('Ingresa el monto'); return }
-    if (codigo.trim().length < 8)     { toast.error('Ingresa un número de operación válido (mínimo 8 caracteres)'); return }
+    if (!total || Number(total) <= 0) { toast.error('El monto no es válido'); return }
+    if (codigo.trim().length < 8)     { toast.error('Ingresa un número de operación válido (mínimo 8 dígitos)'); return }
     if (!archivo)                     { toast.error('Sube la captura de tu Yape'); return }
     setEnviando(true)
     try {
       const form = new FormData()
-      form.append('monto', monto)
+      form.append('monto', String(total))
       form.append('codigo_referencia', codigo)
       form.append('archivo', archivo)
       await facturacionApi.subirComprobanteYape(facturaId, form)
@@ -140,7 +140,7 @@ function ModalYape({ facturaId, total, config, onClose, onSuccess }) {
         <div style={{ background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:14, padding:'16px 18px', marginBottom:20, display:'flex', alignItems:'center', gap:16 }}>
           {config?.qr_yape ? (
             <div
-              onClick={() => window.open(`${API_BASE}${config.qr_yape}`, '_blank')}
+              onClick={() => setQrExpandido(true)}
               title="Click para ampliar QR"
               style={{ width:70, height:70, borderRadius:8, border:'1px solid rgba(255,255,255,0.2)', display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden', background:'white', flexShrink:0, cursor:'zoom-in' }}
             >
@@ -157,21 +157,56 @@ function ModalYape({ facturaId, total, config, onClose, onSuccess }) {
           </div>
         </div>
 
+        {/* Modal QR expandido */}
+        {qrExpandido && (
+          <div
+            onClick={() => setQrExpandido(false)}
+            style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', zIndex:99999, display:'flex', alignItems:'center', justifyContent:'center' }}
+          >
+            <img
+              src={`${API_BASE}${config.qr_yape}`}
+              alt="QR Yape ampliado"
+              style={{ maxWidth:'90vw', maxHeight:'90vh', objectFit:'contain', borderRadius:12, boxShadow:'0 20px 60px rgba(0,0,0,0.5)' }}
+              onClick={e => e.stopPropagation()}
+            />
+            <button onClick={() => setQrExpandido(false)} style={{ position:'fixed', top:20, right:20, background:'rgba(255,255,255,0.12)', border:'none', borderRadius:'50%', width:40, height:40, color:'white', cursor:'pointer', fontSize:20, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
+          </div>
+        )}
+
         {/* Inputs */}
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:16 }}>
-          {[
-            { label:'Monto pagado (S/)', key:'monto', type:'number', ph:'0.00', val:monto, set:setMonto },
-            { label:'Código de operación', key:'codigo', type:'text', ph:'Ej. 987654321', val:codigo, set:setCodigo },
-          ].map(({ label, key, type, ph, val, set }) => (
-            <div key={label}>
-              <label style={{ display:'block', fontSize:11, color:'rgba(255,255,255,0.45)', marginBottom:6, textTransform:'uppercase', letterSpacing:0.5 }}>{label}</label>
-              <input type={type} value={val} onChange={e => {
-                if (key === 'codigo') set(e.target.value.slice(0, 20))
-                else set(e.target.value)
-              }} placeholder={ph}
-                style={{ width:'100%', padding:'10px 14px', borderRadius:10, background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.14)', color:'white', fontSize:14, outline:'none', boxSizing:'border-box' }} />
-            </div>
-          ))}
+          {/* Monto — bloqueado, solo informativo */}
+          <div>
+            <label style={{ display:'block', fontSize:11, color:'rgba(255,255,255,0.45)', marginBottom:6, textTransform:'uppercase', letterSpacing:0.5 }}>Monto a pagar (S/)</label>
+            <input
+              type="text"
+              value={`S/ ${Number(total || 0).toFixed(2)}`}
+              readOnly
+              style={{ width:'100%', padding:'10px 14px', borderRadius:10, background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.08)', color:'hsl(38,85%,65%)', fontSize:14, outline:'none', boxSizing:'border-box', cursor:'not-allowed', fontWeight:700 }}
+            />
+          </div>
+          {/* Código de operación — solo números */}
+          <div>
+            <label style={{ display:'block', fontSize:11, color:'rgba(255,255,255,0.45)', marginBottom:6, textTransform:'uppercase', letterSpacing:0.5 }}>
+              Código de operación <span style={{ color:'hsl(0,80%,65%)' }}>*</span>
+            </label>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="\d*"
+              value={codigo}
+              onChange={e => setCodigo(e.target.value.replace(/\D/g, '').slice(0, 16))}
+              placeholder="Ej. 987654321"
+              style={{
+                width:'100%', padding:'10px 14px', borderRadius:10, outline:'none', boxSizing:'border-box', fontSize:14,
+                background:'rgba(255,255,255,0.08)', color:'white',
+                border: `1px solid ${codigo.length > 0 && codigo.length < 8 ? 'hsl(0,70%,55%)' : codigo.length >= 8 ? 'hsl(145,55%,45%)' : 'rgba(255,255,255,0.14)'}`,
+              }}
+            />
+            {codigo.length > 0 && codigo.length < 8 && (
+              <div style={{ fontSize:11, color:'hsl(0,70%,65%)', marginTop:4 }}>⚠ Mínimo 8 dígitos</div>
+            )}
+          </div>
         </div>
 
         {/* Drop zone */}
@@ -231,9 +266,8 @@ function DashboardPaciente() {
   const [archivoRespuesta, setArchivoRespuesta] = useState(null)
   const [actEnviando, setActEnviando] = useState(false)
 
-  const [modalCancelar, setModalCancelar] = useState(null)
-  const [motivoCancelar, setMotivoCancelar] = useState('')
-  const [cancelando, setCancelando] = useState(false)
+
+
 
   const normalizarOpciones = (item) => {
     if (Array.isArray(item?.opciones_json)) return item.opciones_json
@@ -277,6 +311,17 @@ function DashboardPaciente() {
 
   const enviarEvaluacion = async () => {
     if (!datosEvaluacion) return
+
+    // Validar que todas las preguntas tengan respuesta
+    const items = datosEvaluacion.instrumento?.eva_items ?? []
+    const sinResponder = items.filter(item => {
+      const valor = respuestas[item.id]
+      return valor === undefined || valor === null || String(valor).trim() === ''
+    })
+    if (sinResponder.length > 0) {
+      toast.error(`Faltan ${sinResponder.length} pregunta${sinResponder.length > 1 ? 's' : ''} por responder`)
+      return
+    }
 
     setEnviando(true)
     try {
@@ -463,7 +508,7 @@ function DashboardPaciente() {
 
       toast.success('Cita agendada correctamente')
       setModalAgendar(false)
-      await cargar()
+      cargarDatos()
     } catch (err) {
       toast.error(err.response?.data?.mensaje || 'Error al agendar cita')
     } finally {
@@ -471,7 +516,7 @@ function DashboardPaciente() {
     }
   }
 
-  // --- Lógica para Cancelar Cita (Eliminada) ---
+
 
   // --- Lógica para Reseñas ---
   const [modalResena, setModalResena] = useState(null)
@@ -570,7 +615,7 @@ function DashboardPaciente() {
     .sort((a, b) => new Date(a.programada_para) - new Date(b.programada_para))
   const proximaCita   = proximasCitas[0]
 
-  const hayPendientePago = citas.some(c => { const f = getFactura(c); return !f?.estado || f?.estado === 'pendiente' })
+
 
   return (
     <div className="page-enter" style={{ display:'flex', flexDirection:'column', gap:20 }}>
@@ -640,26 +685,7 @@ function DashboardPaciente() {
       {/* ── Tab: Inicio ── */}
       {tab === 'inicio' && (
         <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
-          {hayPendientePago && (
-            <div style={{
-              display:'flex', alignItems:'flex-start', gap:14,
-              padding:'16px 20px', borderRadius:16,
-              background:'var(--info-bg)',
-              border:'1.5px solid var(--info)',
-              boxShadow:'0 4px 20px rgba(59, 130, 246, 0.08)',
-            }}>
-              <div style={{ width:42, height:42, borderRadius:12, background:'var(--info)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                <AlertTriangle size={20} color="white" />
-              </div>
-              <div>
-                <div style={{ fontWeight:700, color:'var(--info)', fontSize:14, marginBottom:4 }}>Política de Cancelación</div>
-                <div style={{ fontSize:13, color:'var(--text-secondary)', lineHeight:1.65 }}>
-                  Las citas deben cancelarse con <strong>al menos 6 horas de anticipación</strong>.
-                  Cancelaciones tardías o inasistencias sin aviso pueden estar sujetas a limitaciones.
-                </div>
-              </div>
-            </div>
-          )}
+
 
           {/* Grid: Próxima cita + Citas */}
           <div style={{ display:'grid', gridTemplateColumns: proximaCita ? '1fr 1.4fr' : '1fr', gap:20 }}>
@@ -668,7 +694,8 @@ function DashboardPaciente() {
         {proximaCita && (() => {
           const fProx = getFactura(proximaCita)
           const col = colorPago(fProx)
-          const esPendientePago = !fProx?.estado || fProx?.estado === 'pendiente'
+          const tienePagoEnEspera = fProx?.pagos?.some(p => p.confirmado === false)
+          const esPendientePago = !tienePagoEnEspera && (!fProx?.estado || fProx?.estado === 'pendiente')
           return (
             <div style={{
               borderRadius:18, overflow:'hidden',
@@ -713,6 +740,7 @@ function DashboardPaciente() {
                   const [plataforma, enlace] = proximaCita.enlace_reunion.includes('::') 
                     ? proximaCita.enlace_reunion.split('::') 
                     : ['Reunión', proximaCita.enlace_reunion];
+                  if (plataforma.toLowerCase() === 'whatsapp') return null
                   return (
                     <a href={enlace.startsWith('http') ? enlace : `https://${enlace}`} target="_blank" rel="noreferrer"
                       style={{
@@ -738,6 +766,11 @@ function DashboardPaciente() {
                     }}>
                     <Smartphone size={15} /> Pagar con Yape
                   </button>
+                )}
+                {tienePagoEnEspera && (
+                  <div style={{ width:'100%', padding:'10px 14px', borderRadius:12, background:'rgba(250,204,21,0.1)', border:'1px solid rgba(250,204,21,0.35)', color:'hsl(38,85%,45%)', fontSize:13, fontWeight:600, display:'flex', alignItems:'center', gap:7, textAlign:'center', justifyContent:'center' }}>
+                    ⏳ Comprobante enviado, en espera de aprobación
+                  </div>
                 )}
                 
               </div>
@@ -768,7 +801,8 @@ function DashboardPaciente() {
               .map(c => {
                 const factura = getFactura(c)
                 const col = colorPago(factura)
-                const esPendPago = !factura?.estado || factura?.estado === 'pendiente'
+                const hayPagoEnEspera = factura?.pagos?.some(p => p.confirmado === false)
+                const esPendPago = !hayPagoEnEspera && (!factura?.estado || factura?.estado === 'pendiente')
                 return (
                   <div key={c.id} style={{
                     display:'flex', alignItems:'center', gap:12,
@@ -786,7 +820,10 @@ function DashboardPaciente() {
                       </div>
                     </div>
                     {c.modalidad === 'virtual' && c.enlace_reunion && (() => {
-                      const enlace = c.enlace_reunion.includes('::') ? c.enlace_reunion.split('::')[1] : c.enlace_reunion;
+                      const partes = c.enlace_reunion.includes('::') ? c.enlace_reunion.split('::') : ['Reunión', c.enlace_reunion]
+                      const plataforma = partes[0]
+                      const enlace = partes[1]
+                      if (plataforma.toLowerCase() === 'whatsapp') return null
                       return (
                         <a href={enlace.startsWith('http') ? enlace : `https://${enlace}`} target="_blank" rel="noreferrer"
                           style={{ padding:'5px 12px', borderRadius:18, background:'linear-gradient(135deg, var(--info), var(--celeste-dark))', color:'white', border:'none', fontSize:11.5, fontWeight:600, textDecoration:'none', display:'flex', alignItems:'center', gap:4, whiteSpace:'nowrap', flexShrink:0 }}>
@@ -932,23 +969,10 @@ function DashboardPaciente() {
                   <div style={{ fontSize:12, color:'var(--text-muted)' }}>{formatFecha(c.programada_para)}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  {(c.estado === 'pendiente' || c.estado === 'confirmada') && (
-                    <button className="btn btn-ghost btn-sm" onClick={() => {
-                       setModalCancelarPaciente(c)
-                       setMotivoCancelarPaciente('')
-                    }} style={{ color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <XCircle size={14} /> Cancelar
-                    </button>
-                  )}
                   {c.estado === 'completada' && !c.resenas && (
                     <button className="btn btn-warning btn-sm" onClick={() => abrirModalResena(c)} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                       <Star size={14} fill="currentColor" /> Dejar Reseña
                     </button>
-                  )}
-                  {c.reembolso && (
-                    <span className={`badge ${c.reembolso.estado === 'aprobado' ? 'badge-success' : c.reembolso.estado === 'rechazado' ? 'badge-danger' : 'badge-warning'}`}>
-                      {c.reembolso.estado === 'pendiente' ? 'Reembolso Pendiente' : c.reembolso.estado === 'aprobado' ? 'Reembolsado' : 'Reembolso Rechazado'}
-                    </span>
                   )}
                   <span className={`badge ${c.estado==='cancelada'?'badge-danger':c.estado==='confirmada'?'badge-success':c.estado==='completada'?'badge-primary':'badge-warning'}`}>{c.estado}</span>
                 </div>
@@ -1109,8 +1133,8 @@ function DashboardPaciente() {
 
   {/* ── Modal Responder Evaluación ── */}
       {datosEvaluacion && (
-        <div className="modal-backdrop">
-          <div className="card" style={{ width: 700, maxWidth: '92vw', maxHeight: '88vh', overflowY: 'auto' }}>
+        <div className="modal-overlay" style={{ zIndex: 1500, alignItems: 'flex-start', paddingTop: 40, overflowY: 'auto' }}>
+          <div className="card" style={{ width: 700, maxWidth: '92vw', maxHeight: '88vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
             <div className="card-header" style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
               <div>
                 <div className="card-title" style={{ fontSize: 16 }}>{datosEvaluacion.instrumento?.nombre ?? 'Evaluación'}</div>
@@ -1202,9 +1226,26 @@ function DashboardPaciente() {
                 )
               })}
             </div>
-            <div className="card-footer" style={{ display:'flex', justifyContent:'flex-end', gap:10 }}>
-              <button className="btn btn-ghost" onClick={() => { setEvaluacionActiva(null); setDatosEvaluacion(null); setRespuestas({}) }}>Cancelar</button>
-              <button className="btn btn-primary" onClick={enviarEvaluacion} disabled={enviando}>{enviando ? 'Enviando...' : 'Enviar evaluación'}</button>
+            <div className="card-footer" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10 }}>
+              {(() => {
+                const items = datosEvaluacion.instrumento?.eva_items ?? []
+                const respondidas = items.filter(item => {
+                  const v = respuestas[item.id]
+                  return v !== undefined && v !== null && String(v).trim() !== ''
+                }).length
+                const faltan = items.length - respondidas
+                return (
+                  <span style={{ fontSize: 12, color: faltan > 0 ? 'var(--warning)' : 'var(--success)', fontWeight: 600 }}>
+                    {faltan > 0
+                      ? `⚠ ${faltan} pregunta${faltan > 1 ? 's' : ''} sin responder`
+                      : '✓ Todas las preguntas respondidas'}
+                  </span>
+                )
+              })()}
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button className="btn btn-ghost" onClick={() => { setEvaluacionActiva(null); setDatosEvaluacion(null); setRespuestas({}) }}>Cancelar</button>
+                <button className="btn btn-primary" onClick={enviarEvaluacion} disabled={enviando}>{enviando ? 'Enviando...' : 'Enviar evaluación'}</button>
+              </div>
             </div>
           </div>
         </div>
@@ -1616,7 +1657,7 @@ function DashboardPaciente() {
         </div>
       )}
 
-      {/* Modal de Cancelación Eliminado */}
+
       {imagenExpandida && (
         <div className="modal-overlay" onClick={() => setImagenExpandida(null)} style={{ zIndex: 999999, background: 'rgba(0,0,0,0.85)' }}>
           <div style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>

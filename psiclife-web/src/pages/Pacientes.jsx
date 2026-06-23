@@ -136,12 +136,12 @@ export default function Pacientes() {
       e.correo_personal = 'Formato de correo inválido'
     }
 
-    if (form.telefono && !/^\+?[0-9\s-]{9,15}$/.test(form.telefono)) {
-      e.telefono = 'Formato inválido'
+    if (form.telefono && !/^\+?[0-9]{7,15}$/.test(form.telefono.replace(/\s/g, ''))) {
+      e.telefono = 'Solo números y opcionalmente + al inicio (ej: +51987654321)'
     }
 
-    if (form.whatsapp && !/^\+?[0-9\s-]{9,15}$/.test(form.whatsapp)) {
-      e.whatsapp = 'Formato inválido'
+    if (form.whatsapp && !/^\+?[0-9]{7,15}$/.test(form.whatsapp.replace(/\s/g, ''))) {
+      e.whatsapp = 'Solo números y opcionalmente + al inicio (ej: +51987654321)'
     }
 
     setErrores(e)
@@ -461,7 +461,11 @@ export default function Pacientes() {
               {[['nombres','Nombres'],['apellidos','Apellidos']].map(([k,l]) => (
                 <div className="form-group" key={k}>
                   <label className="form-label">{l} <span className="required">*</span></label>
-                  <input className={`form-control ${errores[k]?'error':''}`} value={form[k]} onChange={set(k)} />
+                  <input className={`form-control ${errores[k]?'error':''}`} value={form[k]} onChange={e => {
+                    const v = e.target.value.replace(/[^a-záéíóúñA-ZÁÉÍÓÚÑ\s\-']/g, '')
+                    setForm(f => ({ ...f, [k]: v }))
+                    setErrores(er => ({ ...er, [k]: '' }))
+                  }} placeholder={l} />
                   {errores[k] && <span className="form-error">{errores[k]}</span>}
                 </div>
               ))}
@@ -514,11 +518,17 @@ export default function Pacientes() {
               </div>
               <div className="form-group">
                 <label className="form-label">Teléfono</label>
-                <input className="form-control" value={form.telefono} onChange={set('telefono')} placeholder="+51 ..." />
+                <input className={`form-control ${errores.telefono ? 'error' : ''}`} value={form.telefono}
+                  onChange={e => { const v = e.target.value.replace(/[^+\d]/g, '').replace(/(?!^)\+/g, ''); setForm(f=>({...f,telefono:v})); setErrores(er=>({...er,telefono:''})) }}
+                  placeholder="+51987654321" inputMode="tel" />
+                {errores.telefono && <span className="form-error">{errores.telefono}</span>}
               </div>
               <div className="form-group">
                 <label className="form-label">WhatsApp</label>
-                <input className="form-control" value={form.whatsapp} onChange={set('whatsapp')} placeholder="+51 ..." />
+                <input className={`form-control ${errores.whatsapp ? 'error' : ''}`} value={form.whatsapp}
+                  onChange={e => { const v = e.target.value.replace(/[^+\d]/g, '').replace(/(?!^)\+/g, ''); setForm(f=>({...f,whatsapp:v})); setErrores(er=>({...er,whatsapp:''})) }}
+                  placeholder="+51987654321" inputMode="tel" />
+                {errores.whatsapp && <span className="form-error">{errores.whatsapp}</span>}
               </div>
               <div className="form-group">
                 <label className="form-label">Correo personal</label>

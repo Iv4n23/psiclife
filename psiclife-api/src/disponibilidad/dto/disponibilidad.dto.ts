@@ -34,6 +34,29 @@ export class CrearHorarioDto {
   esta_disponible?: boolean
 }
 
+export class ActualizarHorarioDto {
+  @ApiPropertyOptional({ enum: horarios_dia_semana })
+  @IsOptional() @IsString()
+  @Matches(/^(lunes|martes|miercoles|jueves|viernes|sabado|domingo)$/, {
+    message: 'dia_semana debe ser un día válido',
+  })
+  dia_semana?: horarios_dia_semana
+
+  @ApiPropertyOptional({ example: '09:00' })
+  @IsOptional() @IsString()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'Formato HH:MM requerido' })
+  hora_inicio?: string
+
+  @ApiPropertyOptional({ example: '18:00' })
+  @IsOptional() @IsString()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'Formato HH:MM requerido' })
+  hora_fin?: string
+
+  @ApiPropertyOptional({ default: true })
+  @IsOptional() @IsBoolean()
+  esta_disponible?: boolean
+}
+
 export class CrearBloqueoDto {
   @ApiProperty() @IsUUID()
   psicologo_id: string

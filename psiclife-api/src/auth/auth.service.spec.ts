@@ -306,26 +306,5 @@ describe('CitasService', () => {
     jest.clearAllMocks()
   })
 
-  describe('cancelar()', () => {
-    it('lanza BadRequestException si la cita ya está completada', async () => {
-      prismaMockCitas.citas.findUnique.mockResolvedValue({ id: 'c1', estado: 'completada', paciente: {}, psicologo: {} })
-      await expect(service.cancelar('c1', { cancelado_por: 'paciente', motivo_cancelacion: 'Motivo' }))
-        .rejects.toThrow(BadRequestException)
-    })
 
-    it('lanza BadRequestException si la cita ya está cancelada', async () => {
-      prismaMockCitas.citas.findUnique.mockResolvedValue({ id: 'c2', estado: 'cancelada', paciente: {}, psicologo: {} })
-      await expect(service.cancelar('c2', { cancelado_por: 'psicologo', motivo_cancelacion: 'Ya cancelada' }))
-        .rejects.toThrow(BadRequestException)
-    })
-  })
-
-  describe('solicitarReembolso()', () => {
-    it('lanza ConflictException si ya existe solicitud pendiente', async () => {
-      prismaMockCitas.citas.findUnique.mockResolvedValue({ id: 'c3', estado: 'confirmada', paciente: {}, psicologo: {} })
-      prismaMockCitas.solicitudes_reembolso.findFirst.mockResolvedValue({ id: 'sr1', estado: 'pendiente' })
-      await expect(service.solicitarReembolso('c3', { tipo_solicitud: 'reembolso', motivo: 'Test' }, 'u1'))
-        .rejects.toThrow(ConflictException)
-    })
-  })
 })

@@ -20,6 +20,7 @@ import { PermisosGuard } from 'src/auth/guards/permisos.guard'
 import { Permisos }      from 'src/common/decorators/permisos.decorator'
 import { UsuarioActual } from 'src/common/decorators/usuario-actual.decorator'
 import { act_biblioteca_tipo, act_asignaciones_estado } from '@prisma/client'
+import { PsicologoOwnerHelper } from 'src/common/helpers/psicologo-owner.helper'
 
 
 @ApiTags('Actividades')
@@ -27,7 +28,10 @@ import { act_biblioteca_tipo, act_asignaciones_estado } from '@prisma/client'
 @UseGuards(JwtAuthGuard, PermisosGuard)
 @Controller('actividades')
 export class ActividadesController {
-  constructor(private readonly actividadesService: ActividadesService) {}
+  constructor(
+    private readonly actividadesService: ActividadesService,
+    private readonly psicologoOwner: PsicologoOwnerHelper,
+  ) {}
 
   // ── Biblioteca ────────────────────────────────────────────
 
@@ -92,9 +96,16 @@ export class ActividadesController {
   async listarAsignaciones(
     @Query('pacienteId') pacienteId?: string,
     @Query('estado')     estado?:     act_asignaciones_estado,
-
+    @UsuarioActual('sub') usuarioId?: string,
+    @UsuarioActual('rolNombre') rolNombre?: string,
   ) {
-    const datos = await this.actividadesService.listarAsignaciones(pacienteId, estado)
+    // Psicólogo solo ve asignaciones de sus propios pacientes
+    const pacientesFiltro = await this.psicologoOwner.pacientesAccesibles(usuarioId!, rolNombre!)
+    const datos = await this.actividadesService.listarAsignaciones(
+      pacienteId,
+      estado,
+      pacientesFiltro,
+    )
     return { mensaje: 'Asignaciones obtenidas correctamente', datos }
   }
 

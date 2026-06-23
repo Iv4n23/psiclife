@@ -1,9 +1,9 @@
 // src/pages/WebMedica.jsx
 import { useState, useEffect, useRef } from 'react'
-import { webMedicaApi } from '../services/api'
+import { webMedicaApi, resenasApi } from '../services/api'
 import { Spinner } from '../components/ui/index.jsx'
 import toast from 'react-hot-toast'
-import { Save, ImagePlus, X, Globe } from 'lucide-react'
+import { Save, ImagePlus, X, Globe, Star, Trash2, Eye } from 'lucide-react'
 import { getImageUrl } from '../utils/image'
 import { cleanPayload } from '../utils/payload'
 
@@ -84,7 +84,18 @@ export default function WebMedica() {
   const inputLogo = useRef()
   const inputDir = useRef()
 
+  // ── Estado de Reseñas ──────────────────────────────────────
+  const [resenas,          setResenas]          = useState([])
+  const [cargandoResenas,  setCargandoResenas]  = useState(false)
+  const [resenaDetalle,    setResenaDetalle]     = useState(null)
+  const [confirmarElim,    setConfirmarElim]     = useState(null)
+
   useEffect(() => { cargar() }, [])
+
+  // Cargar reseñas cuando se activa esa pestaña
+  useEffect(() => {
+    if (tabWeb === 'resenas') cargarResenas()
+  }, [tabWeb])
 
   const cargar = async () => {
     setCargando(true)
@@ -137,6 +148,24 @@ export default function WebMedica() {
       console.error('Error cargando Web Médica:', err)
       toast.error('No se pudo cargar la configuración de Web Médica')
     } finally { setCargando(false) }
+  }
+
+  const cargarResenas = async () => {
+    setCargandoResenas(true)
+    try {
+      const { data } = await resenasApi.listarTodas()
+      setResenas(data.datos)
+    } catch {} finally { setCargandoResenas(false) }
+  }
+
+  const eliminarResena = async (id) => {
+    try {
+      await resenasApi.eliminar(id)
+      toast.success('Reseña eliminada')
+      setConfirmarElim(null)
+      setResenaDetalle(null)
+      await cargarResenas()
+    } catch {}
   }
 
   const validar = () => {
@@ -272,7 +301,7 @@ export default function WebMedica() {
           { id: 'hero', label: 'Inicio (Hero)' },
           { id: 'nosotros', label: 'Director' },
           { id: 'secciones', label: 'Secciones & Visibilidad' },
-          { id: 'json', label: 'Edición Avanzada (FAQ, Testimonios)' }
+          { id: 'resenas', label: 'Reseñas' }
         ].map(t => (
           <button key={t.id} onClick={() => setTabWeb(t.id)}
             style={{ padding:'10px 20px', fontSize:13.5, background:'none', border:'none', cursor:'pointer',
@@ -682,72 +711,160 @@ export default function WebMedica() {
           </div>
         </div>
 
-        {/* TAB: Edición Avanzada JSON */}
-        <div style={{ display: tabWeb === 'json' ? 'block' : 'none' }}>
-          <div className="card" style={{ marginBottom: 20 }}>
-            <div className="card-header">
-              <span className="card-title">Edición Avanzada de Contenido</span>
-            </div>
-            <div className="card-body">
-              <div style={{ background: 'var(--warning-bg, #fffbe6)', border: '1px solid var(--warning, #faad14)',
-                borderRadius: 8, padding: '10px 14px', marginBottom: 20, fontSize: 13 }}>
-                ⚠️ Estos campos usan formato JSON. Cada sección es un arreglo de objetos. Respeta la estructura exacta.
-              </div>
+        {/* TAB: Reseñas */}
+        <div style={{ display: tabWeb === 'resenas' ? 'block' : 'none' }}>
 
-              <div className="form-group" style={{ marginBottom: 20 }}>
-                <label className="form-label">Cómo Funciona — Proceso</label>
-                <span className="form-hint" style={{ marginBottom: 6 }}>
-                  Formato: {`[{"paso":"1","titulo":"...","descripcion":"..."}]`}
-                </span>
-                <textarea className="form-control" rows={5} value={form.proceso_json}
-                  onChange={set('proceso_json')} style={{ fontFamily: 'monospace', fontSize: 12.5 }}
-                  placeholder={`[{"paso":"1","titulo":"Primera Consulta","descripcion":"..."},{"paso":"2","titulo":"Evaluación","descripcion":"..."}]`} />
-              </div>
-
-              <div className="form-group" style={{ marginBottom: 20 }}>
-                <label className="form-label">Para Quién</label>
-                <span className="form-hint" style={{ marginBottom: 6 }}>
-                  Formato: {`[{"emoji":"🧠","titulo":"...","descripcion":"..."}]`}
-                </span>
-                <textarea className="form-control" rows={5} value={form.para_quien_json}
-                  onChange={set('para_quien_json')} style={{ fontFamily: 'monospace', fontSize: 12.5 }}
-                  placeholder={`[{"emoji":"🧠","titulo":"Profesionales con estrés","descripcion":"..."}]`} />
-              </div>
-
-              <div className="form-group" style={{ marginBottom: 20 }}>
-                <label className="form-label">Testimonios</label>
-                <span className="form-hint" style={{ marginBottom: 6 }}>
-                  Formato: {`[{"nombre":"...","cargo":"...","texto":"...","rating":5}]`}
-                </span>
-                <textarea className="form-control" rows={5} value={form.testimonios_json}
-                  onChange={set('testimonios_json')} style={{ fontFamily: 'monospace', fontSize: 12.5 }}
-                  placeholder={`[{"nombre":"Ana García","cargo":"Paciente","texto":"Excelente atención...","rating":5}]`} />
-              </div>
-
-              <div className="form-group" style={{ marginBottom: 20 }}>
-                <label className="form-label">Preguntas Frecuentes (FAQ)</label>
-                <span className="form-hint" style={{ marginBottom: 6 }}>
-                  Formato: {`[{"pregunta":"...","respuesta":"..."}]`}
-                </span>
-                <textarea className="form-control" rows={5} value={form.faq_json}
-                  onChange={set('faq_json')} style={{ fontFamily: 'monospace', fontSize: 12.5 }}
-                  placeholder={`[{"pregunta":"¿Cuánto dura la sesión?","respuesta":"Las sesiones tienen una duración de 50 minutos."}]`} />
-              </div>
-
-              <div className="form-group" style={{ marginBottom: 20 }}>
-                <label className="form-label">Especialidades</label>
-                <span className="form-hint" style={{ marginBottom: 6 }}>
-                  Formato: {`[{"nombre":"...","descripcion":"...","imagen":"url"}]`}
-                </span>
-                <textarea className="form-control" rows={5} value={form.especialidades_json}
-                  onChange={set('especialidades_json')} style={{ fontFamily: 'monospace', fontSize: 12.5 }}
-                  placeholder={`[{"nombre":"Evaluación psicológica","descripcion":"Diagnóstico completo","imagen":"https://..."}]`} />
+          {/* Modal detalle reseña */}
+          {resenaDetalle && (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+              <div style={{ background: 'var(--surface)', borderRadius: 16, width: '100%', maxWidth: 560, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', overflow: 'hidden' }}>
+                <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ fontWeight: 700, fontSize: 16 }}>Detalle de reseña</div>
+                  <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setResenaDetalle(null)}><X size={15} /></button>
+                </div>
+                <div style={{ padding: '20px 24px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, fontSize: 13.5, marginBottom: 16 }}>
+                    <div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Paciente</div>
+                      <div style={{ fontWeight: 600 }}>
+                        {resenaDetalle.es_anonima ? <em style={{ color: 'var(--text-muted)' }}>Anónimo</em> : `${resenaDetalle.paciente?.nombres} ${resenaDetalle.paciente?.apellidos}`}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Psicólogo</div>
+                      <div style={{ fontWeight: 600 }}>{resenaDetalle.cita?.psicologo?.nombres} {resenaDetalle.cita?.psicologo?.apellidos}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Calificación</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {[1,2,3,4,5].map(n => <Star key={n} size={16} fill={n <= resenaDetalle.calificacion ? '#f59e0b' : 'none'} color={n <= resenaDetalle.calificacion ? '#f59e0b' : '#d1d5db'} />)}
+                        <span style={{ fontWeight: 700, color: '#f59e0b' }}>{resenaDetalle.calificacion}/5</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Fecha</div>
+                      <div>{new Date(resenaDetalle.creado_en).toLocaleDateString('es-PE', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Comentario</div>
+                    <div style={{ background: 'var(--surface-2)', borderRadius: 10, padding: '12px 16px', lineHeight: 1.7, minHeight: 60, fontSize: 13.5 }}>
+                      {resenaDetalle.texto || <em style={{ color: 'var(--text-muted)' }}>Sin comentario</em>}
+                    </div>
+                  </div>
+                  <div style={{ marginTop: 14 }}>
+                    <span className={`badge ${resenaDetalle.aprobada ? 'badge-success' : 'badge-warning'}`}>
+                      {resenaDetalle.aprobada ? '✓ Aprobada (visible en landing)' : '⏳ Pendiente de aprobación'}
+                    </span>
+                  </div>
+                </div>
+                <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                  <button className="btn btn-ghost" onClick={() => setResenaDetalle(null)}>Cerrar</button>
+                  <button className="btn btn-danger btn-sm"
+                    onClick={() => { setConfirmarElim(resenaDetalle.id); setResenaDetalle(null) }}>
+                    <Trash2 size={13} /> Eliminar reseña
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          )}
+
+          {/* Modal confirmación eliminar */}
+          {confirmarElim && (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+              <div style={{ background: 'var(--surface)', borderRadius: 14, width: '100%', maxWidth: 400, padding: 28, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+                <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 10 }}>¿Eliminar reseña?</div>
+                <p style={{ color: 'var(--text-secondary)', fontSize: 13.5, marginBottom: 20 }}>Esta acción no se puede deshacer.</p>
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                  <button className="btn btn-ghost" onClick={() => setConfirmarElim(null)}>Cancelar</button>
+                  <button className="btn btn-danger" onClick={() => eliminarResena(confirmarElim)}>Eliminar</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {cargandoResenas ? (
+            <div style={{ textAlign: 'center', padding: 40 }}><Spinner /></div>
+          ) : resenas.length === 0 ? (
+            <div className="card">
+              <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
+                <Star size={36} style={{ opacity: 0.3, marginBottom: 12 }} />
+                <div style={{ fontWeight: 600 }}>Sin reseñas todavía</div>
+                <div style={{ fontSize: 13, marginTop: 4 }}>Las reseñas de los pacientes aparecerán aquí.</div>
+              </div>
+            </div>
+          ) : (
+            <div className="card">
+              <div className="card-header">
+                <span className="card-title">Reseñas de pacientes</span>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)', background: 'var(--surface-2)', padding: '2px 10px', borderRadius: 20 }}>
+                  {resenas.length} reseña{resenas.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Paciente</th>
+                      <th>Psicólogo</th>
+                      <th>Calificación</th>
+                      <th>Comentario</th>
+                      <th>Estado</th>
+                      <th>Fecha</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resenas.map(r => (
+                      <tr key={r.id}>
+                        <td style={{ fontWeight: 500 }}>
+                          {r.es_anonima
+                            ? <em style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Anónimo</em>
+                            : `${r.paciente?.apellidos}, ${r.paciente?.nombres}`}
+                        </td>
+                        <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+                          {r.cita?.psicologo?.nombres} {r.cita?.psicologo?.apellidos}
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            {[1,2,3,4,5].map(n => (
+                              <Star key={n} size={12} fill={n <= r.calificacion ? '#f59e0b' : 'none'} color={n <= r.calificacion ? '#f59e0b' : '#d1d5db'} />
+                            ))}
+                            <span style={{ fontSize: 12, fontWeight: 700, color: '#f59e0b', marginLeft: 2 }}>{r.calificacion}</span>
+                          </div>
+                        </td>
+                        <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12.5, color: 'var(--text-secondary)' }}>
+                          {r.texto || <em style={{ color: 'var(--text-muted)' }}>—</em>}
+                        </td>
+                        <td>
+                          <span className={`badge ${r.aprobada ? 'badge-success' : 'badge-warning'}`}>
+                            {r.aprobada ? 'Aprobada' : 'Pendiente'}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                          {new Date(r.creado_en).toLocaleDateString('es-PE')}
+                        </td>
+                        <td>
+                          <div className="td-actions">
+                            <button className="btn btn-ghost btn-icon btn-sm" title="Ver detalle" onClick={() => setResenaDetalle(r)}>
+                              <Eye size={13} />
+                            </button>
+                            <button className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--danger)' }} title="Eliminar"
+                              onClick={() => setConfirmarElim(r.id)}>
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className="form-footer">
+        <div className="form-footer" style={{ display: tabWeb === 'resenas' ? 'none' : undefined }}>
           <button type="submit" className="btn btn-primary" disabled={guardando}>
             <Save size={15} />
             {guardando ? 'Guardando...' : 'Guardar información'}

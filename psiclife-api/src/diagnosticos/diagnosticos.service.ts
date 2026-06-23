@@ -55,8 +55,9 @@ export class DiagnosticosService {
   }
 
   // ── Diagnósticos de paciente ───────────────────────────────
-  async listarTodos() {
+  async listarTodos(psicologoId?: string) {
     return this.prisma.dx_diagnosticos.findMany({
+      where: psicologoId ? { psicologo_id: psicologoId } : undefined,
       include: {
         catalogo: true,
         paciente: { select: { nombres: true, apellidos: true, numero_documento: true } },

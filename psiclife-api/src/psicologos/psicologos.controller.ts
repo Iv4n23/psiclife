@@ -113,4 +113,12 @@ export class PsicologosController {
     const datos = await this.psicologosService.toggleActivo(id)
     return { mensaje: 'Estado actualizado', datos }
   }
+
+  @Delete(':id')
+  @Permisos('disponibilidad.editar')
+  @ApiOperation({ summary: 'Eliminar psicólogo' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  async eliminar(@Param('id', ParseUUIDPipe) id: string) {
+    return this.psicologosService.eliminar(id)
+  }
 }

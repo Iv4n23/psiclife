@@ -14,7 +14,8 @@ export function AuthProvider({ children }) {
     rolNombre: user?.rol ?? user?.rolNombre,
   })
 
-  // Al montar, intentar restaurar sesión desde localStorage
+  // Al montar, restaurar sesión desde localStorage y luego sincronizar
+  // el perfil desde el backend para reflejar cambios de rol/permisos
   useEffect(() => {
     // Interceptar acción de logout desde la URL antes de que el router intervenga
     const params = new URLSearchParams(window.location.search)
@@ -23,12 +24,8 @@ export function AuthProvider({ children }) {
       localStorage.removeItem('psiclife_user')
       document.cookie = 'psiclife_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
       
-      // Si el logout se ejecutó desde el iframe invisible de la landing, detenemos aquí.
       if (window !== window.top) return
-      
-      // Limpiar la URL para evitar bucles
       window.history.replaceState(null, '', window.location.pathname)
-      
       toast.success('Sesión cerrada correctamente')
       window.location.href = import.meta.env.VITE_LANDING_URL || 'http://localhost:5174'
       return
@@ -36,13 +33,47 @@ export function AuthProvider({ children }) {
 
     const token    = localStorage.getItem('psiclife_token')
     const userData = localStorage.getItem('psiclife_user')
-    if (token && userData) {
-      const parsedUser = JSON.parse(userData)
-      api.defaults.headers.common['Authorization'] = `Bearer ${token}`
-      setUsuario(normalizarUsuario(parsedUser))
-      // Sincronizar cookie para la landing
-      document.cookie = `psiclife_session=${encodeURIComponent(JSON.stringify(normalizarUsuario(parsedUser)))}; path=/; max-age=86400; SameSite=Lax`
+
+    if (!token || !userData) {
+      setCargando(false)
+      return
     }
+
+    // 1. Restaurar desde localStorage inmediatamente (evita flash de pantalla)
+    const parsedUser = JSON.parse(userData)
+    api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+    setUsuario(normalizarUsuario(parsedUser))
+
+    // 2. Sincronizar con el backend en background para recoger cambios de rol/permisos
+    // Usamos el endpoint de perfil existente para obtener el rol actualizado
+    api.get('/perfil').then(({ data }) => {
+      // El endpoint /perfil devuelve { id, correo, rol: { id, nombre, permisos } }
+      const perfilActualizado = data.datos ?? data
+      if (!perfilActualizado?.rol) return
+
+      const usuarioActualizado = normalizarUsuario({
+        ...parsedUser,
+        rol:      perfilActualizado.rol.nombre,
+        rolNombre: perfilActualizado.rol.nombre,
+        permisos: perfilActualizado.rol.permisos,
+      })
+
+      // Solo actualizar si algo cambió (evita renders innecesarios)
+      const cambioRol = parsedUser.rol !== perfilActualizado.rol.nombre
+      const cambioPermisos = JSON.stringify(parsedUser.permisos) !== JSON.stringify(perfilActualizado.rol.permisos)
+
+      if (cambioRol || cambioPermisos) {
+        localStorage.setItem('psiclife_user', JSON.stringify(usuarioActualizado))
+        document.cookie = `psiclife_session=${encodeURIComponent(JSON.stringify(usuarioActualizado))}; path=/; max-age=86400; SameSite=Lax`
+        setUsuario(usuarioActualizado)
+      }
+    }).catch(() => {
+      // Si falla (token expirado, etc.) no hacer nada — el backend rechazará
+      // el siguiente request autenticado y el usuario verá 401
+    })
+
+    // Sincronizar cookie para la landing
+    document.cookie = `psiclife_session=${encodeURIComponent(JSON.stringify(normalizarUsuario(parsedUser)))}; path=/; max-age=86400; SameSite=Lax`
     setCargando(false)
   }, [])
 

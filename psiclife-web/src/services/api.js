@@ -2,8 +2,10 @@
 import axios from 'axios'
 import toast from 'react-hot-toast'
 
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api/v1'
+
 const api = axios.create({
-  baseURL:         import.meta.env.VITE_API_URL,
+  baseURL:         API_BASE_URL,
   withCredentials: true,   // para cookies HttpOnly del refresh token
   timeout:         15000,
 })
@@ -43,11 +45,15 @@ api.interceptors.response.use(
       if (retryAfter) msg += ` Intenta nuevamente en ${retryAfter} segundos.`
     }
 
-    // Token expirado → intentar refresh automático
-    if (error.response?.status === 401) {
+    // Token expirado → intentar refresh automático (no en login/registro)
+    const requestUrl = error.config?.url ?? ''
+    const esAuthPublica = ['/auth/login', '/auth/registro', '/auth/recuperar-contrasena', '/auth/restablecer-contrasena']
+      .some((ruta) => requestUrl.includes(ruta))
+
+    if (error.response?.status === 401 && !esAuthPublica) {
       try {
         const { data } = await axios.post(
-          `${import.meta.env.VITE_API_URL}/auth/refresh`,
+          `${API_BASE_URL}/auth/refresh`,
           {},
           { withCredentials: true }
         )
@@ -134,6 +140,7 @@ export const webMedicaApi = {
 export const disponibilidadApi = {
   listarHorarios:   (psicId)  => api.get(`/disponibilidad/horarios/${psicId}`),
   crearHorario:     (data)    => api.post('/disponibilidad/horarios', data),
+  actualizarHorario:(id, d)   => api.patch(`/disponibilidad/horarios/${id}`, d),
   toggleHorario:    (id, d)   => api.patch(`/disponibilidad/horarios/${id}/disponibilidad`, d),
   eliminarHorario:  (id)      => api.delete(`/disponibilidad/horarios/${id}`),
   listarBloqueos:   (psicId)  => api.get(`/disponibilidad/bloqueos/${psicId}`),
@@ -176,6 +183,7 @@ export const psicologosApi = {
   actualizar:   (id, d)    => api.patch(`/psicologos/${id}`, d),
   subirFoto:    (id, form) => api.post(`/psicologos/${id}/foto`, form),
   toggleActivo: (id)       => api.patch(`/psicologos/${id}/toggle-activo`),
+  eliminar:     (id)       => api.delete(`/psicologos/${id}`),
 }
 
 export const citasApi = {
@@ -184,12 +192,9 @@ export const citasApi = {
   obtener:             (id)        => api.get(`/citas/${id}`),
   crear:               (data)      => api.post('/citas', data),
   actualizar:          (id, d)     => api.patch(`/citas/${id}`, d),
-  cancelar:            (id, d)     => api.patch(`/citas/${id}/cancelar`, d),
+  actualizarNotas:     (id, d)     => api.patch(`/citas/${id}/notas`, d),
   reprogramar:         (id, d)     => api.post(`/citas/${id}/reprogramar`, d),
   asistencia:          (id, d)     => api.post(`/citas/${id}/asistencia`, d),
-  solicitarReembolso:  (id, d)     => api.post(`/citas/${id}/reembolso`, d),
-  listarReembolsos:    (estado)    => api.get('/citas/reembolsos', { params: { estado } }),
-  resolverReembolso:   (solId, d)  => api.patch(`/citas/reembolsos/${solId}/resolver`, d),
   eliminar:            (id)        => api.delete(`/citas/${id}`),
 }
 
@@ -266,6 +271,8 @@ export const configuracionApi = {
 
 export const resenasApi = {
   listar:    () => api.get('/resenas'),
+  listarTodas: () => api.get('/resenas/todas'),
   miReseñas: () => api.get('/resenas/mis'),
   crear:     (data) => api.post('/resenas', data),
+  eliminar:  (id)   => api.delete(`/resenas/${id}`),
 }

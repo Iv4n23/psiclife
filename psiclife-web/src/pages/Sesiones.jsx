@@ -1,94 +1,53 @@
 // src/pages/Sesiones.jsx
-import { useState, useEffect } from 'react'
-import { citasApi, diagnosticosApi, evaluacionesApi, actividadesApi, pacientesApi } from '../services/api'
+import { useState, useEffect, useCallback } from 'react'
+import {
+  citasApi, diagnosticosApi, evaluacionesApi,
+  actividadesApi, pacientesApi,
+} from '../services/api'
 import { Spinner, EmptyState } from '../components/ui/index.jsx'
+import DrawerDiagnosticos from '../components/citas/DrawerDiagnosticos'
+import DrawerEvaluaciones from '../components/citas/DrawerEvaluaciones'
+import DrawerActividades  from '../components/citas/DrawerActividades'
 import toast from 'react-hot-toast'
-import { Calendar, User, Save, FileText, CheckCircle, Brain, ClipboardList, Activity, ExternalLink, Search, X, Pencil, Trash2, AlertTriangle } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import {
+  X, Save, CheckCircle, Brain, ClipboardList,
+  Activity, Calendar, Video, AlertTriangle, User, Search,
+} from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
 
+// ── Constantes ────────────────────────────────────────────────
+const ESTADO_BADGE = {
+  pendiente:    'badge-warning',
+  confirmada:   'badge-info',
+  completada:   'badge-success',
+  cancelada:    'badge-danger',
+  reprogramada: 'badge-muted',
+  no_asistio:   'badge-danger',
+}
+
+const ESTADOS_CLINICOS = ['pendiente', 'confirmada', 'completada']
+
+// ── Componente principal ──────────────────────────────────────
 export default function Sesiones() {
-  const [citas, setCitas] = useState([])
-  const [cargando, setCargando] = useState(true)
-  const [guardando, setGuardando] = useState(false)
-  const [detalle, setDetalle] = useState(null)
-  const [notasSesion, setNotasSesion] = useState('')
-  const [historialPaciente, setHistorialPaciente] = useState(null)
-  const [cargandoHistorial, setCargandoHistorial] = useState(false)
-  const [busqSesion, setBusqSesion] = useState('')
-  const [busqDx, setBusqDx] = useState('')
-  const [busqEva, setBusqEva] = useState('')
-  const [busqAct, setBusqAct] = useState('')
-  const navigate = useNavigate()
+  const { usuario } = useAuth()
+  const rawRol = typeof usuario?.rol === 'string' ? usuario.rol : typeof usuario?.rolNombre === 'string' ? usuario.rolNombre : ''
+  const esPsicologo = rawRol.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes('psicolog')
 
-  // Modales
-  const [modalDx, setModalDx] = useState(false)
-  const [modalEva, setModalEva] = useState(false)
-  const [modalAct, setModalAct] = useState(false)
+  const [citas,       setCitas]       = useState([])
+  const [cargando,    setCargando]    = useState(true)
+  const [guardando,   setGuardando]   = useState(false)
+  const [busqueda,    setBusqueda]    = useState('')
+  const [filtroPsicologo, setFiltroPsicologo] = useState('')
 
-  // Diccionarios para selectores
-  const [catalogosDx, setCatalogosDx] = useState([])
-  const [instrumentos, setInstrumentos] = useState([])
-  const [biblioteca, setBiblioteca] = useState([])
+  // ── Detalle / drawer ──────────────────────────────────────
+  const [citaActiva,  setCitaActiva]  = useState(null)
+  const [tab,         setTab]         = useState('notas')
+  const [notas,       setNotas]       = useState('')
+  const [lastSaved,   setLastSaved]   = useState(null)
 
-  // Formularios Modales
-  const [formDx, setFormDx] = useState({ catalogo_id: '', tipo: 'presuntivo', observaciones: '' })
-  const [formEva, setFormEva] = useState({ instrumento_id: '' })
-  const [formAct, setFormAct] = useState({ actividad_id: '', instrucciones: '', fecha_limite: '' })
-
-  // Diagnósticos de la sesión actual
-  const [dxSesion, setDxSesion]         = useState([])
-  const [editDxId, setEditDxId]         = useState(null)   // null = crear, id = editar
-  const [confirmElimDx, setConfirmElimDx] = useState(null) // id a eliminar
-
-  const catalogosFiltrados = catalogosDx.filter(d =>
-    d.codigo.toLowerCase().includes(busqDx.toLowerCase()) ||
-    d.nombre.toLowerCase().includes(busqDx.toLowerCase())
-  )
-
-  const historialEventos = historialPaciente ? [
-    ...(historialPaciente.citas || []).map(c => ({
-      id: `cita-${c.id}`,
-      fecha: c.programada_para,
-      tipo: 'cita',
-      titulo: `Sesión ${c.numero_sesion || ''}`.trim(),
-      resumen: `${c.modalidad || 'Sesión'} · ${c.estado || 'estado desconocido'}`,
-    })),
-    ...(historialPaciente.dx_diagnosticos || []).map(dx => ({
-      id: `dx-${dx.id}`,
-      fecha: dx.fecha_diagnostico,
-      tipo: 'diagnostico',
-      titulo: dx.catalogo?.codigo || 'Diagnóstico',
-      resumen: dx.catalogo?.nombre || 'Sin descripción',
-      meta: dx.tipo,
-    })),
-    ...(historialPaciente.act_asignaciones || []).map(act => ({
-      id: `act-${act.id}`,
-      fecha: act.creado_en || act.fecha_limite,
-      tipo: 'actividad',
-      titulo: act.actividad?.titulo || 'Actividad asignada',
-      resumen: `Estado: ${act.estado}${act.fecha_limite ? ` · Límite: ${new Date(act.fecha_limite).toLocaleDateString('es-PE')}` : ''}`,
-    })),
-  ].sort((a,b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()) : []
-
-  const formatFechaTimeline = (fecha) => fecha ? new Date(fecha).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' }) : '—'
-  const instrumentosFiltrados = instrumentos.filter(i =>
-    i.nombre.toLowerCase().includes(busqEva.toLowerCase()) ||
-    i.codigo_instrumento.toLowerCase().includes(busqEva.toLowerCase()) ||
-    (i.area_evaluada || '').toLowerCase().includes(busqEva.toLowerCase())
-  )
-  const bibliotecaFiltrada = biblioteca.filter(b =>
-    b.titulo.toLowerCase().includes(busqAct.toLowerCase()) ||
-    (b.tipo || '').toLowerCase().includes(busqAct.toLowerCase()) ||
-    (b.area_psicologica || '').toLowerCase().includes(busqAct.toLowerCase())
-  )
-  const sesionesFiltradas = citas.filter(c => {
-    const paciente = `${c.paciente?.nombres || ''} ${c.paciente?.apellidos || ''}`.toLowerCase()
-    return (
-      paciente.includes(busqSesion.toLowerCase()) ||
-      c.estado?.toLowerCase().includes(busqSesion.toLowerCase()) ||
-      new Date(c.programada_para).toLocaleString('es-PE').toLowerCase().includes(busqSesion.toLowerCase())
-    )
-  })
+  // ── Historial paciente ────────────────────────────────────
+  const [historial,   setHistorial]   = useState(null)
+  const [cargandoHx,  setCargandoHx]  = useState(false)
 
   useEffect(() => { cargar() }, [])
 
@@ -96,9 +55,8 @@ export default function Sesiones() {
     setCargando(true)
     try {
       const { data } = await citasApi.listar()
-      // Filtrar solo citas confirmadas o completadas que pueden tener una sesión
-      const validas = data.datos.filter(c => c.estado === 'confirmada' || c.estado === 'completada' || c.estado === 'pendiente')
-      setCitas(validas.reverse())
+      const validas = (data.datos ?? []).filter(c => ESTADOS_CLINICOS.includes(c.estado))
+      setCitas(validas)
     } catch {
       toast.error('Error al cargar sesiones')
     } finally {
@@ -106,540 +64,356 @@ export default function Sesiones() {
     }
   }
 
-  const verDetalle = async (id) => {
+  // Abrir detalle de una cita
+  const abrirDetalle = useCallback(async (cita) => {
     try {
-      const { data } = await citasApi.obtener(id)
-      setDetalle(data.datos)
-      setNotasSesion(data.datos.notas_sesion || '')
-      // Cargar diagnósticos asociados a este paciente y filtrar por cita
-      await cargarDxSesion(data.datos.paciente_id, id)
-      await cargarHistorialPaciente(data.datos.paciente_id)
+      const { data } = await citasApi.obtener(cita.id)
+      const c = data.datos
+      setCitaActiva(c)
+      setNotas(c.notas_sesion || '')
+      setLastSaved(null)
+      setTab('notas')
+      // Historial del paciente
+      setCargandoHx(true)
+      pacientesApi.historial(c.paciente_id)
+        .then(r => setHistorial(r.data.datos))
+        .catch(() => setHistorial(null))
+        .finally(() => setCargandoHx(false))
     } catch {
-      toast.error('Error al cargar detalle')
+      toast.error('Error al cargar detalle de la sesión')
     }
-  }
+  }, [])
 
-  const cargarDxSesion = async (pacienteId, citaId) => {
-    try {
-      const { data } = await diagnosticosApi.porPaciente(pacienteId)
-      const todos = data.datos || []
-      // Filtrar los que pertenecen a esta cita (cita_id puede ser null en diagnósticos old)
-      setDxSesion(todos.filter(d => d.cita_id === citaId))
-    } catch {
-      setDxSesion([])
-    }
-  }
-
-  const cargarHistorialPaciente = async (pacienteId) => {
-    if (!pacienteId) return
-    setCargandoHistorial(true)
-    try {
-      const { data } = await pacientesApi.historial(pacienteId)
-      setHistorialPaciente(data.datos)
-    } catch {
-      setHistorialPaciente(null)
-    } finally {
-      setCargandoHistorial(false)
-    }
-  }
+  // Autosave de notas cada 30s
+  useEffect(() => {
+    if (!citaActiva || ['completada', 'cancelada'].includes(citaActiva.estado)) return
+    const timer = setTimeout(async () => {
+      if (notas !== (citaActiva.notas_sesion || '')) {
+        try {
+          await citasApi.actualizarNotas(citaActiva.id, { notas_sesion: notas })
+          setLastSaved(new Date())
+        } catch {}
+      }
+    }, 30000)
+    return () => clearTimeout(timer)
+  }, [notas, citaActiva])
 
   const guardarNotas = async () => {
     setGuardando(true)
     try {
-      await citasApi.actualizar(detalle.id, { notas_sesion: notasSesion })
-      toast.success('Notas de sesión guardadas')
-      await verDetalle(detalle.id)
+      await citasApi.actualizarNotas(citaActiva.id, { notas_sesion: notas })
+      setLastSaved(new Date())
+      toast.success('Notas guardadas')
       await cargar()
     } catch {
       toast.error('Error al guardar notas')
-    } finally {
-      setGuardando(false)
-    }
+    } finally { setGuardando(false) }
   }
 
   const marcarCompletada = async () => {
+    if (!notas.trim()) return toast.error('Registra las notas clínicas antes de completar la sesión')
     setGuardando(true)
     try {
-      await citasApi.actualizar(detalle.id, { estado: 'completada' })
-      toast.success('Sesión marcada como completada')
-      await verDetalle(detalle.id)
+      await citasApi.actualizar(citaActiva.id, { estado: 'completada', notas_sesion: notas })
+      toast.success('Sesión completada')
+      await abrirDetalle(citaActiva)
       await cargar()
-    } catch {
-      toast.error('Error al actualizar estado')
-    } finally {
-      setGuardando(false)
-    }
+    } catch (e) {
+      toast.error(e.response?.data?.message || 'Error al completar sesión')
+    } finally { setGuardando(false) }
   }
 
-  // --- Accesos Rápidos (Gestión Clínica) ---
-  const abrirModalDx = async (dx = null) => {
-    setBusqDx('')
-    if (dx) {
-      // Modo edición: precargar datos
-      setEditDxId(dx.id)
-      setFormDx({ catalogo_id: dx.catalogo_id ?? '', tipo: dx.tipo ?? 'presuntivo', observaciones: dx.observaciones ?? '' })
-    } else {
-      setEditDxId(null)
-      setFormDx({ catalogo_id: '', tipo: 'presuntivo', observaciones: '' })
-    }
-    setModalDx(true)
-    try { const { data } = await diagnosticosApi.catalogo(''); setCatalogosDx(data.datos || []) } catch {}
-  }
+  // ── Filtros ───────────────────────────────────────────────
+  const citasFiltradas = citas.filter(c => {
+    const texto = `${c.paciente?.nombres} ${c.paciente?.apellidos} ${c.razon_consulta || ''}`.toLowerCase()
+    const matchBusqueda = texto.includes(busqueda.toLowerCase())
+    const matchPsic = !filtroPsicologo || c.psicologo_id === filtroPsicologo
+    return matchBusqueda && matchPsic
+  })
 
-  const guardarDx = async () => {
-    if (!formDx.catalogo_id) return toast.error('Selecciona un diagnóstico')
-    setGuardando(true)
-    try {
-      if (editDxId) {
-        // Editar diagnóstico existente
-        await diagnosticosApi.actualizar(editDxId, { tipo: formDx.tipo, observaciones: formDx.observaciones })
-        toast.success('Diagnóstico actualizado')
-      } else {
-        // Crear nuevo
-        await diagnosticosApi.crear({
-          paciente_id: detalle.paciente_id, psicologo_id: detalle.psicologo_id, cita_id: detalle.id,
-          fecha_diagnostico: new Date().toISOString(), ...formDx
-        })
-        toast.success('Diagnóstico enlazado a la cita')
-      }
-      setModalDx(false)
-      await cargarDxSesion(detalle.paciente_id, detalle.id)
-    } catch { toast.error('Error al guardar') } finally { setGuardando(false) }
-  }
+  // Lista única de psicólogos para el filtro (solo para admin)
+  const psicologosUnicos = [...new Map(
+    citas.filter(c => c.psicologo).map(c => [c.psicologo_id, c.psicologo])
+  ).values()]
 
-  const eliminarDx = async (id) => {
-    setGuardando(true)
-    try {
-      await diagnosticosApi.eliminar(id)
-      toast.success('Diagnóstico eliminado')
-      setConfirmElimDx(null)
-      await cargarDxSesion(detalle.paciente_id, detalle.id)
-    } catch { toast.error('Error al eliminar') } finally { setGuardando(false) }
-  }
+  const esSoloLectura = citaActiva && ['completada', 'cancelada'].includes(citaActiva.estado)
 
-  const abrirModalEva = async () => {
-    setModalEva(true); setFormEva({ instrumento_id: '' }); setBusqEva('')
-    try { const { data } = await evaluacionesApi.listarInstrumentos(); setInstrumentos(data.datos || []) } catch {}
-  }
-  const guardarEva = async () => {
-    if(!formEva.instrumento_id) return toast.error('Selecciona un instrumento')
-    setGuardando(true)
-    try {
-      await evaluacionesApi.crearAplicacion({
-        paciente_id: detalle.paciente_id, psicologo_id: detalle.psicologo_id, cita_id: detalle.id,
-        fecha_aplicacion: new Date().toISOString(), instrumento_id: formEva.instrumento_id
-      })
-      toast.success('Evaluación enlazada a la cita')
-      setModalEva(false)
-    } catch { toast.error('Error al guardar') } finally { setGuardando(false) }
-  }
+  // ── Historial eventos ─────────────────────────────────────
+  const historialEventos = historial ? [
+    ...(historial.citas || []).map(c => ({
+      id: `c-${c.id}`, fecha: c.programada_para, tipo: 'cita',
+      titulo: `Sesión ${c.numero_sesion || ''}`.trim(),
+      sub: `${c.modalidad} · ${c.estado}`,
+      color: 'var(--celeste)',
+    })),
+    ...(historial.dx_diagnosticos || []).map(dx => ({
+      id: `dx-${dx.id}`, fecha: dx.fecha_diagnostico, tipo: 'diagnostico',
+      titulo: dx.catalogo?.codigo || 'Dx',
+      sub: dx.catalogo?.nombre || '',
+      color: 'var(--info)',
+    })),
+    ...(historial.act_asignaciones || []).map(a => ({
+      id: `a-${a.id}`, fecha: a.creado_en, tipo: 'actividad',
+      titulo: a.actividad?.titulo || 'Actividad',
+      sub: `Estado: ${a.estado}`,
+      color: 'var(--success)',
+    })),
+  ].sort((a, b) => new Date(b.fecha) - new Date(a.fecha)).slice(0, 8) : []
 
-  const abrirModalAct = async () => {
-    setModalAct(true); setFormAct({ actividad_id: '', instrucciones: '', fecha_limite: '' }); setBusqAct('')
-    try { const { data } = await actividadesApi.listarBiblioteca(); setBiblioteca(data.datos || []) } catch {}
-  }
-  const guardarAct = async () => {
-    if(!formAct.actividad_id) return toast.error('Selecciona una actividad')
-    setGuardando(true)
-    try {
-      await actividadesApi.asignar({
-        paciente_id: detalle.paciente_id, psicologo_id: detalle.psicologo_id, cita_id: detalle.id,
-        fecha_asignacion: new Date().toISOString(), ...formAct
-      })
-      toast.success('Actividad enlazada a la cita')
-      setModalAct(false)
-    } catch { toast.error('Error al guardar') } finally { setGuardando(false) }
-  }
-
+  // ── Render ────────────────────────────────────────────────
   return (
-    <div className="page-enter" style={{ display: 'flex', gap: 24, height: 'calc(100vh - 120px)' }}>
-      {/* Lista de Sesiones */}
-      <div className="card" style={{ flex: '0 0 350px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <div className="card-header">
-          <span className="card-title">Historial de Sesiones</span>
-        </div>
-        <div style={{ padding: 12 }}>
-          <div className="search-box" style={{ marginBottom: 12 }}>
-            <Search className="search-icon" />
-            <input className="form-control" style={{ paddingLeft: 34 }}
-              placeholder="Buscar sesión por paciente, estado o fecha..."
-              value={busqSesion} onChange={e => setBusqSesion(e.target.value)} />
-          </div>
-        </div>
-        <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
-          {cargando ? <Spinner /> : citas.length === 0 ? (
-            <EmptyState titulo="Sin sesiones" descripcion="No hay sesiones registradas" />
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {sesionesFiltradas.map(c => (
-                <button key={c.id} onClick={() => verDetalle(c.id)} style={{
-                  textAlign: 'left', padding: 12, borderRadius: 8, border: '1px solid var(--border)',
-                  background: detalle?.id === c.id ? 'var(--surface-2)' : 'var(--surface)',
-                  cursor: 'pointer', transition: 'all 0.2s'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{c.paciente?.nombres} {c.paciente?.apellidos}</span>
-                    <span className={`badge ${c.estado === 'completada' ? 'badge-success' : 'badge-info'}`} style={{ fontSize: 10 }}>
-                      {c.estado}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <Calendar size={12} /> {new Date(c.programada_para).toLocaleString('es-PE')}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
+    <div className="page-enter" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 80px)', gap: 0 }}>
+
+      {/* Cabecera */}
+      <div className="section-header" style={{ marginBottom: 16 }}>
+        <div>
+          <div className="section-title">Sesiones Clínicas</div>
+          <div className="section-subtitle">Notas, diagnósticos, evaluaciones y actividades por sesión</div>
         </div>
       </div>
 
-      {/* Detalle de Sesión */}
-      <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        {detalle ? (
-          <>
-            <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <div>
-                <span className="card-title">Sesión con {detalle.paciente?.nombres} {detalle.paciente?.apellidos}</span>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-                  {new Date(detalle.programada_para).toLocaleString('es-PE')} — {detalle.modalidad}
-                </div>
-                {detalle.modalidad === 'virtual' && (
-                  <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-secondary)' }}>
-                    {(() => {
-                      const [plataforma, enlace] = detalle.enlace_reunion?.includes('::')
-                        ? detalle.enlace_reunion.split('::')
-                        : [detalle.plataforma_virtual || 'Zoom', detalle.enlace_reunion || '']
-                      return (
-                        <>
-                          <div><b>Medio:</b> {plataforma}</div>
-                          <div><b>Enlace / contacto:</b> {enlace || '—'}</div>
-                        </>
-                      )
-                    })()}
-                  </div>
-                )}
-              </div>
-              {detalle.estado !== 'completada' && (
-                <button className="btn btn-success btn-sm" onClick={marcarCompletada} disabled={guardando}>
-                  <CheckCircle size={14} /> Marcar Completada
-                </button>
-              )}
+      <div style={{ display: 'flex', gap: 20, flex: 1, minHeight: 0 }}>
+
+        {/* ── Panel izquierdo: lista ── */}
+        <div className="card" style={{ flex: '0 0 340px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {/* Filtros */}
+          <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ position: 'relative' }}>
+              <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
+              <input
+                className="form-control"
+                style={{ paddingLeft: 32, fontSize: 13 }}
+                placeholder="Buscar paciente o motivo..."
+                value={busqueda}
+                onChange={e => setBusqueda(e.target.value)}
+              />
             </div>
-            
-            <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.8fr', gap: 20, alignItems: 'start' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-                  <div className="form-group" style={{ display: 'flex', flexDirection: 'column', marginBottom: 0 }}>
-                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <FileText size={16} /> Notas de la sesión
-                    </label>
-                    <textarea 
-                      className="form-control" 
-                      style={{ flex: 1, resize: 'vertical', minHeight: 260 }} 
-                      value={notasSesion} 
-                      onChange={e => setNotasSesion(e.target.value)}
-                      placeholder="Registra aquí las notas clínicas, observaciones y conclusiones de la sesión..."
-                    />
-                    <div style={{ marginTop: 12, textAlign: 'right' }}>
-                      <button className="btn btn-primary" onClick={guardarNotas} disabled={guardando}>
-                        <Save size={14} /> {guardando ? 'Guardando...' : 'Guardar Notas'}
-                      </button>
-                    </div>
-                  </div>
+            {!esPsicologo && psicologosUnicos.length > 1 && (
+              <select
+                className="form-control"
+                style={{ fontSize: 13 }}
+                value={filtroPsicologo}
+                onChange={e => setFiltroPsicologo(e.target.value)}
+              >
+                <option value="">Todos los psicólogos</option>
+                {psicologosUnicos.map(p => (
+                  <option key={p.id} value={p.id}>{p.apellidos}, {p.nombres}</option>
+                ))}
+              </select>
+            )}
+          </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <h4 style={{ margin: 0, fontSize: 14 }}>Gestión Clínica del Paciente</h4>
-                    </div>
-                    <div className="stats-grid" style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 0 }}>
-                      <div className="stat-card" style={{ cursor: 'pointer', width: '100%' }} onClick={() => abrirModalDx()}>
-                        <div className="stat-icon" style={{ background: 'var(--info-bg)' }}><Brain size={18} color="var(--info)"/></div>
-                        <div>
-                          <div className="stat-num" style={{ fontSize: 15, display: 'flex', alignItems: 'center', gap: 6 }}>
-                            Diagnósticos <ExternalLink size={12} />
-                          </div>
-                          <div className="stat-label">Asignar diagnóstico CIE-10/DSM-5 a esta sesión</div>
+          {/* Lista */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: 10 }}>
+            {cargando ? <Spinner /> : citasFiltradas.length === 0 ? (
+              <EmptyState titulo="Sin sesiones" descripcion="No hay sesiones que coincidan" />
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {citasFiltradas
+                  .sort((a, b) => new Date(b.programada_para) - new Date(a.programada_para))
+                  .map(c => {
+                    const activa = citaActiva?.id === c.id
+                    const esVirtualSinEnlace = c.modalidad === 'virtual' && !c.enlace_reunion && c.estado !== 'completada'
+                    return (
+                      <button
+                        key={c.id}
+                        onClick={() => abrirDetalle(c)}
+                        style={{
+                          textAlign: 'left', padding: '10px 12px', borderRadius: 10,
+                          border: `1.5px solid ${activa ? 'var(--celeste)' : esVirtualSinEnlace ? 'var(--warning)' : 'var(--border)'}`,
+                          background: activa ? 'var(--celeste-light)' : 'var(--surface)',
+                          cursor: 'pointer', transition: 'all 0.15s',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6, marginBottom: 4 }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                            {c.paciente?.nombres} {c.paciente?.apellidos}
+                          </span>
+                          <span className={`badge ${ESTADO_BADGE[c.estado] || 'badge-muted'}`} style={{ fontSize: 10, flexShrink: 0 }}>
+                            {c.estado}
+                          </span>
                         </div>
-                      </div>
-                      <div className="stat-card" style={{ cursor: 'pointer', width: '100%' }} onClick={abrirModalEva}>
-                        <div className="stat-icon" style={{ background: 'var(--warning-bg)' }}><ClipboardList size={18} color="var(--warning)"/></div>
-                        <div>
-                          <div className="stat-num" style={{ fontSize: 15, display: 'flex', alignItems: 'center', gap: 6 }}>
-                            Evaluaciones <ExternalLink size={12} />
-                          </div>
-                          <div className="stat-label">Aplicar pruebas e instrumentos psicométricos</div>
+                        <div style={{ fontSize: 11.5, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Calendar size={11} />
+                          {new Date(c.programada_para).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })}
+                          {c.modalidad === 'virtual' && <Video size={11} style={{ marginLeft: 4 }} color="var(--info)" />}
                         </div>
-                      </div>
-                      <div className="stat-card" style={{ cursor: 'pointer', width: '100%' }} onClick={abrirModalAct}>
-                        <div className="stat-icon" style={{ background: 'var(--success-bg)' }}><Activity size={18} color="var(--success)"/></div>
-                        <div>
-                          <div className="stat-num" style={{ fontSize: 15, display: 'flex', alignItems: 'center', gap: 6 }}>
-                            Actividades <ExternalLink size={12} />
-                          </div>
-                          <div className="stat-label">Asignar lecturas, ejercicios o tareas</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Lista de diagnósticos de esta sesión */}
-                    {dxSesion.length > 0 && (
-                      <div style={{ marginTop: 4 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 8 }}>Diagnósticos de esta sesión</div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                          {dxSesion.map(dx => {
-                            const tipoBadge = { presuntivo: 'badge-info', principal: 'badge-success', secundario: 'badge-warning', descartado: 'badge-muted' }
-                            return (
-                              <div key={dx.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface-2)' }}>
-                                <Brain size={15} color="var(--info)" style={{ marginTop: 2, flexShrink: 0 }} />
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                                    <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-primary)' }}>{dx.catalogo?.codigo}</span>
-                                    <span className={`badge ${tipoBadge[dx.tipo] || 'badge-muted'}`} style={{ fontSize: 10 }}>{dx.tipo}</span>
-                                  </div>
-                                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{dx.catalogo?.nombre}</div>
-                                  {dx.observaciones && <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 3, fontStyle: 'italic' }}>{dx.observaciones}</div>}
-                                </div>
-                                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                                  <button className="btn btn-ghost btn-sm btn-icon" title="Editar" onClick={() => abrirModalDx(dx)}>
-                                    <Pencil size={13} />
-                                  </button>
-                                  <button className="btn btn-ghost btn-sm btn-icon" title="Eliminar"
-                                    style={{ color: 'var(--danger)' }}
-                                    onClick={() => setConfirmElimDx(dx.id)}>
-                                    <Trash2 size={13} />
-                                  </button>
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignSelf: 'stretch' }}>
-                  <div className="card" style={{ padding: 14, border: '1px solid var(--border)', background: 'var(--surface-2)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                      <div>
-                        <div style={{ fontSize: 14, fontWeight: 700 }}>Historial del Paciente</div>
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Línea de tiempo de citas, diagnósticos y actividades recientes</div>
-                      </div>
-                      {cargandoHistorial && <Spinner size={18} />}
-                    </div>
-                    {historialPaciente ? (
-                      historialEventos.length > 0 ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                          {historialEventos.slice(0, 6).map(evento => (
-                            <div key={evento.id} style={{ padding: 10, borderRadius: 10, background: 'var(--surface)', border: '1px solid var(--border)' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-                                <span style={{ fontSize: 13, fontWeight: 700 }}>{evento.titulo}</span>
-                                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{formatFechaTimeline(evento.fecha)}</span>
-                              </div>
-                              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>{evento.resumen}</div>
-                              {evento.meta && <div style={{ marginTop: 4, fontSize: 11, color: 'var(--text-muted)' }}>{evento.meta}</div>}
-                            </div>
-                          ))}
-                          {historialEventos.length > 6 && (
-                            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
-                              Mostrando los 6 eventos más recientes de {historialEventos.length}.
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No hay eventos clínicos registrados aún para este paciente.</div>
-                      )
-                    ) : (
-                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Selecciona una sesión para cargar el historial del paciente.</div>
-                    )}
-                  </div>
-
-                  {/* Modal Confirmar Eliminación Diagnóstico */}
-                  {confirmElimDx && (
-                    <div className="modal-overlay">
-                      <div className="modal" style={{ maxWidth: 380 }}>
-                        <div className="modal-icon modal-icon-danger"><AlertTriangle size={22} /></div>
-                        <div className="modal-title">Eliminar Diagnóstico</div>
-                        <div className="modal-desc">¿Estás seguro de que deseas eliminar este diagnóstico? Esta acción no se puede deshacer.</div>
-                        <div className="modal-actions">
-                          <button className="btn btn-ghost" onClick={() => setConfirmElimDx(null)} disabled={guardando}>Cancelar</button>
-                          <button className="btn btn-danger" onClick={() => eliminarDx(confirmElimDx)} disabled={guardando}>
-                            {guardando ? 'Eliminando...' : 'Sí, eliminar'}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {modalDx && (
-                    <div className="modal-overlay">
-                      <div className="modal" style={{ width: 500, maxWidth: '90vw' }}>
-                        <div className="modal-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                          {editDxId ? 'Editar Diagnóstico' : 'Añadir Diagnóstico'}
-                          <button className="btn btn-ghost btn-sm" onClick={() => setModalDx(false)}><X size={16} /></button>
-                        </div>
-
-                        {/* En modo edición: mostrar diagnóstico seleccionado como solo lectura */}
-                        {editDxId ? (
-                          <div style={{ padding: '10px 14px', background: 'var(--surface-2)', borderRadius: 8, border: '1px solid var(--border)', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <Brain size={16} color="var(--info)" />
-                            <div>
-                              <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-primary)' }}>
-                                {catalogosDx.find(d => d.id === formDx.catalogo_id)?.codigo ?? '—'}
-                              </div>
-                              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                                {catalogosDx.find(d => d.id === formDx.catalogo_id)?.nombre ?? 'Diagnóstico seleccionado'}
-                              </div>
-                            </div>
-                            <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>Solo tipo y observaciones editables</span>
-                          </div>
-                        ) : (
-                          /* En modo creación: mostrar buscador */
-                          <div className="form-group">
-                            <label className="form-label">Diagnóstico</label>
-                            <div className="search-box" style={{ marginBottom: 10 }}>
-                              <Search className="search-icon" />
-                              <input className="form-control" style={{ paddingLeft: 34 }}
-                                placeholder="Buscar diagnóstico..." value={busqDx}
-                                onChange={e => setBusqDx(e.target.value)} />
-                            </div>
-                            <div className="search-results">
-                              {catalogosFiltrados.length > 0 ? catalogosFiltrados.map(d => (
-                                <button key={d.id} type="button" className="search-result-item"
-                                  style={{
-                                    background: formDx.catalogo_id === d.id ? 'var(--surface-2)' : 'transparent',
-                                    borderLeft: formDx.catalogo_id === d.id ? '3px solid var(--celeste)' : '3px solid transparent'
-                                  }}
-                                  onClick={() => setFormDx({...formDx, catalogo_id: d.id})}>
-                                  <div style={{ fontWeight: 600 }}>{d.codigo}</div>
-                                  <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{d.nombre}</div>
-                                </button>
-                              )) : (
-                                <div className="search-empty">Sin resultados</div>
-                              )}
-                            </div>
+                        {c.razon_consulta && (
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {c.razon_consulta}
                           </div>
                         )}
+                        {esVirtualSinEnlace && (
+                          <div style={{ fontSize: 11, color: 'var(--warning)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <AlertTriangle size={11} /> Sin enlace asignado
+                          </div>
+                        )}
+                      </button>
+                    )
+                  })}
+              </div>
+            )}
+          </div>
+        </div>
 
-                        <div className="form-group">
-                          <label className="form-label">Tipo</label>
-                          <select className="form-control" value={formDx.tipo} onChange={e => setFormDx({...formDx, tipo: e.target.value})}>
-                            <option value="presuntivo">Presuntivo</option>
-                            <option value="principal">Principal</option>
-                            <option value="secundario">Secundario</option>
-                            <option value="descartado">Descartado</option>
-                          </select>
-                        </div>
-                        <div className="form-group" style={{ marginBottom: 20 }}>
-                          <label className="form-label">Observaciones</label>
-                          <textarea className="form-control" value={formDx.observaciones} onChange={e => setFormDx({...formDx, observaciones: e.target.value})} />
-                        </div>
-                        <div className="modal-actions">
-                          <button className="btn btn-ghost" onClick={() => setModalDx(false)}>Cancelar</button>
-                          <button className="btn btn-primary" onClick={guardarDx} disabled={guardando}>
-                            {guardando ? 'Guardando...' : editDxId ? 'Actualizar' : 'Guardar Diagnóstico'}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
+        {/* ── Panel derecho: detalle clínico ── */}
+        {!citaActiva ? (
+          <div className="card" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <EmptyState
+              titulo="Selecciona una sesión"
+              descripcion="Haz clic en una sesión de la lista para ver y gestionar su contenido clínico"
+            />
+          </div>
+        ) : (
+          <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+            {/* Cabecera del detalle */}
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                  <span style={{ fontWeight: 700, fontSize: 16 }}>
+                    {citaActiva.paciente?.nombres} {citaActiva.paciente?.apellidos}
+                  </span>
+                  <span className={`badge ${ESTADO_BADGE[citaActiva.estado] || 'badge-muted'}`}>
+                    {citaActiva.estado}
+                  </span>
+                </div>
+                <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  <span>{new Date(citaActiva.programada_para).toLocaleString('es-PE')}</span>
+                  {citaActiva.psicologo && (
+                    <span><b>Psicólogo:</b> {citaActiva.psicologo.nombres} {citaActiva.psicologo.apellidos}</span>
                   )}
-
-                  {modalEva && (
-                    <div className="modal-overlay">
-                      <div className="modal" style={{ width: 500, maxWidth: '90vw' }}>
-                        <div className="modal-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                          Aplicar Evaluación
-                          <button className="btn btn-ghost btn-sm" onClick={() => setModalEva(false)}><X size={16} /></button>
-                        </div>
-                        <div className="form-group" style={{ marginBottom: 20 }}>
-                          <label className="form-label">Instrumento Psicométrico</label>
-                          <div className="search-box" style={{ marginBottom: 10 }}>
-                            <Search className="search-icon" />
-                            <input className="form-control" style={{ paddingLeft: 34 }}
-                              placeholder="Buscar instrumento..." value={busqEva}
-                              onChange={e => setBusqEva(e.target.value)} />
-                          </div>
-                          <div className="search-results">
-                            {instrumentosFiltrados.length > 0 ? instrumentosFiltrados.map(i => (
-                              <button key={i.id} type="button" className="search-result-item"
-                                style={{
-                                  background: formEva.instrumento_id === i.id ? 'var(--surface-2)' : 'transparent',
-                                  borderLeft: formEva.instrumento_id === i.id ? '3px solid var(--warning)' : '3px solid transparent'
-                                }}
-                                onClick={() => setFormEva({...formEva, instrumento_id: i.id})}>
-                                <div style={{ fontWeight: 600 }}>{i.codigo_instrumento}</div>
-                                <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{i.nombre}</div>
-                              </button>
-                            )) : (
-                              <div className="search-empty">Sin resultados</div>
-                            )}
-                          </div>
-                        </div>
-                        <div className="modal-actions">
-                          <button className="btn btn-ghost" onClick={() => setModalEva(false)}>Cancelar</button>
-                          <button className="btn btn-primary" onClick={guardarEva} disabled={guardando}>Asignar Instrumento</button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {modalAct && (
-                    <div className="modal-overlay">
-                      <div className="modal" style={{ width: 500, maxWidth: '90vw' }}>
-                        <div className="modal-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                          Asignar Actividad Terapéutica
-                          <button className="btn btn-ghost btn-sm" onClick={() => setModalAct(false)}><X size={16} /></button>
-                        </div>
-                        <div className="form-group">
-                          <label className="form-label">Actividad de Biblioteca</label>
-                          <div className="search-box" style={{ marginBottom: 10 }}>
-                            <Search className="search-icon" />
-                            <input className="form-control" style={{ paddingLeft: 34 }}
-                              placeholder="Buscar actividad..." value={busqAct}
-                              onChange={e => setBusqAct(e.target.value)} />
-                          </div>
-                          <div className="search-results">
-                            {bibliotecaFiltrada.length > 0 ? bibliotecaFiltrada.map(b => (
-                              <button key={b.id} type="button" className="search-result-item"
-                                style={{
-                                  background: formAct.actividad_id === b.id ? 'var(--surface-2)' : 'transparent',
-                                  borderLeft: formAct.actividad_id === b.id ? '3px solid var(--success)' : '3px solid transparent'
-                                }}
-                                onClick={() => setFormAct({...formAct, actividad_id: b.id})}>
-                                <div style={{ fontWeight: 600 }}>{b.titulo}</div>
-                                <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{b.tipo || 'Actividad'}</div>
-                              </button>
-                            )) : (
-                              <div className="search-empty">Sin resultados</div>
-                            )}
-                          </div>
-                        </div>
-                        <div className="form-group">
-                          <label className="form-label">Instrucciones</label>
-                          <textarea className="form-control" value={formAct.instrucciones} onChange={e => setFormAct({...formAct, instrucciones: e.target.value})} />
-                        </div>
-                        <div className="form-group" style={{ marginBottom: 20 }}>
-                          <label className="form-label">Fecha Límite</label>
-                          <input type="date" className="form-control" value={formAct.fecha_limite} onChange={e => setFormAct({...formAct, fecha_limite: e.target.value})} />
-                        </div>
-                        <div className="modal-actions">
-                          <button className="btn btn-ghost" onClick={() => setModalAct(false)}>Cancelar</button>
-                          <button className="btn btn-primary" onClick={guardarAct} disabled={guardando}>Guardar Actividad</button>
-                        </div>
-                      </div>
-                    </div>
+                  {citaActiva.modalidad === 'virtual' && (
+                    <span style={{ color: 'var(--info)', display: 'flex', alignItems: 'center', gap: 3 }}>
+                      <Video size={12} />
+                      {citaActiva.enlace_reunion
+                        ? citaActiva.enlace_reunion.split('::')[0]
+                        : <span style={{ color: 'var(--warning)' }}>Sin enlace</span>}
+                    </span>
                   )}
                 </div>
               </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                {!esSoloLectura && (
+                  <>
+                    <button className="btn btn-ghost btn-sm" onClick={guardarNotas} disabled={guardando}
+                      style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <Save size={13} /> Guardar notas
+                    </button>
+                    <button className="btn btn-success btn-sm" onClick={marcarCompletada} disabled={guardando}
+                      style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <CheckCircle size={13} /> Completar sesión
+                    </button>
+                  </>
+                )}
+                <button onClick={() => setCitaActiva(null)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}>
+                  <X size={18} />
+                </button>
+              </div>
             </div>
-          </>
-        ) : (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <EmptyState titulo="Selecciona una sesión" descripcion="Elige una cita del panel izquierdo para ver o registrar sus detalles." />
+
+            {/* Pestañas */}
+            <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', padding: '0 20px', background: 'var(--surface)' }}>
+              {[
+                { id: 'notas',         label: 'Notas' },
+                { id: 'diagnosticos',  label: 'Diagnósticos' },
+                { id: 'evaluaciones',  label: 'Evaluaciones' },
+                { id: 'actividades',   label: 'Actividades' },
+                { id: 'historial',     label: 'Historial' },
+              ].map(t => (
+                <button key={t.id} onClick={() => setTab(t.id)} style={{
+                  padding: '11px 15px', background: 'none', border: 'none',
+                  borderBottom: tab === t.id ? '2px solid var(--celeste)' : '2px solid transparent',
+                  color: tab === t.id ? 'var(--celeste)' : 'var(--text-secondary)',
+                  fontWeight: tab === t.id ? 600 : 400, cursor: 'pointer', fontSize: 13,
+                }}>
+                  {t.label}
+                </button>
+              ))}
+              {!esSoloLectura && lastSaved && (
+                <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)', alignSelf: 'center', paddingRight: 4 }}>
+                  Guardado: {lastSaved.toLocaleTimeString()}
+                </span>
+              )}
+            </div>
+
+            {/* Contenido de las pestañas */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+
+              {/* ── Notas ── */}
+              {tab === 'notas' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14, height: '100%' }}>
+                  <div className="form-group">
+                    <label className="form-label">Razón de la consulta</label>
+                    <input type="text" className="form-control" value={citaActiva.razon_consulta || ''} readOnly disabled />
+                  </div>
+                  <div className="form-group" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                    <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Notas clínicas</span>
+                      <span style={{ fontSize: 11, color: notas.length > 5000 ? 'var(--danger)' : 'var(--text-muted)' }}>
+                        {notas.length}/5000
+                      </span>
+                    </label>
+                    <textarea
+                      className="form-control"
+                      style={{ flex: 1, resize: 'none', minHeight: 340 }}
+                      value={notas}
+                      readOnly={esSoloLectura}
+                      onChange={e => setNotas(e.target.value)}
+                      placeholder="Registra aquí las notas clínicas, observaciones y conclusiones de la sesión..."
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* ── Diagnósticos ── */}
+              {tab === 'diagnosticos' && (
+                <DrawerDiagnosticos cita={citaActiva} esSoloLectura={esSoloLectura} />
+              )}
+
+              {/* ── Evaluaciones ── */}
+              {tab === 'evaluaciones' && (
+                <DrawerEvaluaciones cita={citaActiva} esSoloLectura={esSoloLectura} />
+              )}
+
+              {/* ── Actividades ── */}
+              {tab === 'actividades' && (
+                <DrawerActividades cita={citaActiva} esSoloLectura={esSoloLectura} />
+              )}
+
+              {/* ── Historial del paciente ── */}
+              {tab === 'historial' && (
+                <div>
+                  {cargandoHx ? <Spinner /> : historialEventos.length === 0 ? (
+                    <EmptyState titulo="Sin historial" descripcion="No hay eventos clínicos previos para este paciente" />
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {historialEventos.map(ev => (
+                        <div key={ev.id} style={{
+                          padding: '10px 14px', borderRadius: 10,
+                          background: 'var(--surface-2)', border: '1px solid var(--border)',
+                          borderLeft: `3px solid ${ev.color}`,
+                          display: 'flex', flexDirection: 'column', gap: 3,
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontWeight: 600, fontSize: 13 }}>{ev.titulo}</span>
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                              {new Date(ev.fecha).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })}
+                            </span>
+                          </div>
+                          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{ev.sub}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+            </div>
           </div>
         )}
       </div>
-
     </div>
   )
 }

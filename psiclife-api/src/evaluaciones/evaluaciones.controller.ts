@@ -14,13 +14,17 @@ import { JwtAuthGuard }  from 'src/auth/guards/jwt-auth.guard'
 import { PermisosGuard } from 'src/auth/guards/permisos.guard'
 import { Permisos }      from 'src/common/decorators/permisos.decorator'
 import { UsuarioActual } from 'src/common/decorators/usuario-actual.decorator'
+import { PsicologoOwnerHelper } from 'src/common/helpers/psicologo-owner.helper'
 
 @ApiTags('Evaluaciones')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermisosGuard)
 @Controller('evaluaciones')
 export class EvaluacionesController {
-  constructor(private readonly evaluacionesService: EvaluacionesService) {}
+  constructor(
+    private readonly evaluacionesService: EvaluacionesService,
+    private readonly psicologoOwner: PsicologoOwnerHelper,
+  ) {}
 
   // ── Instrumentos ──────────────────────────────────────────
 
@@ -80,8 +84,11 @@ export class EvaluacionesController {
   async listarAplicaciones(
     @Query('pacienteId')  pacienteId?:  string,
     @Query('psicologoId') psicologoId?: string,
+    @UsuarioActual('sub') usuarioId?:   string,
+    @UsuarioActual('rolNombre') rolNombre?: string,
   ) {
-    const datos = await this.evaluacionesService.listarAplicaciones(pacienteId, psicologoId)
+    const psicFiltro = await this.psicologoOwner.filtrarPorPsicologo(psicologoId, usuarioId!, rolNombre!)
+    const datos = await this.evaluacionesService.listarAplicaciones(pacienteId, psicFiltro)
     return { mensaje: 'Aplicaciones obtenidas correctamente', datos }
   }
 
@@ -99,14 +106,10 @@ export class EvaluacionesController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: any,
   ) {
-    const respuestas = Array.isArray(body)
-      ? body
-      : body?.respuestas
-
+    const respuestas = Array.isArray(body) ? body : body?.respuestas
     if (!Array.isArray(respuestas)) {
       throw new BadRequestException('El campo respuestas debe ser un arreglo')
     }
-
     const datos = await this.evaluacionesService.completarPaciente(id, respuestas)
     return { mensaje: 'Evaluación enviada con éxito', datos }
   }
@@ -115,15 +118,27 @@ export class EvaluacionesController {
   @Permisos('evaluaciones.ver')
   @ApiOperation({ summary: 'Obtener aplicación con respuestas' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  async buscarAplicacion(@Param('id', ParseUUIDPipe) id: string) {
+  async buscarAplicacion(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UsuarioActual('sub') usuarioId: string,
+    @UsuarioActual('rolNombre') rolNombre: string,
+  ) {
     const datos = await this.evaluacionesService.buscarAplicacion(id)
+    if (datos?.paciente_id) {
+      await this.psicologoOwner.verificarAccesoPaciente(datos.paciente_id, usuarioId, rolNombre)
+    }
     return { mensaje: 'Aplicación obtenida correctamente', datos }
   }
 
   @Post('aplicaciones')
   @Permisos('evaluaciones.crear')
   @ApiOperation({ summary: 'Asignar evaluación a un paciente' })
-  async crearAplicacion(@Body() dto: CrearAplicacionDto) {
+  async crearAplicacion(
+    @Body() dto: CrearAplicacionDto,
+    @UsuarioActual('sub') usuarioId: string,
+    @UsuarioActual('rolNombre') rolNombre: string,
+  ) {
+    await this.psicologoOwner.verificarAccesoPaciente(dto.paciente_id, usuarioId, rolNombre)
     const datos = await this.evaluacionesService.crearAplicacion(dto)
     return { mensaje: 'Evaluación asignada correctamente', datos }
   }
@@ -156,9 +171,7 @@ export class EvaluacionesController {
   @Permisos('evaluaciones.eliminar')
   @ApiOperation({ summary: 'Anular una aplicación' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  async anular(
-    @Param('id', ParseUUIDPipe) id: string,
-  ) {
+  async anular(@Param('id', ParseUUIDPipe) id: string) {
     const datos = await this.evaluacionesService.anularAplicacion(id)
     return { mensaje: 'Evaluación anulada correctamente', datos }
   }

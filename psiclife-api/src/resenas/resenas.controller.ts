@@ -1,8 +1,10 @@
-import { Controller, Get, Post, Body, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Param, ParseUUIDPipe, Body, UseGuards } from '@nestjs/common';
 import { ResenasService } from './resenas.service';
 import { CrearResenaDto } from './dto/crear-resena.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { Request } from 'express';
+import { UsuarioActual } from '../common/decorators/usuario-actual.decorator';
+import { Permisos } from '../common/decorators/permisos.decorator';
+import { PermisosGuard } from '../auth/guards/permisos.guard';
 
 @Controller('resenas')
 export class ResenasController {
@@ -15,18 +17,30 @@ export class ResenasController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Get('todas')
+  async listarTodas() {
+    const datos = await this.resenasService.listarTodas();
+    return { datos, mensaje: 'Reseñas obtenidas correctamente' };
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get('mis')
-  async misResenas(@Req() req: Request) {
-    const usuarioId = req.user['id'];
+  async misResenas(@UsuarioActual('sub') usuarioId: string) {
     const datos = await this.resenasService.obtenerMisResenas(usuarioId);
     return { datos, mensaje: 'Mis reseñas' };
   }
 
   @UseGuards(JwtAuthGuard)
   @Post()
-  async crear(@Req() req: Request, @Body() dto: CrearResenaDto) {
-    const usuarioId = req.user['id'];
+  async crear(@UsuarioActual('sub') usuarioId: string, @Body() dto: CrearResenaDto) {
     const datos = await this.resenasService.crear(usuarioId, dto);
     return { datos, mensaje: 'Reseña enviada correctamente' };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete(':id')
+  async eliminar(@Param('id', ParseUUIDPipe) id: string) {
+    await this.resenasService.eliminar(id);
+    return { mensaje: 'Reseña eliminada correctamente' };
   }
 }

@@ -9,6 +9,7 @@ import { join }                 from 'path'
 
 
 import { PrismaModule }         from './common/prisma/prisma.module'
+import { HelpersModule }        from './common/helpers/helpers.module'
 import { CorreosModule }        from './correos/correos.module'
 import { AuthModule }           from './auth/auth.module'
 import { PerfilModule }         from './perfil/perfil.module'
@@ -49,6 +50,7 @@ import { ConfiguracionModule }  from './configuracion/configuracion.module'
 
     // Infraestructura (globales)
     PrismaModule,
+    HelpersModule,
     CorreosModule,
 
     // Módulos funcionales

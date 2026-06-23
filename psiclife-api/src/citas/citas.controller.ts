@@ -13,36 +13,31 @@ import { v4 as uuid } from 'uuid'
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger'
 import { CitasService } from './citas.service'
 import {
-  CrearCitaDto, ActualizarCitaDto, CancelarCitaDto,
-  RegistrarAsistenciaDto, SolicitarReembolsoDto, SolicitarCitaPublicaDto, ActualizarNotasDto
+  CrearCitaDto, ActualizarCitaDto,
+  RegistrarAsistenciaDto, SolicitarCitaPublicaDto, ActualizarNotasDto
 } from './dto/citas.dto'
 import { JwtAuthGuard }  from 'src/auth/guards/jwt-auth.guard'
 import { PermisosGuard } from 'src/auth/guards/permisos.guard'
 import { Permisos }      from 'src/common/decorators/permisos.decorator'
 import { Public }        from 'src/common/decorators/public.decorator'
 import { UsuarioActual } from 'src/common/decorators/usuario-actual.decorator'
+import { PsicologoOwnerHelper } from 'src/common/helpers/psicologo-owner.helper'
 import { IsString, IsOptional } from 'class-validator'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { citas_estado } from '@prisma/client'
 
 
-class ResolverReembolsoDto {
-  @ApiProperty({ enum: ['aprobado', 'rechazado'] })
-  @IsString()
-  estado: 'aprobado' | 'rechazado'
 
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  notas?: string
-}
 
 @ApiTags('Citas')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermisosGuard)
 @Controller('citas')
 export class CitasController {
-  constructor(private readonly citasService: CitasService) {}
+  constructor(
+    private readonly citasService: CitasService,
+    private readonly psicologoOwner: PsicologoOwnerHelper,
+  ) {}
 
   @Get()
   @Permisos('citas.ver')
@@ -58,42 +53,28 @@ export class CitasController {
     @Query('estado')      estado?:      citas_estado,
     @Query('fecha')       fecha?:       string,
     @Query('mes')         mes?:         string,
+    @UsuarioActual('sub') usuarioId?:   string,
+    @UsuarioActual('rolNombre') rolNombre?: string,
   ) {
-    const datos = await this.citasService.listar({ psicologoId, pacienteId, estado, fecha, mes })
+    // Si es psicólogo, forzar filtro a sus propias citas
+    const psicFiltro = await this.psicologoOwner.filtrarPorPsicologo(psicologoId, usuarioId!, rolNombre!)
+    const datos = await this.citasService.listar({ psicologoId: psicFiltro, pacienteId, estado, fecha, mes })
     return { mensaje: 'Citas obtenidas correctamente', datos }
   }
 
   @Get('hoy')
   @Permisos('citas.ver')
   @ApiOperation({ summary: 'Citas del día (dashboard)' })
-  async citasHoy() {
-    const datos = await this.citasService.citasHoy()
+  async citasHoy(
+    @UsuarioActual('sub') usuarioId?: string,
+    @UsuarioActual('rolNombre') rolNombre?: string,
+  ) {
+    const psicFiltro = await this.psicologoOwner.filtrarPorPsicologo(undefined, usuarioId!, rolNombre!)
+    const datos = await this.citasService.citasHoy(psicFiltro)
     return { mensaje: 'Citas de hoy obtenidas correctamente', datos }
   }
 
-  @Get('reembolsos')
-  @Permisos('citas.ver')
-  @ApiOperation({ summary: 'Listar solicitudes de reembolso' })
-  @ApiQuery({ name: 'estado', required: false, description: 'pendiente | aprobado | rechazado' })
-  async listarReembolsos(@Query('estado') estado?: string) {
-    const datos = await this.citasService.listarReembolsos(estado)
-    return { mensaje: 'Solicitudes de reembolso obtenidas correctamente', datos }
-  }
 
-  @Patch('reembolsos/:solicitudId/resolver')
-  @Permisos('citas.editar')
-  @ApiOperation({ summary: 'Aprobar o rechazar solicitud de reembolso' })
-  @ApiParam({ name: 'solicitudId', format: 'uuid' })
-  async resolverReembolso(
-    @Param('solicitudId', ParseUUIDPipe) solicitudId: string,
-    @Body() dto: ResolverReembolsoDto,
-    @UsuarioActual('sub') usuarioId: string,
-  ) {
-    const datos = await this.citasService.resolverReembolso(
-      solicitudId, dto.estado, dto.notas ?? '', usuarioId,
-    )
-    return { mensaje: `Solicitud ${dto.estado} correctamente`, datos }
-  }
 
   @Get(':id')
   @Permisos('citas.ver')
@@ -136,34 +117,7 @@ export class CitasController {
     return { mensaje: 'Notas clínicas actualizadas correctamente', datos }
   }
 
-  @Patch(':id/cancelar')
-  @ApiOperation({ summary: 'Cancelar cita' })
-  @ApiParam({ name: 'id', format: 'uuid' })
-  async cancelar(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: CancelarCitaDto,
-    @UsuarioActual() usuario,
-  ) {
-    const cita = await this.citasService.buscarPorId(id)
 
-    if (dto.cancelado_por === 'paciente') {
-      if ((cita as any).paciente?.usuario_id !== usuario.sub) {
-        throw new ForbiddenException('Solo el paciente dueño puede cancelar esta cita')
-      }
-    } else if (dto.cancelado_por === 'psicologo') {
-      if ((cita as any).psicologo?.usuario_id !== usuario.sub) {
-        throw new ForbiddenException('Solo el psicólogo responsable puede cancelar esta cita')
-      }
-    } else {
-      const puedeEditar = usuario.permisos?.citas?.editar === true
-      if (!puedeEditar) {
-        throw new ForbiddenException('No tienes permisos para cancelar la cita')
-      }
-    }
-
-    const datos = await this.citasService.cancelar(id, dto)
-    return { mensaje: 'Cita cancelada correctamente', datos }
-  }
 
   @Post(':id/reprogramar')
   @Permisos('citas.crear')
@@ -191,19 +145,7 @@ export class CitasController {
     return { mensaje: 'Asistencia registrada correctamente', datos }
   }
 
-  @Post(':id/reembolso')
-  @Permisos('citas.ver')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Solicitar reembolso o reprogramación' })
-  @ApiParam({ name: 'id', format: 'uuid' })
-  async solicitarReembolso(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: SolicitarReembolsoDto,
-    @UsuarioActual('sub') usuarioId: string,
-  ) {
-    const datos = await this.citasService.solicitarReembolso(id, dto, usuarioId)
-    return { mensaje: 'Solicitud registrada correctamente', datos }
-  }
+
 
 
 

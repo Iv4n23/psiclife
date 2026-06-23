@@ -13,8 +13,11 @@ export class DashboardController {
 
   @Get('stats')
   @ApiOperation({ summary: 'Obtener estadísticas para el dashboard' })
-  async getStats() {
-    const stats = await this.dashboardService.getStats();
+  async getStats(
+    @UsuarioActual('sub') usuarioId: string,
+    @UsuarioActual('rolNombre') rolNombre: string,
+  ) {
+    const stats = await this.dashboardService.getStats(usuarioId, rolNombre);
     return { ok: true, datos: stats };
   }
 

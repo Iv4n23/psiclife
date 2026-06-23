@@ -6,12 +6,11 @@ import { PrismaService }  from 'src/common/prisma/prisma.service'
 import { CorreosService } from 'src/correos/correos.service'
 import {
   citas_modalidad, citas_agendado_por, citas_estado,
-  citas_cancelado_por, solicitudes_reembolso_tipo_solicitud,
 } from '@prisma/client'
 
 import {
-  CrearCitaDto, ActualizarCitaDto, CancelarCitaDto,
-  RegistrarAsistenciaDto, SolicitarReembolsoDto, SolicitarCitaPublicaDto,
+  CrearCitaDto, ActualizarCitaDto,
+  RegistrarAsistenciaDto, SolicitarCitaPublicaDto,
 } from './dto/citas.dto'
 
 @Injectable()
@@ -52,32 +51,32 @@ export class CitasService {
         paciente:  { select: { id: true, nombres: true, apellidos: true, telefono: true, whatsapp: true } },
         psicologo: { select: { id: true, nombres: true, apellidos: true } },
         facturas:  { select: { id: true, numero_factura: true, estado: true, total: true } },
-        solicitudes_reembolso: { select: { id: true, estado: true, monto_solicitado: true, tipo_solicitud: true } },
         dx_diagnosticos: { select: { id: true } },
         eva_aplicaciones: { select: { id: true } },
         act_asignaciones: { select: { id: true } },
       },
     })
 
-    // Normalizar: exponer la primera factura y primera solicitud de reembolso
+    // Normalizar: exponer la primera factura
     return citas.map(c => ({
       ...c,
       factura: c.facturas ?? null,
-      reembolso: c.solicitudes_reembolso?.[0] ?? null,
       facturas: undefined, // limpiar original para no duplicar
-      solicitudes_reembolso: undefined,
     }))
   }
 
   // ── Listar citas del día ───────────────────────────────────
-  async citasHoy() {
+  async citasHoy(psicologoId?: string) {
     const hoy = new Date()
     hoy.setHours(0, 0, 0, 0)
     const manana = new Date(hoy)
     manana.setDate(manana.getDate() + 1)
 
     return this.prisma.citas.findMany({
-      where: { programada_para: { gte: hoy, lt: manana } },
+      where: { 
+        programada_para: { gte: hoy, lt: manana },
+        ...(psicologoId ? { psicologo_id: psicologoId } : {}),
+      },
       orderBy: { programada_para: 'asc' },
       include: {
         paciente:  { select: { id: true, nombres: true, apellidos: true, whatsapp: true } },
@@ -96,7 +95,7 @@ export class CitasService {
         paciente:  true,
         psicologo: true,
         asistencias: true,
-        facturas:  true,
+        facturas:  { include: { pagos: true } },
         reprogramaciones: { select: { id: true, programada_para: true, estado: true } },
       },
     })
@@ -253,7 +252,10 @@ export class CitasService {
     }
 
     // Enviar correo de confirmación al paciente
-    if ((cita as any).paciente.correo_personal) {
+    // Para citas virtuales sin enlace asignado aún, el correo se envía
+    // cuando el psicólogo complete el enlace de reunión
+    const esVirtualSinEnlace = cita.modalidad === 'virtual' && !cita.enlace_reunion
+    if (!esVirtualSinEnlace && (cita as any).paciente.correo_personal) {
       this.correos.enviarConPlantilla('cita_confirmada', (cita as any).paciente.correo_personal, {
         nombres:          `${(cita as any).paciente.nombres} ${(cita as any).paciente.apellidos}`,
         nombre_psicologo: `${(cita as any).psicologo.nombres} ${(cita as any).psicologo.apellidos}`,
@@ -302,6 +304,36 @@ export class CitasService {
         programada_para: dto.programada_para ? new Date(dto.programada_para) : undefined,
         estado:          dto.estado as citas_estado,
       } as any,
+    }).then(async (citaActualizada) => {
+      // Si se acaba de asignar enlace a una cita virtual que no lo tenía → enviar correo pendiente
+      const seAsignoEnlace = dto.enlace_reunion &&
+        cita.modalidad === 'virtual' &&
+        !cita.enlace_reunion
+
+      if (seAsignoEnlace) {
+        const citaConRelaciones = await this.prisma.citas.findUnique({
+          where: { id },
+          include: {
+            paciente:  { select: { nombres: true, apellidos: true, correo_personal: true } },
+            psicologo: { select: { nombres: true, apellidos: true } },
+          },
+        })
+        if (citaConRelaciones?.paciente.correo_personal) {
+          const [plataforma] = (dto.enlace_reunion!.includes('::')
+            ? dto.enlace_reunion!.split('::')
+            : ['Reunión', dto.enlace_reunion!])
+          const programadaFecha = citaConRelaciones.programada_para
+          this.correos.enviarConPlantilla('cita_confirmada', citaConRelaciones.paciente.correo_personal, {
+            nombres:          `${citaConRelaciones.paciente.nombres} ${citaConRelaciones.paciente.apellidos}`,
+            nombre_psicologo: `${citaConRelaciones.psicologo.nombres} ${citaConRelaciones.psicologo.apellidos}`,
+            fecha_cita:       programadaFecha.toLocaleDateString('es-PE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+            hora_cita:        programadaFecha.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }),
+            modalidad:        `virtual (${plataforma})`,
+            anio:             String(new Date().getFullYear()),
+          }, { entidadOrigen: 'citas', entidadId: id }).catch(() => {})
+        }
+      }
+      return citaActualizada
     })
   }
 
@@ -318,41 +350,6 @@ export class CitasService {
     })
   }
 
-  // ── Cancelar ───────────────────────────────────────────────
-  async cancelar(id: string, dto: CancelarCitaDto) {
-    const cita = await this.buscarPorId(id)
-
-    if (['completada', 'cancelada'].includes(cita.estado))
-      throw new BadRequestException(`La cita ya está ${cita.estado} y no puede cancelarse`)
-
-    const actualizada = await this.prisma.citas.update({
-      where: { id },
-      data: {
-        estado:             'cancelada' as citas_estado,
-        cancelado_por:      dto.cancelado_por,
-        motivo_cancelacion: dto.motivo_cancelacion,
-      },
-
-      include: {
-        paciente:  { select: { nombres: true, apellidos: true, correo_personal: true } },
-        psicologo: { select: { nombres: true, apellidos: true } },
-      },
-    })
-
-    // Notificar por correo
-    if ((actualizada as any).paciente.correo_personal) {
-      this.correos.enviarConPlantilla('cita_cancelada', (actualizada as any).paciente.correo_personal, {
-        nombres:           `${(actualizada as any).paciente.nombres} ${(actualizada as any).paciente.apellidos}`,
-        fecha_cita:        new Date(cita.programada_para).toLocaleDateString('es-PE'),
-        cancelado_por:     dto.cancelado_por,
-        motivo_cancelacion: dto.motivo_cancelacion,
-        anio:              String(new Date().getFullYear()),
-      }).catch(() => {})
-    }
-
-
-    return actualizada
-  }
 
   // ── Reprogramar ────────────────────────────────────────────
   async reprogramar(id: string, dto: CrearCitaDto) {
@@ -462,85 +459,6 @@ export class CitasService {
     })
   }
 
-  // ── Solicitud de reembolso ─────────────────────────────────
-  async solicitarReembolso(citaId: string, dto: SolicitarReembolsoDto, usuarioId: string) {
-    await this.buscarPorId(citaId)
-
-    const existe = await this.prisma.solicitudes_reembolso.findFirst({
-      where: { cita_id: citaId, estado: 'pendiente' },
-    })
-    if (existe) throw new ConflictException('Ya existe una solicitud pendiente para esta cita')
-
-    return this.prisma.solicitudes_reembolso.create({
-      data: {
-        cita_id:         citaId,
-        solicitado_por:  usuarioId,
-        tipo_solicitud:  dto.tipo_solicitud as solicitudes_reembolso_tipo_solicitud,
-        motivo:          dto.motivo,
-
-        monto_solicitado: dto.monto_solicitado ?? null,
-      },
-    })
-  }
-
-  // ── Resolver solicitud de reembolso ───────────────────────
-  async resolverReembolso(
-    solicitudId: string,
-    estado: 'aprobado' | 'rechazado',
-    notas: string,
-    usuarioId: string,
-  ) {
-    const solicitud = await this.prisma.solicitudes_reembolso.findUnique({
-      where: { id: solicitudId },
-      include: { solicitante: { select: { correo: true } } },
-    })
-    if (!solicitud) throw new NotFoundException('Solicitud no encontrada')
-    if (solicitud.estado !== 'pendiente')
-      throw new BadRequestException('La solicitud ya fue procesada')
-
-    const actualizada = await this.prisma.solicitudes_reembolso.update({
-      where: { id: solicitudId },
-      data: {
-        estado,
-        notas_resolucion: notas,
-        resuelto_por:     usuarioId,
-        resuelto_en:      new Date(),
-      },
-    })
-
-    // Notificar al solicitante
-    const plantilla = estado === 'aprobado' ? 'reembolso_aprobado' : 'reembolso_rechazado'
-    this.correos.enviarConPlantilla(plantilla, solicitud.solicitante.correo, {
-      nombres:          solicitud.solicitante.correo.split('@')[0],
-      notas_resolucion: notas,
-      monto:            String(solicitud.monto_solicitado ?? ''),
-      anio:             String(new Date().getFullYear()),
-    }).catch(() => {})
-
-    return actualizada
-  }
-
-  // ── Listar solicitudes de reembolso ──────────────────────
-  async listarReembolsos(estado?: string) {
-    const where: any = {}
-    if (estado) where.estado = estado
-    return this.prisma.solicitudes_reembolso.findMany({
-      where,
-      orderBy: { solicitado_en: 'desc' },
-      include: {
-        cita: {
-          select: {
-            id: true,
-            programada_para: true,
-            paciente:  { select: { nombres: true, apellidos: true } },
-            psicologo: { select: { nombres: true, apellidos: true } },
-          }
-        },
-        solicitante: { select: { correo: true } },
-        resolutor:   { select: { correo: true } },
-      }
-    })
-  }
 
   // ── Eliminar (solo admin) ──────────────────────────────────
   async eliminar(id: string) {
@@ -549,7 +467,16 @@ export class CitasService {
     // Eliminar registros dependientes en orden
     await this.prisma.asistencias.deleteMany({ where: { cita_id: id } })
     await this.prisma.solicitudes_reembolso.deleteMany({ where: { cita_id: id } })
-    
+    await this.prisma.resenas.deleteMany({ where: { cita_id: id } })
+
+    // Desvincular diagnósticos, evaluaciones y actividades de esta cita
+    await this.prisma.dx_diagnosticos.updateMany({ where: { cita_id: id }, data: { cita_id: null } })
+    await this.prisma.eva_aplicaciones.updateMany({ where: { cita_id: id }, data: { cita_id: null } })
+    await this.prisma.act_asignaciones.updateMany({ where: { cita_id: id }, data: { cita_id: null } })
+
+    // Desvincular citas reprogramadas que apunten a esta como original
+    await this.prisma.citas.updateMany({ where: { cita_original_id: id }, data: { cita_original_id: null } })
+
     // Eliminar pagos asociados a las facturas de la cita
     await this.prisma.pagos.deleteMany({
       where: { factura: { cita_id: id } }
@@ -629,33 +556,37 @@ export class CitasService {
       razon_consulta:  dto.servicio,
     })
 
-    // 5. Registrar el pago Yape si se subió el comprobante y eligió yape
-    if (dto.metodo_pago === 'yape' && comprobanteUrl) {
+    // 5. Registrar pago con comprobante (Yape o transferencia)
+    if ((dto.metodo_pago === 'yape' || dto.metodo_pago === 'transferencia') && comprobanteUrl) {
       const factura = await this.prisma.facturas.findUnique({
         where: { cita_id: citaCreada.id }
       })
 
       if (factura) {
-        // Encontrar algún usuario admin (para registrado_por). Si no existe, usar el primer usuario del sistema.
-        let sysUser = await this.prisma.usuarios.findFirst({ where: { rol: { nombre: 'SuperAdmin' } } })
-        if (!sysUser) {
-          sysUser = await this.prisma.usuarios.findFirst({})
+        let registradoPor = (await this.prisma.usuarios.findFirst({
+          where: { rol: { nombre: 'Administrador' } },
+        }))?.id
+
+        if (!registradoPor) {
+          registradoPor = (await this.prisma.usuarios.findFirst())?.id
         }
 
-        try {
-          await this.prisma.pagos.create({
-            data: {
-              factura_id: factura.id,
-              monto: factura.total,
-              metodo: 'yape',
-              url_comprobante: comprobanteUrl,
-              confirmado: false,
-              registrado_por: sysUser?.id ?? paciente.usuario_id ?? '',
-            }
-          })
-        } catch (err) {
-          console.error('Error creando registro de pago para cita pública', citaCreada.id, err?.message || err)
-          // No lanzar: evitar que la solicitud pública falle después de crear la cita
+        if (registradoPor) {
+          try {
+            await this.prisma.pagos.create({
+              data: {
+                factura_id: factura.id,
+                monto: factura.total,
+                metodo: dto.metodo_pago as 'yape' | 'transferencia',
+                url_comprobante: comprobanteUrl,
+                codigo_referencia: dto.codigo_referencia ?? null,
+                confirmado: false,
+                registrado_por: registradoPor,
+              }
+            })
+          } catch (err) {
+            console.error('Error creando registro de pago para cita pública', citaCreada.id, err?.message || err)
+          }
         }
       }
     }

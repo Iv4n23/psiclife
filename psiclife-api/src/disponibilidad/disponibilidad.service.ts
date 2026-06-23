@@ -6,7 +6,7 @@ import {
 import { horarios_dia_semana } from '@prisma/client'
 
 import { PrismaService } from 'src/common/prisma/prisma.service'
-import { CrearHorarioDto, CrearBloqueoDto, ToggleDisponibilidadDto } from './dto/disponibilidad.dto'
+import { CrearHorarioDto, CrearBloqueoDto, ToggleDisponibilidadDto, ActualizarHorarioDto } from './dto/disponibilidad.dto'
 
 @Injectable()
 export class DisponibilidadService {
@@ -56,6 +56,44 @@ export class DisponibilidadService {
     return this.prisma.horarios.update({
       where: { id },
       data:  { esta_disponible: dto.esta_disponible },
+    })
+  }
+
+  async actualizarHorario(id: string, dto: ActualizarHorarioDto) {
+    const horario = await this.prisma.horarios.findUnique({ where: { id } })
+    if (!horario) throw new NotFoundException('Horario no encontrado')
+
+    const horaInicio = dto.hora_inicio ?? horario.hora_inicio
+    const horaFin = dto.hora_fin ?? horario.hora_fin
+    const diaSemana = dto.dia_semana ?? horario.dia_semana
+
+    if (horaFin <= horaInicio) {
+      throw new BadRequestException('hora_fin debe ser mayor que hora_inicio')
+    }
+
+    // Check for conflicts if changing time or day
+    if (dto.hora_inicio || dto.hora_fin || dto.dia_semana) {
+      const existe = await this.prisma.horarios.findFirst({
+        where: {
+          id: { not: id },
+          psicologo_id: horario.psicologo_id,
+          dia_semana: diaSemana,
+          hora_inicio: horaInicio,
+        },
+      })
+      if (existe) {
+        throw new ConflictException(`Ya existe un horario el ${diaSemana} a las ${horaInicio}`)
+      }
+    }
+
+    return this.prisma.horarios.update({
+      where: { id },
+      data: {
+        dia_semana: dto.dia_semana !== undefined ? dto.dia_semana : undefined,
+        hora_inicio: dto.hora_inicio !== undefined ? dto.hora_inicio : undefined,
+        hora_fin: dto.hora_fin !== undefined ? dto.hora_fin : undefined,
+        esta_disponible: dto.esta_disponible !== undefined ? dto.esta_disponible : undefined,
+      },
     })
   }
 

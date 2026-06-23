@@ -125,6 +125,14 @@ export class CorreosService {
     })
   }
 
+  async enviarVerificacionCuenta(correo: string, nombres: string, token: string) {
+    await this.enviarConPlantilla('verificacion_cuenta', correo, {
+      nombres,
+      token,
+      anio: String(new Date().getFullYear()),
+    })
+  }
+
   // ── Helpers ───────────────────────────────────────────────
 
   private reemplazar(texto: string, vars: Record<string, string>): string {

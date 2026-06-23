@@ -3,6 +3,49 @@ import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { Eye, EyeOff } from 'lucide-react'
 
+// ── Evaluador de fortaleza de contraseña ──────────────────────
+const PASS_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/
+
+function evaluarContrasena(pass) {
+  if (!pass) return { nivel: 0, texto: '', color: '' }
+  let puntos = 0
+  if (pass.length >= 8)     puntos++
+  if (/[A-Z]/.test(pass))   puntos++
+  if (/[a-z]/.test(pass))   puntos++
+  if (/\d/.test(pass))      puntos++
+  if (/[\W_]/.test(pass))   puntos++
+  if (puntos <= 2) return { nivel: puntos, texto: 'Débil',   color: '#ef4444' }
+  if (puntos === 3) return { nivel: puntos, texto: 'Regular', color: '#f59e0b' }
+  if (puntos === 4) return { nivel: puntos, texto: 'Buena',   color: '#3b82f6' }
+  return             { nivel: puntos, texto: 'Fuerte',  color: '#22c55e' }
+}
+
+function FortalezaContrasena({ contrasena }) {
+  const { nivel, texto, color } = evaluarContrasena(contrasena)
+  if (!contrasena) return null
+  return (
+    <div style={{ marginTop: 6 }}>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 3 }}>
+        {[1, 2, 3, 4, 5].map(i => (
+          <div key={i} style={{
+            flex: 1, height: 4, borderRadius: 2,
+            background: i <= nivel ? color : '#e2e8f0',
+            transition: 'background 0.2s',
+          }} />
+        ))}
+      </div>
+      <div style={{ fontSize: 11, color, fontWeight: 600 }}>
+        {texto}
+        {nivel < 5 && (
+          <span style={{ color: 'var(--ink3)', fontWeight: 400, marginLeft: 6 }}>
+            — mayúscula, minúscula, número y símbolo
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function AuthPage() {
   const navigate = useNavigate()
 
@@ -33,8 +76,8 @@ export default function AuthPage() {
     if (!registro.correo) e.correo = 'El correo es requerido'
     else if (!/\S+@\S+\.\S+/.test(registro.correo)) e.correo = 'Correo inválido'
     if (!registro.contrasena) e.contrasena = 'La contraseña es requerida'
-    else if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/.test(registro.contrasena)) {
-      e.contrasena = 'Min 8 caracteres, mayúscula, minúscula, número y símbolo'
+    else if (!PASS_REGEX.test(registro.contrasena)) {
+      e.contrasena = 'Debe tener al menos 8 caracteres, mayúscula, minúscula, número y símbolo'
     }
     if (registro.contrasena !== registro.contrasenaConfirm) e.contrasenaConfirm = 'Las contraseñas no coinciden'
     setErrores(e)
@@ -71,7 +114,9 @@ export default function AuthPage() {
         toast.success('¡Bienvenido!')
         navigate('/dashboard')
       } else {
-        toast.error(json.mensaje || 'Error al iniciar sesión')
+        const raw = json.mensaje ?? json.message
+        const msg = Array.isArray(raw) ? raw[0] : (raw || 'Credenciales incorrectas')
+        toast.error(msg)
       }
     } catch (err) {
       toast.error('Error en el servidor')
@@ -312,6 +357,7 @@ export default function AuthPage() {
                     </button>
                   </div>
                   {errores.contrasena && <span className="form-error">{errores.contrasena}</span>}
+                  <FortalezaContrasena contrasena={registro.contrasena} />
                 </div>
 
                 <div className="form-group">

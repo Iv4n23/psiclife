@@ -1,6 +1,7 @@
 // src/facturacion/facturacion.service.ts
 import {
   Injectable, NotFoundException, BadRequestException, ConflictException,
+  ForbiddenException,
 } from '@nestjs/common'
 import { PrismaService }  from 'src/common/prisma/prisma.service'
 import { CorreosService } from 'src/correos/correos.service'
@@ -25,13 +26,21 @@ export class FacturacionService {
     return `PSIC-${anio}-${timestampPart}-${randomPart}`
   }
 
+  // ── Helper: verificar que una factura pertenece al psicólogo ─
+  private verificarPropiedadFactura(factura: { psicologo_id: string }, psicologoId?: string) {
+    if (psicologoId && factura.psicologo_id !== psicologoId) {
+      throw new ForbiddenException('No tienes acceso a esta factura')
+    }
+  }
+
   // ── Listar ─────────────────────────────────────────────────
-  async listar(estado?: facturas_estado, pacienteId?: string) {
+  async listar(estado?: facturas_estado, pacienteId?: string, psicologoId?: string) {
 
     return this.prisma.facturas.findMany({
       where: {
-        ...(estado     ? { estado }                  : {}),
-        ...(pacienteId ? { paciente_id: pacienteId } : {}),
+        ...(estado      ? { estado }                  : {}),
+        ...(pacienteId  ? { paciente_id: pacienteId } : {}),
+        ...(psicologoId ? { psicologo_id: psicologoId } : {}),
       },
       include: {
         paciente:  { select: { nombres: true, apellidos: true } },
@@ -42,7 +51,7 @@ export class FacturacionService {
     })
   }
 
-  async buscarPorId(id: string) {
+  async buscarPorId(id: string, psicologoId?: string) {
     const f = await this.prisma.facturas.findUnique({
       where: { id },
       include: {
@@ -53,6 +62,7 @@ export class FacturacionService {
       },
     })
     if (!f) throw new NotFoundException(`Factura ${id} no encontrada`)
+    this.verificarPropiedadFactura(f, psicologoId)
     return f
   }
 
@@ -63,11 +73,12 @@ export class FacturacionService {
     })
   }
 
-  async listarPagosPendientesConfirmacion() {
+  async listarPagosPendientesConfirmacion(psicologoId?: string) {
     return this.prisma.pagos.findMany({
       where: {
         confirmado: false,
         url_comprobante: { not: null },
+        ...(psicologoId ? { factura: { psicologo_id: psicologoId } } : {}),
       },
       include: {
         factura: {
@@ -126,8 +137,8 @@ export class FacturacionService {
   }
 
   // ── Registrar pago ─────────────────────────────────────────
-  async registrarPago(facturaId: string, dto: RegistrarPagoDto, usuarioId: string) {
-    const factura = await this.buscarPorId(facturaId)
+  async registrarPago(facturaId: string, dto: RegistrarPagoDto, usuarioId: string, psicologoId?: string) {
+    const factura = await this.buscarPorId(facturaId, psicologoId)
 
     if (dto.codigo_referencia && dto.codigo_referencia.trim() !== '') {
       const existeCodigo = await this.prisma.pagos.findFirst({
@@ -199,8 +210,8 @@ export class FacturacionService {
   }
 
   // ── Anular factura ─────────────────────────────────────────
-  async anular(id: string, dto: AnularFacturaDto, usuarioId: string) {
-    const factura = await this.buscarPorId(id)
+  async anular(id: string, dto: AnularFacturaDto, usuarioId: string, psicologoId?: string) {
+    const factura = await this.buscarPorId(id, psicologoId)
 
     if (factura.estado === 'anulada')
       throw new BadRequestException('La factura ya está anulada')
@@ -228,8 +239,8 @@ export class FacturacionService {
   }
 
   // ── Eliminar factura (solo admin) ──────────────────────────
-  async eliminar(id: string) {
-    const factura = await this.buscarPorId(id)
+  async eliminar(id: string, psicologoId?: string) {
+    const factura = await this.buscarPorId(id, psicologoId)
 
     // Eliminar pagos asociados primero
     await this.prisma.pagos.deleteMany({
@@ -245,7 +256,7 @@ export class FacturacionService {
   }
 
   // ── Reporte financiero ─────────────────────────────────────
-  async reporte(periodo?: string) {
+  async reporte(periodo?: string, psicologoId?: string) {
     const where: any = {}
     if (periodo) {
       const [anio, mes] = periodo.split('-').map(Number)
@@ -253,18 +264,24 @@ export class FacturacionService {
       const fin    = new Date(anio, mes, 1)
       where.emitida_en = { gte: inicio, lt: fin }
     }
+    if (psicologoId) {
+      where.psicologo_id = psicologoId
+    }
+
+    // Facturas pagadas solamente (excluye anuladas, pendientes, parciales)
+    const wherePagadas = { ...where, estado: 'pagada' as const }
 
     const [totalFacturas, totalPagado, porMetodo] = await Promise.all([
-      this.prisma.facturas.count({ where }),
+      this.prisma.facturas.count({ where: wherePagadas }),
       this.prisma.pagos.aggregate({
         _sum: { monto: true },
-        where: { factura: where },
+        where: { factura: where, confirmado: true },
       }),
       this.prisma.pagos.groupBy({
         by:      ['metodo'],
         _sum:    { monto: true },
         _count:  { metodo: true },
-        where:   { factura: where },
+        where:   { factura: where, confirmado: true },
         orderBy: { _sum: { monto: 'desc' } },
       }),
     ])
@@ -319,13 +336,14 @@ export class FacturacionService {
     return pago
   }
 
-  async confirmarPago(pagoId: string, usuarioId: string) {
+  async confirmarPago(pagoId: string, usuarioId: string, psicologoId?: string) {
     const pago = await this.prisma.pagos.findUnique({
       where: { id: pagoId },
       include: { factura: { include: { pagos: true, paciente: true } } }
     })
     if (!pago) throw new NotFoundException('Pago no encontrado')
     if (pago.confirmado) throw new BadRequestException('El pago ya ha sido confirmado')
+    this.verificarPropiedadFactura(pago.factura, psicologoId)
 
     // Actualizar el pago a confirmado = true
     await this.prisma.pagos.update({
@@ -406,13 +424,14 @@ export class FacturacionService {
     return { pagoId, estado_factura: nuevoEstado }
   }
 
-  async rechazarPago(pagoId: string, usuarioId: string) {
+  async rechazarPago(pagoId: string, usuarioId: string, psicologoId?: string) {
     const pago = await this.prisma.pagos.findUnique({
       where: { id: pagoId },
       include: { factura: { include: { pagos: true } } },
     })
     if (!pago) throw new NotFoundException('Pago no encontrado')
     if (pago.confirmado) throw new BadRequestException('No se puede rechazar un pago ya confirmado')
+    this.verificarPropiedadFactura(pago.factura, psicologoId)
 
     // Eliminar el registro del pago pendiente
     await this.prisma.pagos.delete({ where: { id: pagoId } })

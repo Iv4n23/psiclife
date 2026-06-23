@@ -39,7 +39,7 @@ export class ConfiguracionController {
 
   @Get('publica')
   async obtenerPublica() {
-    const datos = await this.configService.obtenerTodos()
+    const datos = await this.configService.obtenerConfigPublica()
     return { datos }
   }
 

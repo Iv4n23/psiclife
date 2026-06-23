@@ -20,12 +20,17 @@ import { UsuarioActual } from 'src/common/decorators/usuario-actual.decorator'
 import { facturas_estado } from '@prisma/client'
 
 
+import { PsicologoOwnerHelper } from 'src/common/helpers/psicologo-owner.helper'
+
 @ApiTags('Facturación')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermisosGuard)
 @Controller('facturacion')
 export class FacturacionController {
-  constructor(private readonly facturacionService: FacturacionService) {}
+  constructor(
+    private readonly facturacionService: FacturacionService,
+    private readonly psicologoOwner: PsicologoOwnerHelper,
+  ) {}
 
   @Get()
   @Permisos('facturacion.ver')
@@ -35,26 +40,38 @@ export class FacturacionController {
   async listar(
     @Query('estado')     estado?:     facturas_estado,
     @Query('pacienteId') pacienteId?: string,
-
+    @UsuarioActual('sub') usuarioId?: string,
+    @UsuarioActual('rolNombre') rolNombre?: string,
   ) {
-    const datos = await this.facturacionService.listar(estado, pacienteId)
+    // Si es psicólogo, solo ve sus propias facturas (vía las citas vinculadas)
+    const psicologoId = await this.psicologoOwner.filtrarPorPsicologo(undefined, usuarioId!, rolNombre!)
+    const datos = await this.facturacionService.listar(estado, pacienteId, psicologoId)
     return { mensaje: 'Facturas obtenidas correctamente', datos }
   }
 
   @Get('reporte')
   @Permisos('reportes.ver')
-  @ApiOperation({ summary: 'Reporte financiero por período' })
+  @ApiOperation({ summary: 'Reporte financiero por período (filtrado por psicólogo si aplica)' })
   @ApiQuery({ name: 'periodo', required: false, example: '2025-07', description: 'Formato YYYY-MM' })
-  async reporte(@Query('periodo') periodo?: string) {
-    const datos = await this.facturacionService.reporte(periodo)
+  async reporte(
+    @Query('periodo') periodo?: string,
+    @UsuarioActual('sub') usuarioId?: string,
+    @UsuarioActual('rolNombre') rolNombre?: string,
+  ) {
+    const psicologoId = await this.psicologoOwner.resolverPsicologoId(usuarioId, rolNombre)
+    const datos = await this.facturacionService.reporte(periodo, psicologoId ?? undefined)
     return { mensaje: 'Reporte financiero obtenido', datos }
   }
 
   @Get('pagos/pendientes')
   @Permisos('facturacion.ver')
   @ApiOperation({ summary: 'Listar pagos con comprobante pendientes de confirmación' })
-  async pagosPendientes() {
-    const datos = await this.facturacionService.listarPagosPendientesConfirmacion()
+  async pagosPendientes(
+    @UsuarioActual('sub') usuarioId?: string,
+    @UsuarioActual('rolNombre') rolNombre?: string,
+  ) {
+    const psicologoId = await this.psicologoOwner.resolverPsicologoId(usuarioId, rolNombre)
+    const datos = await this.facturacionService.listarPagosPendientesConfirmacion(psicologoId ?? undefined)
     return { mensaje: 'Pagos pendientes obtenidos', datos }
   }
 
@@ -71,8 +88,13 @@ export class FacturacionController {
   @Permisos('facturacion.ver')
   @ApiOperation({ summary: 'Obtener factura por ID' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  async buscarPorId(@Param('id', ParseUUIDPipe) id: string) {
-    const datos = await this.facturacionService.buscarPorId(id)
+  async buscarPorId(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UsuarioActual('sub') usuarioId?: string,
+    @UsuarioActual('rolNombre') rolNombre?: string,
+  ) {
+    const psicologoId = await this.psicologoOwner.resolverPsicologoId(usuarioId, rolNombre)
+    const datos = await this.facturacionService.buscarPorId(id, psicologoId ?? undefined)
     return { mensaje: 'Factura obtenida correctamente', datos }
   }
 
@@ -96,8 +118,10 @@ export class FacturacionController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: RegistrarPagoDto,
     @UsuarioActual('sub') usuarioId: string,
+    @UsuarioActual('rolNombre') rolNombre?: string,
   ) {
-    const datos = await this.facturacionService.registrarPago(id, dto, usuarioId)
+    const psicologoId = await this.psicologoOwner.resolverPsicologoId(usuarioId, rolNombre)
+    const datos = await this.facturacionService.registrarPago(id, dto, usuarioId, psicologoId ?? undefined)
     return { mensaje: 'Pago registrado correctamente', datos }
   }
 
@@ -109,8 +133,10 @@ export class FacturacionController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: AnularFacturaDto,
     @UsuarioActual('sub') usuarioId: string,
+    @UsuarioActual('rolNombre') rolNombre?: string,
   ) {
-    const datos = await this.facturacionService.anular(id, dto, usuarioId)
+    const psicologoId = await this.psicologoOwner.resolverPsicologoId(usuarioId, rolNombre)
+    const datos = await this.facturacionService.anular(id, dto, usuarioId, psicologoId ?? undefined)
     return { mensaje: 'Factura anulada correctamente', datos }
   }
 
@@ -118,8 +144,13 @@ export class FacturacionController {
   @Permisos('facturacion.eliminar')
   @ApiOperation({ summary: 'Eliminar factura' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  async eliminar(@Param('id', ParseUUIDPipe) id: string) {
-    const datos = await this.facturacionService.eliminar(id)
+  async eliminar(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UsuarioActual('sub') usuarioId?: string,
+    @UsuarioActual('rolNombre') rolNombre?: string,
+  ) {
+    const psicologoId = await this.psicologoOwner.resolverPsicologoId(usuarioId, rolNombre)
+    const datos = await this.facturacionService.eliminar(id, psicologoId ?? undefined)
     return { mensaje: 'Factura eliminada correctamente', datos }
   }
 
@@ -162,8 +193,10 @@ export class FacturacionController {
   async confirmarPago(
     @Param('pagoId', ParseUUIDPipe) pagoId: string,
     @UsuarioActual('sub') usuarioId: string,
+    @UsuarioActual('rolNombre') rolNombre?: string,
   ) {
-    const datos = await this.facturacionService.confirmarPago(pagoId, usuarioId)
+    const psicologoId = await this.psicologoOwner.resolverPsicologoId(usuarioId, rolNombre)
+    const datos = await this.facturacionService.confirmarPago(pagoId, usuarioId, psicologoId ?? undefined)
     return { mensaje: 'Pago confirmado correctamente', datos }
   }
 
@@ -174,8 +207,10 @@ export class FacturacionController {
   async rechazarPago(
     @Param('pagoId', ParseUUIDPipe) pagoId: string,
     @UsuarioActual('sub') usuarioId: string,
+    @UsuarioActual('rolNombre') rolNombre?: string,
   ) {
-    const datos = await this.facturacionService.rechazarPago(pagoId, usuarioId)
+    const psicologoId = await this.psicologoOwner.resolverPsicologoId(usuarioId, rolNombre)
+    const datos = await this.facturacionService.rechazarPago(pagoId, usuarioId, psicologoId ?? undefined)
     return { mensaje: 'Pago rechazado y eliminado correctamente', datos }
   }
 }

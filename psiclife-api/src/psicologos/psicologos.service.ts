@@ -86,4 +86,16 @@ export class PsicologosService {
       select: { id: true, nombres: true, apellidos: true, esta_activo: true },
     })
   }
+
+  async eliminar(id: string) {
+    await this.buscarPorId(id)
+
+    const total = await this.prisma.psicologos.count()
+    if (total <= 1) {
+      throw new ConflictException('No se puede eliminar al único psicólogo del sistema. Debe haber al menos uno.')
+    }
+
+    await this.prisma.psicologos.delete({ where: { id } })
+    return { mensaje: 'Psicólogo eliminado correctamente' }
+  }
 }

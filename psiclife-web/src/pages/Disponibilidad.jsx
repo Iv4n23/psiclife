@@ -67,19 +67,35 @@ export default function Disponibilidad() {
     : typeof usuario?.rolNombre === 'string'
       ? usuario.rolNombre
       : ''
-  const esPsicologo = rawRol.trim().toLowerCase().includes('psicolog')
+  const esPsicologo = rawRol.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes('psicolog')
 
   useEffect(() => {
-    if (esPsicologo && usuario?.psicologoId && !psicologoId) {
-      setPsicologoId(usuario.psicologoId)
+    if (!esPsicologo) return
+
+    if (usuario?.psicologoId) {
+      // ID ya disponible en el token/localStorage
+      if (!psicologoId) setPsicologoId(usuario.psicologoId)
+    } else {
+      // Fallback: buscar el psicólogo vinculado al usuario actual por API
+      psicologosApi.listar()
+        .then(res => {
+          const miPsicologo = res.data.datos?.find(
+            p => p.usuario_id === usuario?.id
+          )
+          if (miPsicologo) setPsicologoId(miPsicologo.id)
+        })
+        .catch(() => {})
     }
   }, [esPsicologo, usuario, psicologoId])
 
   useEffect(() => {
-    psicologosApi.listar()
-      .then(res => setPsicologos(res.data.datos))
-      .catch(() => {})
-  }, [])
+    // Los psicólogos no necesitan la lista — su ID ya lo tienen del token
+    if (!esPsicologo) {
+      psicologosApi.listar()
+        .then(res => setPsicologos(res.data.datos))
+        .catch(() => {})
+    }
+  }, [esPsicologo])
 
   useEffect(() => {
     if (psicologoId) cargar()
@@ -173,8 +189,11 @@ export default function Disponibilidad() {
         ev.push({
           id: `h-${h.id}-${fechaIso}`,
           titulo: 'Disponible',
+          subtitulo: `${h.hora_inicio.slice(0,5)} – ${h.hora_fin.slice(0,5)}`,
           inicio, fin,
-          bg: 'var(--success-bg)', border: 'rgba(14,164,114,0.3)', text: 'var(--success)', dot: 'var(--success)'
+          bg: 'var(--success-bg)', border: 'rgba(14,164,114,0.3)', text: 'var(--success)', dot: 'var(--success)',
+          tipo: 'horario',
+          raw: h,
         })
       })
 
@@ -232,18 +251,40 @@ export default function Disponibilidad() {
     ev.preventDefault()
     if (!validarH()) return
     setGuardando(true)
+    const esEdicion = modalHorario && typeof modalHorario === 'object'
     try {
-      await disponibilidadApi.crearHorario({
-        psicologo_id: psicologoId,
-        dia_semana:   formH.dia_semana,
-        hora_inicio:  formH.hora_inicio,
-        hora_fin:     formH.hora_fin,
-        esta_disponible: Boolean(formH.esta_disponible),
-      })
-      toast.success('Horario creado')
+      if (esEdicion) {
+        await disponibilidadApi.actualizarHorario(modalHorario.id, {
+          dia_semana:   formH.dia_semana,
+          hora_inicio:  formH.hora_inicio,
+          hora_fin:     formH.hora_fin,
+          esta_disponible: Boolean(formH.esta_disponible),
+        })
+        toast.success('Horario actualizado')
+      } else {
+        await disponibilidadApi.crearHorario({
+          psicologo_id: psicologoId,
+          dia_semana:   formH.dia_semana,
+          hora_inicio:  formH.hora_inicio,
+          hora_fin:     formH.hora_fin,
+          esta_disponible: Boolean(formH.esta_disponible),
+        })
+        toast.success('Horario creado')
+      }
       setModalHorario(false); setFormH(HORARIO_VACIO); setErroresH({})
       await cargar()
     } catch {} finally { setGuardando(false) }
+  }
+
+  const abrirEditarHorario = (h) => {
+    setFormH({
+      dia_semana: h.dia_semana,
+      hora_inicio: h.hora_inicio,
+      hora_fin: h.hora_fin,
+      esta_disponible: h.esta_disponible
+    })
+    setErroresH({})
+    setModalHorario(h)
   }
 
   const toggleHorario = async (h) => {
@@ -372,27 +413,33 @@ export default function Disponibilidad() {
         )}
       </div>
 
-      {/* Selector psicólogo */}
-      <div className="card" style={{ marginBottom: 20 }}>
-        <div className="card-body" style={{ padding: '14px 20px' }}>
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label">Psicólogo</label>
-            <select 
-              className="form-control" 
-              value={psicologoId} 
-              onChange={e => setPsicologoId(e.target.value)}
-              disabled={esPsicologo}
-            >
-              <option value="">Seleccionar psicólogo...</option>
-              {psicologos.map(p => (
-                <option key={p.id} value={p.id}>{p.apellidos}, {p.nombres} — {p.especialidad}</option>
-              ))}
-            </select>
+      {/* Selector psicólogo — solo visible para admins/recepcionistas */}
+      {!esPsicologo && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div className="card-body" style={{ padding: '14px 20px' }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Psicólogo</label>
+              <select
+                className="form-control"
+                value={psicologoId}
+                onChange={e => setPsicologoId(e.target.value)}
+              >
+                <option value="">Seleccionar psicólogo...</option>
+                {psicologos.map(p => (
+                  <option key={p.id} value={p.id}>{p.apellidos}, {p.nombres} — {p.especialidad}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {!psicologoId && (
+      {/* Si es psicólogo y aún no se cargó su ID, mostrar aviso */}
+      {esPsicologo && !psicologoId && (
+        <EmptyState titulo="Cargando tu disponibilidad..." descripcion="Estamos obteniendo tu agenda. Si esto tarda demasiado, intenta cerrar sesión y volver a ingresar." />
+      )}
+
+      {!esPsicologo && !psicologoId && (
         <EmptyState titulo="Selecciona un psicólogo" descripcion="Elige un psicólogo para gestionar su agenda y disponibilidad." />
       )}
 
@@ -409,6 +456,12 @@ export default function Disponibilidad() {
               onSemanaAnterior={() => navSemana(-1)}
               onSemanaSiguiente={() => navSemana(1)}
               onHoy={irAHoy}
+              onClickEvento={(ev) => {
+                if (ev.tipo === 'horario' && ev.raw) {
+                  // Abrir modal de edición del horario clickeado
+                  abrirEditarHorario(ev.raw)
+                }
+              }}
               onClickCelda={({ fecha, horaI, horaF }) => {
                 setModalOpcionesCelda({ fecha, horaI, horaF })
               }}
@@ -607,8 +660,10 @@ export default function Disponibilidad() {
                   {hs.length === 0 ? (
                     <div style={{ fontSize:11, color:'var(--text-muted)', opacity:0.5 }}>—</div>
                   ) : hs.map(h => (
-                    <div key={h.id} style={{
-                      padding:'4px 7px', borderRadius:6, marginBottom:4, fontSize:11, fontWeight:500,
+                    <div key={h.id} 
+                         onClick={() => abrirEditarHorario(h)}
+                         style={{
+                      padding:'4px 7px', borderRadius:6, marginBottom:4, fontSize:11, fontWeight:500, cursor:'pointer',
                       background: h.esta_disponible ? 'hsl(210,65%,92%)' : 'var(--surface-2)',
                       color: h.esta_disponible ? 'hsl(210,60%,35%)' : 'var(--text-muted)',
                       border:`1px solid ${h.esta_disponible ? 'hsl(210,55%,78%)' : 'var(--border)'}`,
@@ -624,11 +679,11 @@ export default function Disponibilidad() {
         </div>
       )}
 
-      {/* ── Modal: Nuevo horario ── */}
+      {/* ── Modal: Nuevo / Editar horario ── */}
       {modalHorario && (
         <div className="modal-overlay">
           <div className="modal">
-            <div className="modal-title">Agregar franja horaria</div>
+            <div className="modal-title">{typeof modalHorario === 'object' ? 'Editar franja horaria' : 'Agregar franja horaria'}</div>
             <form onSubmit={guardarHorario} noValidate>
               <div className="form-group" style={{ marginBottom:14 }}>
                 <label className="form-label">Día de la semana</label>
@@ -658,11 +713,27 @@ export default function Disponibilidad() {
                 </label>
                 <span style={{ fontSize:13 }}>Disponible</span>
               </div>
-              <div className="modal-actions">
-                <button type="button" className="btn btn-ghost" onClick={() => { setModalHorario(false); setErroresH({}) }}>Cancelar</button>
-                <button type="submit" className="btn btn-primary" disabled={guardando}>
-                  <Save size={13} /> {guardando ? 'Guardando...' : 'Guardar horario'}
-                </button>
+              <div className="modal-actions" style={{ marginTop: 24, display: 'flex', gap: 8 }}>
+                {typeof modalHorario === 'object' && (
+                  <button
+                    type="button"
+                    className="btn btn-danger btn-sm"
+                    style={{ marginRight: 'auto' }}
+                    disabled={guardando}
+                    onClick={() => {
+                      setConfirmar({ id: modalHorario.id, tipo: 'horario', desc: `${DIAS_LABEL[modalHorario.dia_semana]} ${modalHorario.hora_inicio.slice(0,5)}–${modalHorario.hora_fin.slice(0,5)}` })
+                      setModalHorario(false)
+                    }}
+                  >
+                    <Trash2 size={13} /> Eliminar
+                  </button>
+                )}
+                <div style={{ display: 'flex', gap: 8, marginLeft: typeof modalHorario === 'object' ? '0' : 'auto' }}>
+                  <button type="button" className="btn btn-ghost" onClick={() => setModalHorario(false)}>Cancelar</button>
+                  <button type="submit" className="btn btn-primary" disabled={guardando}>
+                    <Save size={13} /> {guardando ? 'Guardando...' : (typeof modalHorario === 'object' ? 'Actualizar' : 'Registrar')}
+                  </button>
+                </div>
               </div>
             </form>
           </div>

@@ -13,7 +13,7 @@ import { AppModule }         from './app.module'
 import { HttpExceptionFilter }  from './common/filters/http-exception.filter'
 import { ResponseInterceptor }  from './common/interceptors/response.interceptor'
 
-const DEFAULT_PORT = 3001
+const DEFAULT_PORT = 3000
 
 async function isPortFree(port: number) {
   return new Promise<boolean>((resolve) => {
@@ -61,6 +61,8 @@ async function bootstrap() {
         'http://127.0.0.1:5173',
         'http://127.0.0.1:5174',
         'http://127.0.0.1:5175',
+        'https://0rwvmkc1-5173.brs.devtunnels.ms',  // Panel (devtunnel)
+        'https://0rwvmkc1-5174.brs.devtunnels.ms',  // Landing (devtunnel)
       ]
       
       if (!origin || allowedOrigins.includes(origin)) {

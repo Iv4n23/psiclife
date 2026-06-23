@@ -1,11 +1,23 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/common/prisma/prisma.service';
+import { PsicologoOwnerHelper } from 'src/common/helpers/psicologo-owner.helper';
 
 @Injectable()
 export class DashboardService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly psicologoOwner: PsicologoOwnerHelper,
+  ) {}
 
-  async getStats() {
+  async getStats(usuarioId?: string, rolNombre?: string) {
+    let psicologoId = null;
+    let pacientesAccesibles = undefined;
+
+    if (usuarioId && rolNombre) {
+      psicologoId = await this.psicologoOwner.filtrarPorPsicologo(undefined, usuarioId, rolNombre);
+      pacientesAccesibles = await this.psicologoOwner.pacientesAccesibles(usuarioId, rolNombre);
+    }
+
     const [usuarios, roles, servicios, categorias, citasHoy, pacientes] = await Promise.all([
       this.prisma.usuarios.count({ where: { esta_activo: true } }),
       this.prisma.roles.count({ where: { esta_activo: true } }),
@@ -17,9 +29,15 @@ export class DashboardService {
             gte: new Date(new Date().setHours(0, 0, 0, 0)),
             lt: new Date(new Date().setHours(23, 59, 59, 999)),
           },
+          ...(psicologoId ? { psicologo_id: psicologoId } : {}),
         },
       }),
-      this.prisma.pacientes.count({ where: { estado_paciente: 'activo' } }),
+      this.prisma.pacientes.count({ 
+        where: { 
+          estado_paciente: 'activo',
+          ...(pacientesAccesibles ? { id: { in: pacientesAccesibles } } : {}),
+        } 
+      }),
     ]);
 
     return {

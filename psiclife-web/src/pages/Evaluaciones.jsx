@@ -62,12 +62,15 @@ export default function Evaluaciones() {
   }
 
   const verDetalle = async (id) => {
+    setConfirmar(null)  // limpiar cualquier confirmación pendiente SIEMPRE
     try {
       const { data } = await evaluacionesApi.buscarAplicacion(id)
       setDetalle(data.datos)
       setInterpretacion({ puntaje_total: data.datos.puntaje_total ?? '', interpretacion: data.datos.interpretacion ?? '' })
       setVista('detalle')
-    } catch {}
+    } catch (err) {
+      toast.error(err.response?.data?.mensaje || 'Error al cargar la evaluación')
+    }
   }
 
   const validarAp = () => {
@@ -241,84 +244,231 @@ export default function Evaluaciones() {
   })
 
   // ── Detalle de aplicación ──────────────────────────────────
-  if (vista === 'detalle' && detalle) return (
+  if (vista === 'detalle' && detalle) {
+    const totalItems = detalle.instrumento?.eva_items?.length ?? 0
+    const respondidos = detalle.eva_respuestas?.length ?? 0
+    const progreso = totalItems > 0 ? Math.round((respondidos / totalItems) * 100) : 0
+    const estaCompleto = detalle.estado === 'completado'
+    const puedeCompletar = detalle.estado !== 'completado' && detalle.estado !== 'anulado'
+    const validarCompletar = () => {
+      if (!interpretacion.puntaje_total && interpretacion.puntaje_total !== 0) {
+        toast.error('El puntaje total es requerido')
+        return false
+      }
+      if (!interpretacion.interpretacion?.trim()) {
+        toast.error('La interpretación clínica es requerida')
+        return false
+      }
+      return true
+    }
+    const completarConValidacion = () => {
+      if (!validarCompletar()) return
+      completar()
+    }
+
+    return (
     <div className="page-enter">
       <div className="section-header">
         <div>
           <div className="section-title">{detalle.instrumento?.nombre}</div>
           <div className="section-subtitle">
-            {detalle.paciente?.nombres} {detalle.paciente?.apellidos} ·
-            <span className={`badge ${ESTADO_BADGE[detalle.estado]} `} style={{ marginLeft: 8 }}>{detalle.estado}</span>
+            {detalle.paciente?.nombres} {detalle.paciente?.apellidos} ·&nbsp;
+            Psicólogo: {detalle.psicologo?.nombres} {detalle.psicologo?.apellidos} ·
+            <span className={`badge ${ESTADO_BADGE[detalle.estado]}`} style={{ marginLeft: 8 }}>{detalle.estado}</span>
           </div>
         </div>
-        <button className="btn btn-ghost" onClick={() => setVista('lista')}><X size={14} /> Cerrar</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {puedeCompletar && (
+            <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }}
+              onClick={() => setConfirmar({ id: detalle.id, tipo: 'aplicacion_anular', desc: `la aplicación de ${detalle.instrumento?.nombre}` })}>
+              <Ban size={13} /> Anular
+            </button>
+          )}
+          <button className="btn btn-ghost" onClick={() => { setConfirmar(null); setVista('lista') }}><X size={14} /> Cerrar</button>
+        </div>
       </div>
+
+      {/* Barra de progreso */}
+      {totalItems > 0 && (
+        <div className="card" style={{ marginBottom: 16, padding: '16px 20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
+              Progreso de respuestas
+            </span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: progreso === 100 ? 'var(--success)' : 'var(--info)' }}>
+              {respondidos} / {totalItems} ítems ({progreso}%)
+            </span>
+          </div>
+          <div style={{ height: 8, background: 'var(--surface-2)', borderRadius: 99, overflow: 'hidden' }}>
+            <div style={{
+              height: '100%', borderRadius: 99, transition: 'width 0.4s ease',
+              width: `${progreso}%`,
+              background: progreso === 100
+                ? 'linear-gradient(90deg, var(--success), #10b981)'
+                : 'linear-gradient(90deg, var(--celeste), var(--info))',
+            }} />
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        {/* Info general */}
         <div className="card">
           <div className="card-header"><span className="card-title">Información general</span></div>
-          <div className="card-body" style={{ fontSize: 13.5, lineHeight: 2 }}>
-            <div><b>Instrumento:</b> {detalle.instrumento?.nombre} ({detalle.instrumento?.codigo_instrumento})</div>
-            <div><b>Fecha aplicación:</b> {new Date(detalle.fecha_aplicacion).toLocaleDateString('es-PE')}</div>
-            <div><b>Puntaje total:</b> {detalle.puntaje_total ?? '—'}</div>
-            <div><b>Ítems respondidos:</b> {detalle.eva_respuestas?.length} / {detalle.instrumento?.eva_items?.length}</div>
+          <div className="card-body" style={{ fontSize: 13.5 }}>
+            {[
+              ['Instrumento', `${detalle.instrumento?.nombre} (${detalle.instrumento?.codigo_instrumento})`],
+              ['Área evaluada', detalle.instrumento?.area_evaluada ?? '—'],
+              ['Fecha aplicación', new Date(detalle.fecha_aplicacion).toLocaleDateString('es-PE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })],
+              ['Puntaje total', detalle.puntaje_total ?? '—'],
+              ['Ítems respondidos', `${respondidos} / ${totalItems}`],
+            ].map(([label, val]) => (
+              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>{label}</span>
+                <span style={{ fontWeight: 500, textAlign: 'right', maxWidth: '60%' }}>{val}</span>
+              </div>
+            ))}
           </div>
         </div>
 
-        {detalle.estado !== 'completado' && (
-          <div className="card">
-            <div className="card-header"><span className="card-title">Completar evaluación</span></div>
+        {/* Panel completar / interpretación */}
+        {estaCompleto ? (
+          <div className="card" style={{ border: '1.5px solid var(--success)' }}>
+            <div className="card-header" style={{ background: 'var(--success-bg)', borderBottom: '1px solid var(--success)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <CheckCircle size={16} color="var(--success)" />
+                <span className="card-title" style={{ color: 'var(--success)' }}>Evaluación completada</span>
+              </div>
+            </div>
+            <div className="card-body" style={{ fontSize: 13.5 }}>
+              {detalle.puntaje_total !== null && (
+                <div style={{ textAlign: 'center', marginBottom: 16 }}>
+                  <div style={{ fontSize: 40, fontWeight: 800, color: 'var(--celeste)', lineHeight: 1 }}>{detalle.puntaje_total}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Puntaje total</div>
+                </div>
+              )}
+              {detalle.interpretacion && (
+                <div style={{ background: 'var(--surface-2)', borderRadius: 10, padding: '14px 16px', lineHeight: 1.7, color: 'var(--text-primary)', fontSize: 13.5 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Interpretación clínica</div>
+                  {detalle.interpretacion}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : puedeCompletar ? (
+          <div className="card" style={{ border: '1.5px solid var(--celeste-soft)' }}>
+            <div className="card-header" style={{ background: 'var(--celeste-light)', borderBottom: '1px solid var(--celeste-soft)' }}>
+              <span className="card-title" style={{ color: 'var(--celeste-dark)' }}>Completar evaluación</span>
+              {progreso < 100 && (
+                <span style={{ fontSize: 11, background: 'var(--warning-bg)', color: 'var(--warning)', padding: '2px 8px', borderRadius: 20, fontWeight: 600, border: '1px solid var(--warning)' }}>
+                  ⚠ {progreso}% respondido
+                </span>
+              )}
+            </div>
             <div className="card-body">
-              <div className="form-group" style={{ marginBottom: 14 }}>
-                <label className="form-label">Puntaje total</label>
-                <input type="number" className="form-control" value={interpretacion.puntaje_total}
-                  onChange={e => setInterpretacion(i => ({ ...i, puntaje_total: e.target.value }))} />
+              <div className="form-group" style={{ marginBottom: 16 }}>
+                <label className="form-label">
+                  Puntaje total <span className="required">*</span>
+                </label>
+                <input
+                  type="number"
+                  className="form-control"
+                  value={interpretacion.puntaje_total}
+                  onChange={e => setInterpretacion(i => ({ ...i, puntaje_total: e.target.value }))}
+                  placeholder="Ej. 42"
+                  style={{ fontSize: 18, fontWeight: 700, textAlign: 'center' }}
+                />
               </div>
-              <div className="form-group" style={{ marginBottom: 18 }}>
-                <label className="form-label">Interpretación clínica</label>
-                <textarea className="form-control" rows={4} value={interpretacion.interpretacion}
+              <div className="form-group" style={{ marginBottom: 20 }}>
+                <label className="form-label">
+                  Interpretación clínica <span className="required">*</span>
+                </label>
+                <textarea
+                  className="form-control"
+                  rows={5}
+                  value={interpretacion.interpretacion}
                   onChange={e => setInterpretacion(i => ({ ...i, interpretacion: e.target.value }))}
-                  placeholder="Escribe la interpretación del resultado..." />
+                  placeholder="Describe el resultado clínico: nivel de ansiedad, burnout, etc."
+                  style={{ resize: 'vertical' }}
+                />
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, textAlign: 'right' }}>
+                  {interpretacion.interpretacion?.length ?? 0} caracteres
+                </div>
               </div>
-              <button className="btn btn-primary" onClick={completar} disabled={guardando}>
-                <CheckCircle size={14} /> {guardando ? 'Guardando...' : 'Marcar como completada'}
+              <button
+                className="btn btn-primary"
+                onClick={completarConValidacion}
+                disabled={guardando}
+                style={{ width: '100%', justifyContent: 'center', padding: '12px' }}
+              >
+                <CheckCircle size={15} />
+                {guardando ? 'Guardando...' : 'Marcar como completada'}
               </button>
+              <p style={{ fontSize: 11.5, color: 'var(--text-muted)', textAlign: 'center', marginTop: 8 }}>
+                Ambos campos son requeridos antes de completar
+              </p>
             </div>
           </div>
-        )}
-
-        {detalle.estado === 'completado' && detalle.interpretacion && (
-          <div className="card">
-            <div className="card-header"><span className="card-title">Interpretación</span></div>
-            <div className="card-body" style={{ fontSize: 13.5, lineHeight: 1.7 }}>
-              {detalle.interpretacion}
-            </div>
-          </div>
-        )}
+        ) : null}
       </div>
 
+      {/* Respuestas registradas */}
       {detalle.eva_respuestas?.length > 0 && (
         <div className="card" style={{ marginTop: 16 }}>
-          <div className="card-header"><span className="card-title">Respuestas registradas</span></div>
+          <div className="card-header">
+            <span className="card-title">Respuestas registradas</span>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', background: 'var(--surface-2)', padding: '2px 10px', borderRadius: 20 }}>
+              {respondidos} respuestas
+            </span>
+          </div>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>#</th><th>Ítem</th><th>Respuesta</th><th>Puntaje</th></tr></thead>
+              <thead>
+                <tr>
+                  <th style={{ width: 40 }}>#</th>
+                  <th>Ítem / Pregunta</th>
+                  <th style={{ width: 160 }}>Respuesta</th>
+                  <th style={{ width: 90 }}>Puntaje</th>
+                </tr>
+              </thead>
               <tbody>
-                {detalle.eva_respuestas.map(r => (
-                  <tr key={r.id}>
-                    <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{r.item?.numero_item}</td>
-                    <td style={{ fontSize: 12.5, maxWidth: 300 }}>{r.item?.enunciado}</td>
-                    <td>{r.respuesta_texto ?? r.respuesta_numerica ?? '—'}</td>
-                    <td>{r.puntaje_obtenido ?? '—'}</td>
-                  </tr>
-                ))}
+                {detalle.eva_respuestas
+                  .slice()
+                  .sort((a, b) => (a.item?.numero_item ?? 0) - (b.item?.numero_item ?? 0))
+                  .map(r => (
+                    <tr key={r.id}>
+                      <td style={{ color: 'var(--text-muted)', fontSize: 12, textAlign: 'center' }}>
+                        <span style={{ background: 'var(--surface-2)', borderRadius: 6, padding: '2px 6px', fontWeight: 700 }}>{r.item?.numero_item}</span>
+                      </td>
+                      <td style={{ fontSize: 13, lineHeight: 1.5, maxWidth: 380 }}>{r.item?.enunciado}</td>
+                      <td>
+                        <span style={{ background: 'var(--celeste-light)', color: 'var(--celeste-dark)', borderRadius: 6, padding: '3px 10px', fontSize: 12.5, fontWeight: 600 }}>
+                          {r.respuesta_texto ?? r.respuesta_numerica ?? '—'}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'center', fontWeight: 700, color: 'var(--text-primary)', fontSize: 14 }}>
+                        {r.puntaje_obtenido ?? '—'}
+                      </td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>
         </div>
       )}
+
+      {confirmar && (
+        <Confirm
+          titulo="Anular aplicación"
+          descripcion={`¿Estás seguro de que deseas anular ${confirmar?.desc}? Esta acción no se puede deshacer.`}
+          onConfirm={eliminar}
+          onCancel={() => setConfirmar(null)}
+          cargando={guardando}
+        />
+      )}
     </div>
   )
+  }
 
   // ── Formulario nueva aplicación ────────────────────────────
   if (vista === 'form') return (

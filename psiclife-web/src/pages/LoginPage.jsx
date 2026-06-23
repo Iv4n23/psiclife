@@ -1,5 +1,5 @@
 // src/pages/LoginPage.jsx
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { authApi, webMedicaApi } from '../services/api'
@@ -7,6 +7,50 @@ import { getImageUrl } from '../utils/image'
 import toast from 'react-hot-toast'
 import { Eye, EyeOff, Globe } from 'lucide-react'
 import { useTheme } from '../hooks/useTheme'
+
+// ── Evaluador de fortaleza de contraseña ──────────────────────
+const PASS_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/
+
+function evaluarContrasena(pass) {
+  if (!pass) return { nivel: 0, texto: '', color: '' }
+  let puntos = 0
+  if (pass.length >= 8)           puntos++
+  if (/[A-Z]/.test(pass))         puntos++
+  if (/[a-z]/.test(pass))         puntos++
+  if (/\d/.test(pass))            puntos++
+  if (/[\W_]/.test(pass))         puntos++
+  if (puntos <= 2) return { nivel: puntos, texto: 'Débil',   color: 'var(--danger)' }
+  if (puntos === 3) return { nivel: puntos, texto: 'Regular', color: 'var(--warning)' }
+  if (puntos === 4) return { nivel: puntos, texto: 'Buena',   color: 'var(--info)' }
+  return             { nivel: puntos, texto: 'Fuerte',  color: 'var(--success)' }
+}
+
+// ── Componente indicador ──────────────────────────────────────
+function FortalezaContrasena({ contrasena }) {
+  const { nivel, texto, color } = evaluarContrasena(contrasena)
+  if (!contrasena) return null
+  return (
+    <div style={{ marginTop: 6 }}>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 3 }}>
+        {[1, 2, 3, 4, 5].map(i => (
+          <div key={i} style={{
+            flex: 1, height: 4, borderRadius: 2,
+            background: i <= nivel ? color : 'var(--border)',
+            transition: 'background 0.2s',
+          }} />
+        ))}
+      </div>
+      <div style={{ fontSize: 11, color, fontWeight: 600 }}>
+        {texto}
+        {nivel < 5 && (
+          <span style={{ color: 'var(--text-muted)', fontWeight: 400, marginLeft: 6 }}>
+            — debe tener mayúscula, minúscula, número y símbolo
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
 
 export default function LoginPage() {
   const { login } = useAuth()
@@ -33,8 +77,8 @@ export default function LoginPage() {
     else if (!/\S+@\S+\.\S+/.test(form.correo)) e.correo = 'Correo inválido'
     
     if (!form.contrasena) e.contrasena = 'La contraseña es requerida'
-    else if ((tab === 'registro' || tab === 'completar') && form.contrasena.length < 8) {
-      e.contrasena = 'Debe tener al menos 8 caracteres'
+    else if ((tab === 'registro' || tab === 'completar') && !PASS_REGEX.test(form.contrasena)) {
+      e.contrasena = 'Debe tener al menos 8 caracteres, mayúscula, minúscula, número y símbolo'
     }
     
     if (tab === 'registro' || tab === 'completar') {
@@ -70,7 +114,10 @@ export default function LoginPage() {
         toast.success('Bienvenido a PsicLife')
         navigate('/dashboard')
       } catch (err) {
-        const msg = err.response?.data?.mensaje ?? 'Error al iniciar sesión'
+        const data = err.response?.data
+        // El backend puede devolver el mensaje en .mensaje (custom) o .message (NestJS nativo)
+        const raw = data?.mensaje ?? data?.message
+        const msg = Array.isArray(raw) ? raw[0] : (raw || 'Error al iniciar sesión')
         toast.error(msg)
       } finally {
         setCargando(false)
@@ -79,7 +126,7 @@ export default function LoginPage() {
       // Registro estándar
       try {
         await authApi.registro({ correo: form.correo, contrasena: form.contrasena })
-        toast.success('Cuenta creada exitosamente. Iniciando sesión...')
+        toast.success('Cuenta creada. Si ya agendaste una cita, usa "Completar registro" para vincularla.')
         await login({ correo: form.correo, contrasena: form.contrasena })
         navigate('/dashboard')
       } catch (err) {
@@ -233,6 +280,9 @@ export default function LoginPage() {
                   </button>
                 </div>
                 {errores.contrasena && <span className="form-error">{errores.contrasena}</span>}
+                {(tab === 'registro' || tab === 'completar') && !tokenEnviado && (
+                  <FortalezaContrasena contrasena={form.contrasena} />
+                )}
               </div>
 
               {tab === 'registro' && (

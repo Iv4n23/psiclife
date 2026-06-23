@@ -12,10 +12,12 @@
   border-bottom: 1px solid rgba(42,173,219,.1);
   box-shadow: 0 2px 24px rgba(42,173,219,.06);
 }
+
 .inner {
   max-width: 1200px; margin: 0 auto; padding: 0 48px;
   display: flex; align-items: center; justify-content: space-between; gap: 32px;
 }
+
 .logo {
   font-family: 'Playfair Display', serif;
   font-size: 24px; font-weight: 600; color: var(--ink);
@@ -23,35 +25,28 @@
 }
 .logo em { font-style: italic; color: var(--c2); }
 
-/* Si el logo viene como imagen, limitar su tamaño para que no desborde */
-.logo img,
-.logoImg {
-  display: block;
-  height: 48px;
-  width: auto;
-  object-fit: contain;
+.logo img, .logoImg {
+  display: block; height: 48px; width: auto; object-fit: contain;
 }
+.nav.scrolled .logo img, .nav.scrolled .logoImg { height: 40px; }
 
-.nav.scrolled .logo img,
-.nav.scrolled .logoImg {
-  height: 40px;
-}
-
+/* ── Links (desktop) ── */
 .links {
-  display: flex; gap: 28px; list-style: none; align-items: center;
+  display: flex; gap: 28px; list-style: none; align-items: center; margin: 0; padding: 0;
 }
 .links a {
   font-size: 14px; font-weight: 400; color: var(--ink2);
-  transition: color .2s; white-space: nowrap;
+  transition: color .2s; white-space: nowrap; text-decoration: none;
 }
 .links a:hover { color: var(--ink); }
 
+/* ── Acciones (desktop) ── */
 .actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 
 .btnLogin {
   padding: 8px 20px; border-radius: 100px;
   font-size: 14px; font-weight: 400; color: var(--ink2);
-  border: 1.5px solid var(--c4); transition: all .2s;
+  border: 1.5px solid var(--c4); transition: all .2s; background: none; cursor: pointer;
 }
 .btnLogin:hover { background: var(--c3); color: var(--ink); border-color: var(--c); }
 
@@ -60,64 +55,108 @@
   font-size: 14px; font-weight: 500;
   background: linear-gradient(135deg, var(--c), var(--c2));
   color: #fff; box-shadow: 0 4px 16px rgba(42,173,219,.3);
-  transition: all .2s;
+  transition: all .2s; border: none; cursor: pointer;
 }
 .btnAgendar:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(42,173,219,.4); }
 
+/* ── Hamburguesa (oculta en desktop) ── */
 .hamburger {
-  display: none; flex-direction: column; gap: 4px;
-  width: 28px; padding: 4px;
+  display: none; flex-direction: column; justify-content: center; gap: 5px;
+  width: 36px; height: 36px; padding: 6px;
+  background: none; border: none; cursor: pointer; flex-shrink: 0;
 }
 .hamburger span {
   display: block; height: 2px; border-radius: 2px;
-  background: var(--ink); transition: all .2s;
+  background: var(--ink); transition: all .25s;
+  transform-origin: center;
 }
+/* Animación hamburguesa → X */
+.hamburger.active span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.hamburger.active span:nth-child(2) { opacity: 0; transform: scaleX(0); }
+.hamburger.active span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
 
-@media (max-width: 860px) {
-  .links {
-    display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(255,255,255,.97); backdrop-filter: blur(20px);
-    flex-direction: column; justify-content: center; gap: 32px;
-    font-size: 18px; z-index: 99;
-  }
-  .links.open { display: flex; }
-  .hamburger { display: flex; }
-  .inner { padding: 0 24px; }
-  .btnLogin { display: none; }
-  .logo img, .logoImg { height: 40px }
-}
-
-.userMenu {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
+/* ── userMenu ── */
+.userMenu { display: flex; align-items: center; gap: 12px; }
 .avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
+  width: 36px; height: 36px; border-radius: 50%;
   background: linear-gradient(135deg, var(--c), var(--c2));
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  font-weight: 600;
-  box-shadow: 0 4px 12px rgba(42,173,219,.2);
+  color: #fff; display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 600; box-shadow: 0 4px 12px rgba(42,173,219,.2);
 }
-
 .btnLogout {
-  padding: 8px;
-  border-radius: 50%;
-  color: var(--ink2);
-  transition: all .2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  padding: 8px; border-radius: 50%; color: var(--ink2);
+  transition: all .2s; display: flex; align-items: center; justify-content: center;
+  background: none; border: none; cursor: pointer;
 }
-.btnLogout:hover {
-  background: #fef2f2;
-  color: #ef4444;
+.btnLogout:hover { background: #fef2f2; color: #ef4444; }
+
+/* ══════════════════════════════════════
+   MOBILE  ≤ 860px
+══════════════════════════════════════ */
+@media (max-width: 860px) {
+  .inner { padding: 0 20px; gap: 8px; }
+  .logo img, .logoImg { height: 38px; }
+
+  /* Ocultar links y botones de escritorio */
+  .links { display: none; }
+  .btnLogin { display: none; }
+  .btnAgendar { display: none; }
+
+  /* Mostrar hamburguesa */
+  .hamburger { display: flex; }
+
+  /* ── Menú abierto: overlay pantalla completa ── */
+  .links.open {
+    display: flex;
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(255,255,255,0.97);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    z-index: 99;
+    padding: 24px;
+    list-style: none;
+  }
+
+  .links.open a {
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--ink);
+  }
+
+  /* Botones de acción dentro del menú mobile */
+  .mobileBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 13px 36px;
+    border-radius: 100px;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+  .mobileBtnOutline {
+    background: none;
+    border: 1.5px solid var(--c4);
+    color: var(--ink2);
+  }
+  .mobileBtnSolid {
+    border: none;
+    background: linear-gradient(135deg, var(--c), var(--c2));
+    color: #fff;
+    box-shadow: 0 4px 16px rgba(42,173,219,.3);
+  }
+
+  /* La hamburguesa queda encima del overlay (z-index 101 > 99) */
+  .hamburger { z-index: 101; position: relative; }
 }
 
+/* En desktop, ocultar los botones exclusivos de mobile */
+@media (min-width: 861px) {
+  .mobileBtn { display: none; }
+}

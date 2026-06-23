@@ -10,13 +10,18 @@ import { CrearDiagnosticoDto, ActualizarDiagnosticoDto, CrearCatalogoDto } from 
 import { JwtAuthGuard }  from 'src/auth/guards/jwt-auth.guard'
 import { PermisosGuard } from 'src/auth/guards/permisos.guard'
 import { Permisos }      from 'src/common/decorators/permisos.decorator'
+import { UsuarioActual } from 'src/common/decorators/usuario-actual.decorator'
+import { PsicologoOwnerHelper } from 'src/common/helpers/psicologo-owner.helper'
 
 @ApiTags('Diagnósticos')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermisosGuard)
 @Controller('diagnosticos')
 export class DiagnosticosController {
-  constructor(private readonly diagnosticosService: DiagnosticosService) {}
+  constructor(
+    private readonly diagnosticosService: DiagnosticosService,
+    private readonly psicologoOwner: PsicologoOwnerHelper,
+  ) {}
 
   // ── Catálogo ──────────────────────────────────────────────
 
@@ -63,8 +68,13 @@ export class DiagnosticosController {
   @Get()
   @Permisos('diagnosticos.ver')
   @ApiOperation({ summary: 'Listar todos los diagnósticos registrados' })
-  async listarTodos() {
-    const datos = await this.diagnosticosService.listarTodos()
+  async listarTodos(
+    @UsuarioActual('sub') usuarioId: string,
+    @UsuarioActual('rolNombre') rolNombre: string,
+  ) {
+    // Si es psicólogo, filtrar solo diagnósticos de sus propios pacientes
+    const psicologoId = await this.psicologoOwner.filtrarPorPsicologo(undefined, usuarioId, rolNombre)
+    const datos = await this.diagnosticosService.listarTodos(psicologoId ?? undefined)
     return { mensaje: 'Diagnósticos obtenidos correctamente', datos }
   }
 
@@ -72,7 +82,12 @@ export class DiagnosticosController {
   @Permisos('diagnosticos.ver')
   @ApiOperation({ summary: 'Diagnósticos de un paciente' })
   @ApiParam({ name: 'pacienteId', format: 'uuid' })
-  async listarPorPaciente(@Param('pacienteId', ParseUUIDPipe) pacienteId: string) {
+  async listarPorPaciente(
+    @Param('pacienteId', ParseUUIDPipe) pacienteId: string,
+    @UsuarioActual('sub') usuarioId: string,
+    @UsuarioActual('rolNombre') rolNombre: string,
+  ) {
+    await this.psicologoOwner.verificarAccesoPaciente(pacienteId, usuarioId, rolNombre)
     const datos = await this.diagnosticosService.listarPorPaciente(pacienteId)
     return { mensaje: 'Diagnósticos obtenidos correctamente', datos }
   }
@@ -97,7 +112,12 @@ export class DiagnosticosController {
   @Post()
   @Permisos('diagnosticos.crear')
   @ApiOperation({ summary: 'Registrar diagnóstico' })
-  async crear(@Body() dto: CrearDiagnosticoDto) {
+  async crear(
+    @Body() dto: CrearDiagnosticoDto,
+    @UsuarioActual('sub') usuarioId: string,
+    @UsuarioActual('rolNombre') rolNombre: string,
+  ) {
+    await this.psicologoOwner.verificarAccesoPaciente(dto.paciente_id, usuarioId, rolNombre)
     const datos = await this.diagnosticosService.crear(dto)
     return { mensaje: 'Diagnóstico registrado correctamente', datos }
   }

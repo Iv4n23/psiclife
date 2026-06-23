@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { facturacionApi, pacientesApi, psicologosApi, citasApi, configuracionApi } from '../services/api'
 import { EmptyState, Spinner } from '../components/ui/index.jsx'
 import toast from 'react-hot-toast'
-import { Plus, X, Save, Eye, DollarSign, TrendingUp, CheckCircle, AlertTriangle, Image, ImageOff, Trash2, RefreshCw } from 'lucide-react'
+import { Plus, X, Save, Eye, DollarSign, TrendingUp, CheckCircle, AlertTriangle, Image, ImageOff, Trash2, RefreshCw, FileText, CreditCard } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { getImageUrl } from '../utils/image'
 
@@ -19,7 +19,10 @@ const IGV_RATE = 0.18
 const API_BASE = import.meta.env.VITE_API_URL?.replace('/api/v1', '') ?? 'http://localhost:3000'
 
 export default function Pagos() {
-  const { puedo } = useAuth()
+  const { puedo, usuario } = useAuth()
+  const rawRol = typeof usuario?.rol === 'string' ? usuario.rol : typeof usuario?.rolNombre === 'string' ? usuario.rolNombre : ''
+  const esPsicologo = rawRol.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes('psicolog')
+  const miPsicologoId = usuario?.psicologoId ?? null
   const [facturas,   setFacturas]   = useState([])
   const [cargando,   setCargando]   = useState(true)
   const [guardando,  setGuardando]  = useState(false)
@@ -47,6 +50,7 @@ export default function Pagos() {
 
   const [motivoAnular, setMotivoAnular] = useState('')
   const [imagenExpandida, setImagenExpandida] = useState(null)
+  const [modalFactura, setModalFactura] = useState(null)  // factura en modal de vista rápida
 
   // ── Estados para Verificación de Pagos ────────────────────
   const [pagosPend,       setPagosPend]       = useState([])
@@ -112,8 +116,15 @@ export default function Pagos() {
     } catch {}
   }
 
-  const igv      = form.subtotal ? Math.round(Number(form.subtotal) * IGV_RATE * 100) / 100 : 0
-  const total    = form.subtotal ? Math.round((Number(form.subtotal) + igv) * 100) / 100 : 0
+  const abrirModalFactura = async (id) => {
+    try {
+      const { data } = await facturacionApi.obtener(id)
+      setModalFactura(data.datos)
+    } catch {}
+  }
+
+  const igv   = 0
+  const total = form.subtotal ? Math.round(Number(form.subtotal) * 100) / 100 : 0
 
   const validarF = () => {
     const e = {}
@@ -185,7 +196,9 @@ export default function Pagos() {
     try {
       await facturacionApi.confirmarPago(pagoId)
       toast.success('Pago confirmado. Factura actualizada.')
-      await verDetalle(detalle.id)
+      if (detalle?.id) {
+        await verDetalle(detalle.id)
+      }
       await cargar()
     } catch (err) {
       const msg = err.response?.data?.mensaje ?? 'Error al confirmar pago'
@@ -197,13 +210,13 @@ export default function Pagos() {
     if (!window.confirm('¿Seguro que deseas rechazar este pago? Se notificará al paciente.')) return
     setGuardando(true)
     try {
-      // Usar la misma ruta de anular/rechazar si existe, sino eliminar el pago
       await facturacionApi.rechazarPago(pagoId)
       toast.success('Pago rechazado correctamente.')
-      await verDetalle(detalle.id)
+      if (detalle?.id) {
+        await verDetalle(detalle.id)
+      }
       await cargar()
     } catch (err) {
-      // Si no existe endpoint de rechazo, informar al usuario
       const msg = err.response?.data?.mensaje ?? 'Error al rechazar pago'
       toast.error(msg)
     } finally { setGuardando(false) }
@@ -281,8 +294,6 @@ export default function Pagos() {
             <div className="card-body" style={{ fontSize: 13.5, lineHeight: 2 }}>
               <div><b>Servicio:</b> {detalle.descripcion_servicio}</div>
               <div><b>Psicólogo:</b> {detalle.psicologo?.nombres} {detalle.psicologo?.apellidos}</div>
-              <div><b>Subtotal:</b> S/ {Number(detalle.subtotal).toFixed(2)}</div>
-              <div><b>IGV (18%):</b> S/ {Number(detalle.igv).toFixed(2)}</div>
               <div style={{ fontWeight: 600, fontSize: 15 }}><b>Total:</b> S/ {Number(detalle.total).toFixed(2)}</div>
               <div><b>Pagado:</b> S/ {pagado.toFixed(2)}</div>
               {restante > 0 && <div style={{ color: 'var(--info)' }}><b>Saldo pendiente:</b> S/ {restante.toFixed(2)}</div>}
@@ -551,10 +562,6 @@ export default function Pagos() {
                   value={form.subtotal} onChange={set('subtotal')} min={0} step="0.01" />
                 {errores.subtotal && <span className="form-error">{errores.subtotal}</span>}
               </div>
-              <div className="form-group">
-                <label className="form-label">IGV (18%) — calculado</label>
-                <input className="form-control" value={`S/ ${igv.toFixed(2)}`} disabled style={{ background: 'var(--surface-2)' }} />
-              </div>
               <div className="form-group" style={{ gridColumn: '1/-1' }}>
                 <div style={{ background: 'var(--celeste-light)', border: '1.5px solid var(--celeste-soft)', borderRadius: 'var(--radius-sm)', padding: '12px 16px', fontSize: 16, fontWeight: 600, color: 'var(--celeste-dark)' }}>
                   Total a cobrar: S/ {total.toFixed(2)}
@@ -581,11 +588,11 @@ export default function Pagos() {
           <div className="section-title">Pagos</div>
           <div className="section-subtitle">Facturas, pagos y reporte financiero</div>
         </div>
-        {tab === 'facturas' && <button className="btn btn-primary" onClick={() => setVista('form')}><Plus size={15}/> Nueva factura</button>}
+        {tab === 'facturas' && !esPsicologo && <button className="btn btn-primary" onClick={() => setVista('form')}><Plus size={15}/> Nueva factura</button>}
       </div>
 
       <div style={{ display:'flex', borderBottom:'1px solid var(--border)', marginBottom: 20 }}>
-        {['facturas','configuracion'].map(t => (
+        {['facturas',...(!esPsicologo ? ['configuracion'] : [])].map(t => (
           <button key={t} onClick={() => setTab(t)}
             style={{ padding:'10px 20px', fontSize:13.5, background:'none', border:'none', cursor:'pointer',
               borderBottom: tab===t ? '2.5px solid var(--celeste)' : '2.5px solid transparent',
@@ -736,14 +743,14 @@ export default function Pagos() {
             <div className="stat-icon" style={{ background: 'var(--info-bg)' }}><DollarSign size={18} color="var(--info)"/></div>
             <div>
               <div className="stat-num">S/ {Number(reporte.total_recaudado).toFixed(2)}</div>
-              <div className="stat-label">Total recaudado</div>
+              <div className="stat-label">{esPsicologo ? 'Total recaudado (mis sesiones)' : 'Total recaudado'}</div>
             </div>
           </div>
           <div className="stat-card">
             <div className="stat-icon" style={{ background: 'var(--success-bg)' }}><TrendingUp size={18} color="var(--success)"/></div>
             <div>
               <div className="stat-num">{reporte.total_facturas}</div>
-              <div className="stat-label">Total facturas</div>
+              <div className="stat-label">{esPsicologo ? 'Sesiones pagadas' : 'Sesiones pagadas'}</div>
             </div>
           </div>
           {reporte.por_metodo?.map(m => (
@@ -751,7 +758,7 @@ export default function Pagos() {
               <div className="stat-icon" style={{ background: 'var(--info-bg)' }}><DollarSign size={18} color="var(--info)"/></div>
               <div>
                 <div className="stat-num">S/ {Number(m._sum?.monto ?? 0).toFixed(2)}</div>
-                <div className="stat-label">{m.metodo} ({m._count?.metodo} pagos)</div>
+                <div className="stat-label">{m.metodo} ({m._count?.metodo} {m._count?.metodo === 1 ? 'pago' : 'pagos'})</div>
               </div>
             </div>
           ))}
@@ -774,12 +781,12 @@ export default function Pagos() {
                       <td style={{ fontWeight: 600 }}>S/ {Number(f.total).toFixed(2)}</td>
                       <td><span className={`badge ${ESTADO_BADGE[f.estado]}`}>{f.estado}</span></td>
                       <td>
-                        <button className="btn btn-ghost btn-icon btn-sm" onClick={() => verDetalle(f.id)} title="Ver detalle">
+                        <button className="btn btn-ghost btn-icon btn-sm" onClick={() => abrirModalFactura(f.id)} title="Ver detalle del pago">
                           <Eye size={13}/>
                         </button>
-                        {f.pagos?.some(p => (p.metodo === 'yape' || p.metodo === 'transferencia') && p.url_comprobante) && (
-                          <button className="btn btn-ghost btn-icon btn-sm" onClick={() => abrirComprobanteFactura(f)} title="Ver comprobante">
-                            <Image size={13} />
+                        {puedo('facturacion.editar') && ['pendiente','parcial'].includes(f.estado) && (
+                          <button className="btn btn-ghost btn-icon btn-sm" onClick={() => verDetalle(f.id)} title="Gestionar factura" style={{ fontSize: 13 }}>
+                            ⚙
                           </button>
                         )}
                         {puedo('facturacion.eliminar') && (
@@ -873,6 +880,140 @@ export default function Pagos() {
           </div>
         </form>
       )}
+
+      {/* ── Modal de visualización de factura / pago ── */}
+      {modalFactura && (() => {
+        const mf = modalFactura
+        const pagadoM  = mf.pagos?.reduce((a, p) => a + Number(p.monto), 0) ?? 0
+        const saldoM   = Number(mf.total) - pagadoM
+        const hayPend  = mf.pagos?.some(p => (p.metodo === 'yape' || p.metodo === 'transferencia') && p.confirmado === false)
+        return (
+          <div className="modal-overlay" onClick={() => setModalFactura(null)} style={{ zIndex: 1500, alignItems: 'flex-start', paddingTop: 60 }}>
+            <div onClick={e => e.stopPropagation()} style={{
+              background: 'var(--surface)', borderRadius: 18, width: '100%', maxWidth: 620,
+              boxShadow: '0 24px 60px rgba(0,0,0,0.22)', overflow: 'hidden',
+            }}>
+              {/* Header */}
+              <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700, fontSize: 16, fontFamily: 'monospace' }}>{mf.numero_factura}</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>
+                    {mf.paciente?.apellidos}, {mf.paciente?.nombres} ·&nbsp;
+                    <span className={`badge ${ESTADO_BADGE[mf.estado]}`}>{mf.estado}</span>
+                  </div>
+                </div>
+                {(() => {
+                  const pagoConImg = mf.pagos?.find(p => p.url_comprobante)
+                  return pagoConImg ? (
+                    <button className="btn btn-ghost btn-sm"
+                      onClick={() => setImagenExpandida(getImageUrl(pagoConImg.url_comprobante))}>
+                      <Image size={13} /> Ver comprobante
+                    </button>
+                  ) : null
+                })()}
+                <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setModalFactura(null)}><X size={15} /></button>
+              </div>
+
+              {/* Resumen financiero */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 1, background: 'var(--border)' }}>
+                {[
+                  { label: 'Total', val: `S/ ${Number(mf.total).toFixed(2)}`, bold: true },
+                  { label: saldoM > 0 ? 'Saldo pendiente' : 'Pagado', val: `S/ ${saldoM > 0 ? saldoM.toFixed(2) : pagadoM.toFixed(2)}`, color: saldoM > 0 ? 'var(--warning)' : 'var(--success)' },
+                  { label: 'Estado', val: mf.estado, color: mf.estado === 'pagada' ? 'var(--success)' : mf.estado === 'anulada' ? 'var(--danger)' : 'var(--warning)' },
+                ].map(({ label, val, bold, color }) => (
+                  <div key={label} style={{ background: 'var(--surface)', padding: '14px 16px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>{label}</div>
+                    <div style={{ fontWeight: bold ? 800 : 600, fontSize: bold ? 17 : 14, color: color ?? 'var(--text-primary)', textTransform: 'capitalize' }}>{val}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Datos de factura */}
+              <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px', fontSize: 13 }}>
+                <div><span style={{ color: 'var(--text-muted)' }}>Psicólogo:</span> <strong>{mf.psicologo?.nombres} {mf.psicologo?.apellidos}</strong></div>
+                <div><span style={{ color: 'var(--text-muted)' }}>Servicio:</span> {mf.descripcion_servicio}</div>
+                <div><span style={{ color: 'var(--text-muted)' }}>Fecha emisión:</span> {new Date(mf.emitida_en).toLocaleDateString('es-PE', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+                {mf.motivo_anulacion && <div style={{ gridColumn: '1/-1', color: 'var(--danger)' }}><span style={{ color: 'var(--text-muted)' }}>Motivo anulación:</span> {mf.motivo_anulacion}</div>}
+              </div>
+
+              {/* Historial de pagos */}
+              <div style={{ padding: '16px 24px' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>
+                  Pagos registrados {mf.pagos?.length > 0 && <span style={{ background: 'var(--surface-2)', borderRadius: 20, padding: '1px 8px', marginLeft: 6 }}>{mf.pagos.length}</span>}
+                </div>
+                {!mf.pagos?.length ? (
+                  <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 13, padding: '12px 0' }}>Sin pagos registrados</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {mf.pagos.map(p => {
+                      const esPend = (p.metodo === 'yape' || p.metodo === 'transferencia') && p.confirmado === false
+                      const imgUrl = p.url_comprobante ? getImageUrl(p.url_comprobante) : null
+                      return (
+                        <div key={p.id} style={{
+                          display: 'flex', gap: 14, alignItems: 'flex-start',
+                          padding: '12px 14px', borderRadius: 12,
+                          background: esPend ? 'var(--info-bg)' : 'var(--surface-2)',
+                          border: `1.5px solid ${esPend ? 'rgba(58,174,216,0.3)' : 'var(--border)'}`,
+                        }}>
+                          {/* Comprobante thumbnail */}
+                          {imgUrl && (
+                            <div onClick={() => setImagenExpandida(imgUrl)} style={{ cursor: 'zoom-in', flexShrink: 0 }}>
+                              <img src={imgUrl} alt="comprobante"
+                                style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }} />
+                              <div style={{ fontSize: 10, color: 'var(--info)', textAlign: 'center', marginTop: 2 }}>🔍 Ampliar</div>
+                            </div>
+                          )}
+                          {/* Datos del pago */}
+                          <div style={{ flex: 1, fontSize: 13 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                              <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>S/ {Number(p.monto).toFixed(2)}</span>
+                              <span className="badge badge-info" style={{ textTransform: 'capitalize' }}>{p.metodo}</span>
+                              <span className={`badge ${esPend ? 'badge-info' : 'badge-success'}`}>
+                                {esPend ? '⏳ Pendiente confirmación' : '✓ Confirmado'}
+                              </span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 16px', color: 'var(--text-secondary)' }}>
+                              {p.codigo_referencia && (
+                                <div style={{ gridColumn: '1/-1' }}>
+                                  <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>N° Operación:</span>{' '}
+                                  <code style={{ background: 'var(--surface)', border: '1px solid var(--border)', padding: '2px 8px', borderRadius: 6, fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
+                                    {p.codigo_referencia}
+                                  </code>
+                                </div>
+                              )}
+                              <div><span style={{ color: 'var(--text-muted)', fontSize: 11 }}>Fecha:</span> {new Date(p.pagado_en).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })}</div>
+                            </div>
+                          </div>
+                          {/* Acciones aprobar/rechazar si está pendiente */}
+                          {esPend && puedo('facturacion.editar') && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+                              <button disabled={guardando} onClick={async () => {
+                                await confirmarPagoYape(p.id)
+                                await abrirModalFactura(mf.id)
+                                await cargar()
+                              }} style={{ padding: '6px 12px', borderRadius: 8, background: 'linear-gradient(135deg,#10b981,#059669)', color: '#fff', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+                                <CheckCircle size={13} /> Aprobar
+                              </button>
+                              <button disabled={guardando} onClick={async () => {
+                                if (!window.confirm('¿Rechazar este pago?')) return
+                                await rechazarPago(p.id)
+                                await abrirModalFactura(mf.id)
+                                await cargar()
+                              }} style={{ padding: '6px 12px', borderRadius: 8, background: 'rgba(224,48,80,0.08)', color: 'var(--danger)', border: '1px solid rgba(224,48,80,0.3)', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+                                <X size={12} /> Rechazar
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {imagenExpandida && (
         <div className="modal-overlay" onClick={() => setImagenExpandida(null)} style={{ zIndex: 2000, background: 'rgba(0,0,0,0.85)' }}>

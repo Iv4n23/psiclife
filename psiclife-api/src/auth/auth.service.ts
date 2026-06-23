@@ -37,7 +37,7 @@ export class AuthService {
     if (!usuario.esta_activo) throw new UnauthorizedException('Tu cuenta está desactivada')
 
     const valida = await bcrypt.compare(dto.contrasena, usuario.contrasena_hash)
-    if (!valida) throw new UnauthorizedException('Credenciales incorrectas')
+    if (!valida) throw new UnauthorizedException('La contraseña que ingresaste es incorrecta')
 
     const ahora = new Date()
     await this.prisma.usuarios.update({
@@ -90,20 +90,18 @@ export class AuthService {
     })
     if (existe) throw new BadRequestException('El correo ya está registrado')
 
-    let rolUsuario = await this.prisma.roles.findUnique({
-      where: { nombre: 'Usuario' }
+    let rolPaciente = await this.prisma.roles.findUnique({
+      where: { nombre: 'Paciente' }
     })
-    
-    // Si no existe el rol "Usuario", lo creamos temporalmente para no fallar
-    if (!rolUsuario) {
-      rolUsuario = await this.prisma.roles.create({
-        data: {
-          nombre: 'Usuario',
-          permisos: [],
-          es_del_sistema: true,
-          descripcion: 'Rol básico para pacientes/usuarios registrados desde la web'
-        }
+
+    if (!rolPaciente) {
+      rolPaciente = await this.prisma.roles.findUnique({
+        where: { nombre: 'Usuario' }
       })
+    }
+
+    if (!rolPaciente) {
+      throw new BadRequestException('No se encontró un rol válido para el registro')
     }
 
     const hash = await bcrypt.hash(dto.contrasena, 12)
@@ -111,7 +109,7 @@ export class AuthService {
       data: {
         correo: dto.correo,
         contrasena_hash: hash,
-        rol_id: rolUsuario.id,
+        rol_id: rolPaciente.id,
         esta_activo: true
       }
     })
@@ -404,16 +402,11 @@ export class AuthService {
       }
     })
 
-    // Enviar correo (Se asume que la plantilla recuperacion_contrasena o una genérica puede servir.
-    // Usamos enviarCorreo directo o plantilla si existe, aquí reutilizamos el sistema)
-    await this.correos.enviarConPlantilla(
-      'recuperacion_contrasena', // Por defecto se puede usar esta si no hay otra, o enviar el token
+    // Enviar correo con el token de 6 dígitos
+    await this.correos.enviarVerificacionCuenta(
       usuario.correo,
-      {
-        nombres: paciente.nombres || usuario.correo.split('@')[0],
-        enlace_recuperacion: `Token de verificación: ${tokenRaw}`,
-        anio: new Date().getFullYear().toString(),
-      }
+      paciente.nombres || usuario.correo.split('@')[0],
+      tokenRaw,
     ).catch(() => {})
 
     return {

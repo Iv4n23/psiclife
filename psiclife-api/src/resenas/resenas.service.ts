@@ -63,6 +63,22 @@ export class ResenasService {
     });
   }
 
+  async listarTodas() {
+    return this.prisma.resenas.findMany({
+      include: {
+        paciente: { select: { nombres: true, apellidos: true } },
+        cita: { include: { psicologo: { select: { nombres: true, apellidos: true } } } }
+      },
+      orderBy: { creado_en: 'desc' }
+    });
+  }
+
+  async eliminar(id: string) {
+    const resena = await this.prisma.resenas.findUnique({ where: { id } });
+    if (!resena) throw new NotFoundException('Reseña no encontrada');
+    await this.prisma.resenas.delete({ where: { id } });
+  }
+
   async listarPublicas() {
     // Obtenemos hasta 5 reseñas aleatorias con calificación 4 o 5
     // Usaremos un enfoque manual con raw query o tomamos las últimas buenas y aleatorizamos

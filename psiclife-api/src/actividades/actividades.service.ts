@@ -76,13 +76,12 @@ export class ActividadesService {
 
   // ── Asignaciones ──────────────────────────────────────────
 
-  async listarAsignaciones(pacienteId?: string, estado?: act_asignaciones_estado) {
-
+  async listarAsignaciones(pacienteId?: string, estado?: act_asignaciones_estado, pacienteIds?: string[]) {
     return this.prisma.act_asignaciones.findMany({
       where: {
-        ...(pacienteId ? { paciente_id: pacienteId } : {}),
-        ...(estado     ? { estado: estado as act_asignaciones_estado } : {}),
-
+        ...(pacienteId  ? { paciente_id: pacienteId } : {}),
+        ...(pacienteIds ? { paciente_id: { in: pacienteIds } } : {}),
+        ...(estado      ? { estado: estado as act_asignaciones_estado } : {}),
       },
       include: {
         actividad: { select: { titulo: true, tipo: true } },

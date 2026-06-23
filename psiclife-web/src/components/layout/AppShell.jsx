@@ -78,7 +78,7 @@ export default function AppShell() {
     webMedicaApi.obtener()
       .then(res => {
         if (res.data?.datos?.logo_url) {
-          const apiBase = import.meta.env.VITE_API_URL.replace('/api/v1', '')
+          const apiBase = import.meta.env.VITE_API_URL?.replace('/api/v1', '') ?? 'http://localhost:3000'
           setLogoUrl(`${apiBase}${res.data.datos.logo_url}`)
         }
       })

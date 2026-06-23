@@ -66,6 +66,24 @@ export class UsuariosService {
   async actualizar(id: string, dto: ActualizarUsuarioDto, solicitanteId: string) {
     const anterior = await this.buscarPorId(id)
 
+    // Un administrador no puede cambiar su propio rol
+    if (dto.rol_id && id === solicitanteId) {
+      throw new ForbiddenException('No puedes cambiar tu propio rol')
+    }
+
+    // No se puede quitar el rol de administrador al único admin activo
+    if (dto.rol_id && anterior.rol.nombre === 'Administrador') {
+      const rolNuevo = await this.verificarRol(dto.rol_id)
+      if (rolNuevo.nombre !== 'Administrador') {
+        const totalAdmins = await this.prisma.usuarios.count({
+          where: { rol: { nombre: 'Administrador' }, esta_activo: true },
+        })
+        if (totalAdmins <= 1) {
+          throw new ForbiddenException('No puedes cambiar el rol del único administrador activo')
+        }
+      }
+    }
+
     if (dto.rol_id) await this.verificarRol(dto.rol_id)
 
     if (dto.correo && dto.correo !== anterior.correo) {
@@ -118,6 +136,25 @@ export class UsuariosService {
       if (total <= 1)
         throw new ForbiddenException('No se puede eliminar al único administrador activo')
     }
+
+    // Verificar si tiene un perfil de psicólogo
+    const tienePerfilPsicologo = await this.prisma.psicologos.findFirst({
+      where: { usuario_id: id },
+    })
+    if (tienePerfilPsicologo) {
+      throw new ConflictException('No se puede eliminar la cuenta porque tiene un perfil de psicólogo asociado. Por favor, elimine el perfil de psicólogo primero en su respectivo apartado.')
+    }
+
+    // Desvincular de otras tablas que restringen el borrado
+    await this.prisma.pacientes.updateMany({
+      where: { usuario_id: id },
+      data: { usuario_id: null },
+    })
+
+    await this.prisma.auditoria.updateMany({
+      where: { usuario_id: id },
+      data: { usuario_id: null },
+    })
 
     await this.prisma.usuarios.delete({ where: { id } })
     await this.auditoria('usuario.eliminado', id, usuario, null, solicitanteId)

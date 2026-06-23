@@ -120,6 +120,9 @@ export default function Citas() {
   const [modalEliminar,   setModalEliminar]   = useState(null)
   const [modalReprogramar, setModalReprogramar] = useState(null)
   const [formReprogramar, setFormReprogramar] = useState({ programada_para: '', modalidad: 'presencial', plataforma_virtual: 'zoom', enlace_reunion: '' })
+  const [slotsReprog, setSlotsReprog] = useState([])
+  const [fechaReprog, setFechaReprog] = useState('')
+  const [cargandoSlotsReprog, setCargandoSlotsReprog] = useState(false)
   const [detalleCita,     setDetalleCita]     = useState(null)
   
   const [modalEnlace,     setModalEnlace]     = useState(null)
@@ -159,18 +162,61 @@ export default function Citas() {
   useEffect(() => { cargar() }, [mesActual, añoActual])
   useEffect(() => { setDetalleCita(null) }, [diaSelec])
 
+  // Cargar slots para el modal de reprogramar
+  useEffect(() => {
+    if (!modalReprogramar || !fechaReprog) { setSlotsReprog([]); return }
+    const psicId = modalReprogramar.psicologo_id
+    if (!psicId) return
+    setCargandoSlotsReprog(true)
+    disponibilidadApi.semana(psicId, fechaReprog)
+      .then(({ data }) => {
+        const { horarios, bloqueos, citas } = data.datos || data
+        const JS_DIAS = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado']
+        const d = new Date(fechaReprog + 'T00:00:00')
+        const diaSemana = JS_DIAS[d.getDay()]
+        const hs = horarios.filter(h => h.dia_semana === diaSemana && h.esta_disponible)
+        let slots = []
+        hs.forEach(h => {
+          let cur = new Date(`${fechaReprog}T${h.hora_inicio}:00`)
+          const fin = new Date(`${fechaReprog}T${h.hora_fin}:00`)
+          while (cur < fin) {
+            slots.push(cur.toTimeString().slice(0, 5))
+            cur = new Date(cur.getTime() + 60 * 60000)
+          }
+        })
+        const bloqDia = bloqueos.filter(b => b.fecha_bloqueo?.startsWith(fechaReprog))
+        const citasDia = citas.filter(c => c.programada_para?.startsWith(fechaReprog) && c.id !== modalReprogramar.id)
+        slots = slots.filter(slot => {
+          const si = new Date(`${fechaReprog}T${slot}:00`)
+          const sf = new Date(si.getTime() + 60 * 60000)
+          if (citasDia.some(c => { const ci = new Date(c.programada_para); const cf = new Date(ci.getTime() + c.duracion_minutos * 60000); return si < cf && sf > ci })) return false
+          if (bloqDia.some(b => { if (!b.hora_inicio) return true; const bi = new Date(`${fechaReprog}T${b.hora_inicio}:00`); const bf = new Date(`${fechaReprog}T${b.hora_fin}:00`); return si < bf && sf > bi })) return false
+          return true
+        })
+        setSlotsReprog(slots)
+      })
+      .catch(() => setSlotsReprog([]))
+      .finally(() => setCargandoSlotsReprog(false))
+  }, [fechaReprog, modalReprogramar])
+
   const rawRol = typeof usuario?.rol === 'string'
     ? usuario.rol
     : typeof usuario?.rolNombre === 'string'
       ? usuario.rolNombre
       : ''
-  const esPsicologo = rawRol.trim().toLowerCase().includes('psicolog')
+  const esPsicologo = rawRol.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes('psicolog')
 
   useEffect(() => {
     if (vista === 'form' && esPsicologo && usuario?.psicologoId && !form.psicologo_id) {
       setForm(f => ({ ...f, psicologo_id: usuario.psicologoId }))
     }
-  }, [vista, usuario, form.psicologo_id, esPsicologo])
+    // Fallback: si es psicólogo pero aún no tiene psicologoId en el token,
+    // buscarlo en la lista de psicólogos cargada
+    if (vista === 'form' && esPsicologo && !usuario?.psicologoId && !form.psicologo_id && psicologos.length > 0) {
+      const mio = psicologos.find(p => p.usuario_id === usuario?.id)
+      if (mio) setForm(f => ({ ...f, psicologo_id: mio.id }))
+    }
+  }, [vista, usuario, form.psicologo_id, esPsicologo, psicologos])
 
   // Cargar slots disponibles al cambiar fecha o psicólogo
   useEffect(() => {
@@ -230,10 +276,14 @@ export default function Citas() {
   const cargar = async () => {
     setCargando(true)
     try {
-      // Cargamos el mes completo
       const mesStr = String(mesActual + 1).padStart(2, '0')
+      const paramsListar = { mes: `${añoActual}-${mesStr}` }
+      if (esPsicologo && usuario?.psicologoId) {
+        paramsListar.psicologoId = usuario.psicologoId
+      }
+
       const [{ data: dc }, { data: dp }, { data: dps }, { data: dcfg }] = await Promise.all([
-        citasApi.listar({ mes: `${añoActual}-${mesStr}` }),
+        citasApi.listar(paramsListar),
         pacientesApi.listar(),
         psicologosApi.listar(),
         configuracionApi.listar().catch(()=>({data:{datos:[]}})),
@@ -249,6 +299,9 @@ export default function Citas() {
         } else if (typeof dcfg.datos === 'object') {
           Object.assign(cfgObj, dcfg.datos)
         }
+      }
+      if (cfgObj.METODOS_PAGO && typeof cfgObj.METODOS_PAGO === 'object') {
+        cfgObj.qr_yape = cfgObj.METODOS_PAGO.qr_yape || cfgObj.qr_yape || ''
       }
       setConfig(cfgObj)
     } catch (err) {
@@ -370,16 +423,21 @@ export default function Citas() {
       const resCita = await citasApi.crear(payload)
       const citaId = resCita.data.datos.id
 
-      // Obtener factura generada
-      const resFac = await facturacionApi.porCita(citaId)
-      const facturaId = resFac.data.datos.id
-      const montoFactura = resFac.data.datos.total
-
+      // Registrar pago en efectivo — error no bloquea el éxito de la cita
       if (metodo_pago === 'efectivo') {
-        await facturacionApi.registrarPago(facturaId, {
-          monto: Number(montoFactura),
-          metodo: 'efectivo',
-        })
+        try {
+          const resFac = await facturacionApi.porCita(citaId)
+          const facturaId = resFac.data.datos.id
+          const montoFactura = Number(resFac.data.datos.total)
+          if (montoFactura > 0) {
+            await facturacionApi.registrarPago(facturaId, {
+              monto: montoFactura,
+              metodo: 'efectivo',
+            })
+          }
+        } catch {
+          // El pago en efectivo puede registrarse manualmente desde Pagos si falla
+        }
       }
 
       toast.success('Cita agendada con éxito')
@@ -394,12 +452,23 @@ export default function Citas() {
   const agendarParaDiaSelec = () => {
     const d = new Date(añoActual, mesActual, diaSelec)
     const localISO = d.toLocaleDateString('en-CA')
-    setForm({ ...FORM_VACIO, fecha: localISO, hora: '' })
+    // Si es psicólogo, precargar su propio ID directamente
+    const miId = esPsicologo
+      ? (usuario?.psicologoId || psicologos.find(p => p.usuario_id === usuario?.id)?.id || '')
+      : ''
+    setForm({ ...FORM_VACIO, fecha: localISO, hora: '', psicologo_id: miId })
     setVista('form')
   }
 
   const reprogramar = async (ev) => {
     ev.preventDefault()
+    if (!fechaReprog) { toast.error('Selecciona una fecha'); return }
+    if (!formReprogramar.programada_para) { toast.error('Selecciona una hora disponible'); return }
+    const fechaR = new Date(formReprogramar.programada_para)
+    const ahora = new Date()
+    const maxFecha = new Date(); maxFecha.setMonth(maxFecha.getMonth() + 1)
+    if (fechaR <= ahora) { toast.error('No puedes reprogramar a una fecha/hora pasada'); return }
+    if (fechaR > maxFecha) { toast.error('No puedes reprogramar con más de 1 mes de anticipación'); return }
     if (formReprogramar.modalidad === 'virtual') {
       const error = validarEnlaceReunion(formReprogramar.plataforma_virtual, formReprogramar.enlace_reunion)
       if (error) {
@@ -494,15 +563,32 @@ export default function Citas() {
 
               <div className="form-group">
                 <label className="form-label">Psicólogo <span className="required">*</span></label>
-                <select 
-                  className={`form-control ${errores.psicologo_id ? 'error' : ''}`} 
-                  value={form.psicologo_id} 
-                  onChange={set('psicologo_id')}
-                  disabled={esPsicologo}
-                >
-                  <option value="">Seleccionar...</option>
-                  {psicologos.filter(p => p.esta_activo).map(p => <option key={p.id} value={p.id}>{p.apellidos}, {p.nombres}</option>)}
-                </select>
+                {esPsicologo ? (
+                  // Psicólogo solo ve su propio nombre, campo bloqueado
+                  <select
+                    className={`form-control ${errores.psicologo_id ? 'error' : ''}`}
+                    value={form.psicologo_id}
+                    disabled
+                  >
+                    {form.psicologo_id
+                      ? psicologos
+                          .filter(p => p.id === form.psicologo_id)
+                          .map(p => <option key={p.id} value={p.id}>{p.apellidos}, {p.nombres}</option>)
+                      : <option value="">Cargando...</option>
+                    }
+                  </select>
+                ) : (
+                  <select
+                    className={`form-control ${errores.psicologo_id ? 'error' : ''}`}
+                    value={form.psicologo_id}
+                    onChange={set('psicologo_id')}
+                  >
+                    <option value="">Seleccionar...</option>
+                    {psicologos.filter(p => p.esta_activo).map(p => (
+                      <option key={p.id} value={p.id}>{p.apellidos}, {p.nombres}</option>
+                    ))}
+                  </select>
+                )}
                 {errores.psicologo_id && <span className="form-error">{errores.psicologo_id}</span>}
               </div>
 
@@ -539,6 +625,7 @@ export default function Citas() {
                   className={`form-control ${errores.fecha ? 'error' : ''}`}
                   value={form.fecha} onChange={e => { setForm(f => ({...f, fecha: e.target.value, hora: ''})); setErrores(er => ({...er, fecha: ''})) }}
                   min={new Date().toLocaleDateString('en-CA')}
+                  max={(() => { const d = new Date(); d.setMonth(d.getMonth() + 1); return d.toLocaleDateString('en-CA') })()}
                 />
               </div>
 
@@ -666,7 +753,13 @@ export default function Citas() {
               Historial por Paciente
             </button>
           </div>
-          <button className="btn btn-primary" onClick={() => { setForm(FORM_VACIO); setVista('form') }}>
+          <button className="btn btn-primary" onClick={() => {
+            const miId = esPsicologo
+              ? (usuario?.psicologoId || psicologos.find(p => p.usuario_id === usuario?.id)?.id || '')
+              : ''
+            setForm({ ...FORM_VACIO, psicologo_id: miId })
+            setVista('form')
+          }}>
             <Plus size={15} /> Agendar Sesión
           </button>
         </div>
@@ -711,14 +804,35 @@ export default function Citas() {
             </p>
             <form onSubmit={reprogramar}>
               <div className="form-group" style={{ marginBottom: 14 }}>
-                <label className="form-label">Nueva Fecha y hora <span className="required">*</span></label>
-                <input type="datetime-local"
+                <label className="form-label">Nueva fecha <span className="required">*</span></label>
+                <input
+                  type="date"
                   className="form-control"
                   required
-                  value={formReprogramar.programada_para}
-                  onChange={e => setFormReprogramar(f => ({ ...f, programada_para: e.target.value }))}
-                  min={new Date().toLocaleString('sv').replace(' ', 'T').slice(0, 16)}
+                  value={fechaReprog}
+                  min={new Date().toLocaleDateString('en-CA')}
+                  max={(() => { const d = new Date(); d.setMonth(d.getMonth() + 1); return d.toLocaleDateString('en-CA') })()}
+                  onChange={e => {
+                    setFechaReprog(e.target.value)
+                    setFormReprogramar(f => ({ ...f, programada_para: '' }))
+                  }}
                 />
+              </div>
+              <div className="form-group" style={{ marginBottom: 14 }}>
+                <label className="form-label">Hora disponible <span className="required">*</span></label>
+                <select
+                  className="form-control"
+                  value={formReprogramar.programada_para}
+                  disabled={!fechaReprog || cargandoSlotsReprog}
+                  onChange={e => setFormReprogramar(f => ({ ...f, programada_para: e.target.value }))}
+                >
+                  <option value="">
+                    {!fechaReprog ? 'Selecciona una fecha primero' : cargandoSlotsReprog ? 'Cargando horarios...' : slotsReprog.length === 0 ? 'Sin horarios disponibles' : 'Seleccionar hora...'}
+                  </option>
+                  {slotsReprog.map(h => (
+                    <option key={h} value={`${fechaReprog}T${h}:00`}>{h}</option>
+                  ))}
+                </select>
               </div>
               <div className="form-group" style={{ marginBottom: 14 }}>
                 <label className="form-label">Modalidad</label>
@@ -752,16 +866,16 @@ export default function Citas() {
         </div>
       )}
 
-      {/* ── Modal cancelar eliminado ── */}
+
 
       {/* ── Modal eliminar ── */}
       {modalEliminar && (
         <div className="modal-overlay">
           <div className="modal">
-            <div className="modal-title" style={{ color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Trash2 size={18} /> Eliminar cita
+            <div className="modal-title" style={{ color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Trash2 size={12} /> Eliminar cita
             </div>
-            <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', marginBottom: 8 }}>
+            <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', marginBottom: 6 }}>
               Estás a punto de eliminar permanentemente la cita de{' '}
               <b>{modalEliminar.paciente?.nombres} {modalEliminar.paciente?.apellidos}</b>.
             </p>
@@ -769,7 +883,7 @@ export default function Citas() {
               background: 'rgba(224,48,80,0.06)',
               border: '1px solid rgba(224,48,80,0.25)',
               borderRadius: 8,
-              padding: '10px 14px',
+              padding: '10px 8px',
               fontSize: 12.5,
               color: 'var(--danger)',
               marginBottom: 20,
