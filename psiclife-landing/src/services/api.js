@@ -22,6 +22,9 @@ export const landingApi = {
   // Obtener reseñas publicas
   getResenasPublicas: () => api.get('/resenas'),
 
+  // Verificar si el código de operación/referencia ya está usado (paso a paso)
+  verificarCodigoReferencia: (codigo) => api.post('/citas/verificar-codigo', { codigo_referencia: codigo }),
+
   // Obtener horarios de un psicólogo (recurrentes)
   getHorarios: (psicologoId) => api.get(`/disponibilidad/horarios/${psicologoId}`),
 

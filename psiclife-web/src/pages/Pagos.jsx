@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { facturacionApi, pacientesApi, psicologosApi, citasApi, configuracionApi } from '../services/api'
 import { EmptyState, Spinner } from '../components/ui/index.jsx'
 import toast from 'react-hot-toast'
-import { Plus, X, Save, Eye, DollarSign, TrendingUp, CheckCircle, AlertTriangle, Image, ImageOff, Trash2, RefreshCw, FileText, CreditCard } from 'lucide-react'
+import { Plus, X, Save, Eye, DollarSign, TrendingUp, CheckCircle, AlertTriangle, Image, ImageOff, Trash2, RefreshCw, FileText, CreditCard, Ban } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { getImageUrl } from '../utils/image'
 
@@ -56,6 +56,13 @@ export default function Pagos() {
   const [pagosPend,       setPagosPend]       = useState([])
   const [cargandoPend,    setCargandoPend]    = useState(false)
 
+  // ── Estados para Pagos Confirmados (admin) ────────────────
+  const [pagosConf,       setPagosConf]       = useState([])
+  const [cargandoConf,    setCargandoConf]    = useState(false)
+  const [modalAnularPago, setModalAnularPago] = useState(null)  // pago a anular
+  const [motivoAnularPago, setMotivoAnularPago] = useState('')
+  const [anulandoPago,    setAnulandoPago]    = useState(false)
+
   useEffect(() => { cargar() }, [])
 
   const cargar = async () => {
@@ -105,6 +112,31 @@ export default function Pagos() {
   }
 
   useEffect(() => { if (tab === 'facturas') cargarPagosPend() }, [tab])
+  useEffect(() => { if (tab === 'pagos_confirmados') cargarPagosConf() }, [tab])
+
+  const cargarPagosConf = async () => {
+    setCargandoConf(true)
+    try {
+      const { data } = await facturacionApi.pagosConfirmados()
+      setPagosConf(data.datos ?? [])
+    } catch (err) {
+      console.error('Error cargando pagos confirmados:', err)
+      toast.error('No se pudieron cargar los pagos confirmados.')
+    } finally { setCargandoConf(false) }
+  }
+
+  const handleAnularPago = async () => {
+    if (!motivoAnularPago.trim()) { toast.error('Ingresa el motivo de la anulación'); return }
+    setAnulandoPago(true)
+    try {
+      await facturacionApi.anularPago(modalAnularPago.id, { motivo: motivoAnularPago })
+      toast.success('Pago anulado correctamente. La cita asociada ha sido cancelada.')
+      setModalAnularPago(null)
+      setMotivoAnularPago('')
+      await cargarPagosConf()
+      await cargar()
+    } catch {} finally { setAnulandoPago(false) }
+  }
 
   const verDetalle = async (id) => {
     try {
@@ -158,6 +190,20 @@ export default function Pagos() {
       e.codigo_referencia = 'Ingresa al menos 8 dígitos en el código de operación'
     if ((formPago.metodo === 'yape' || formPago.metodo === 'transferencia') && formPago.codigo_referencia && !/^[0-9-]+$/.test(formPago.codigo_referencia))
       e.codigo_referencia = 'El código de operación solo puede contener números y guiones'
+
+    if (!e.codigo_referencia && (formPago.metodo === 'yape' || formPago.metodo === 'transferencia')) {
+      setGuardando(true)
+      try {
+        const { data } = await citasApi.verificarCodigo(formPago.codigo_referencia)
+        if (data.datos?.usado) {
+          e.codigo_referencia = 'Este número de operación ya está registrado en el sistema'
+        }
+      } catch (err) {
+        console.error('Error al verificar código', err)
+      }
+      setGuardando(false)
+    }
+
     setErrPago(e)
     if (Object.keys(e).length > 0) return
     setGuardando(true)
@@ -592,13 +638,14 @@ export default function Pagos() {
       </div>
 
       <div style={{ display:'flex', borderBottom:'1px solid var(--border)', marginBottom: 20 }}>
-        {['facturas',...(!esPsicologo ? ['configuracion'] : [])].map(t => (
+        {['facturas',...(!esPsicologo ? ['pagos_confirmados', 'configuracion'] : [])].map(t => (
           <button key={t} onClick={() => setTab(t)}
             style={{ padding:'10px 20px', fontSize:13.5, background:'none', border:'none', cursor:'pointer',
               borderBottom: tab===t ? '2.5px solid var(--celeste)' : '2.5px solid transparent',
               color: tab===t ? 'var(--text-primary)' : 'var(--text-muted)',
               fontWeight: tab===t ? 500 : 400, display:'flex', alignItems:'center', gap:6 }}>
             {t === 'facturas' ? (<>Facturas y Reportes{pagosPend.length > 0 && <span style={{ background:'var(--danger)', color:'white', fontSize:10, borderRadius:20, padding:'1px 7px', fontWeight:700 }}>{pagosPend.length} pendientes</span>}</>) 
+             : t === 'pagos_confirmados' ? (<><CreditCard size={14}/> Pagos Confirmados</>)
              : 'Configuración de Pagos'}
           </button>
         ))}
@@ -765,8 +812,8 @@ export default function Pagos() {
         </div>
       )}
 
-      <div className="card">
-        {cargando ? <Spinner /> : facturas.length === 0
+      <div className="card" style={{ opacity: cargando ? 0.6 : 1, transition: 'opacity 0.2s', pointerEvents: cargando ? 'none' : 'auto' }}>
+        {cargando && facturas.length === 0 ? <Spinner /> : facturas.length === 0
           ? <EmptyState titulo="Sin facturas" descripcion="Crea la primera factura con el botón de arriba." />
           : (
             <div className="table-wrap">
@@ -802,6 +849,108 @@ export default function Pagos() {
             </div>
           )}
       </div>
+        </>
+      ) : tab === 'pagos_confirmados' ? (
+        <>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+            <div>
+              <div style={{ fontWeight:700, fontSize:15 }}>Pagos confirmados</div>
+              <div style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:2 }}>Lista de todos los pagos validados. Solo el administrador puede anular pagos por motivo de reembolso bancario.</div>
+            </div>
+            <button className="btn btn-ghost btn-sm" onClick={cargarPagosConf} style={{ display:'flex', alignItems:'center', gap:6 }}>
+              <RefreshCw size={14} /> Actualizar
+            </button>
+          </div>
+
+          <div className="card">
+            {cargandoConf ? <Spinner /> : pagosConf.length === 0
+              ? <EmptyState titulo="Sin pagos confirmados" descripcion="Aún no hay pagos confirmados en el sistema." />
+              : (
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Fecha</th>
+                        <th>Paciente</th>
+                        <th>Factura</th>
+                        <th>Método</th>
+                        <th>Monto</th>
+                        <th>Referencia</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pagosConf.map(p => (
+                        <tr key={p.id}>
+                          <td style={{ fontSize:12.5 }}>{new Date(p.pagado_en).toLocaleString('es-PE', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}</td>
+                          <td>{p.factura?.paciente ? `${p.factura.paciente.nombres} ${p.factura.paciente.apellidos}` : '—'}</td>
+                          <td style={{ fontFamily:'monospace', fontSize:12 }}>{p.factura?.numero_factura ?? '—'}</td>
+                          <td><span className="badge badge-info">{p.metodo}</span></td>
+                          <td style={{ fontWeight:600 }}>S/ {Number(p.monto).toFixed(2)}</td>
+                          <td style={{ fontSize:12, fontFamily:'monospace' }}>{p.codigo_referencia || '—'}</td>
+                          <td>
+                            {!esPsicologo && (
+                              <button className="btn btn-danger btn-sm" onClick={() => { setModalAnularPago(p); setMotivoAnularPago('') }}
+                                style={{ display:'flex', alignItems:'center', gap:4, fontSize:11.5 }}>
+                                <Ban size={13}/> Anular
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+          </div>
+
+          {/* Modal de anulación de pago */}
+          {modalAnularPago && (
+            <div className="modal-overlay" onClick={() => setModalAnularPago(null)}>
+              <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth:480 }}>
+                <div className="modal-header">
+                  <span className="modal-title" style={{ display:'flex', alignItems:'center', gap:8 }}>
+                    <Ban size={18} style={{ color:'var(--danger)' }}/> Anular pago
+                  </span>
+                  <button className="modal-close" onClick={() => setModalAnularPago(null)}><X size={18}/></button>
+                </div>
+                <div className="modal-body">
+                  <div style={{ padding:'14px 16px', borderRadius:12, background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.25)', marginBottom:18 }}>
+                    <div style={{ fontWeight:600, color:'var(--danger)', fontSize:13, marginBottom:6 }}>⚠️ Acción irreversible</div>
+                    <div style={{ fontSize:12.5, color:'var(--text-secondary)', lineHeight:1.6 }}>
+                      Al anular este pago, la factura volverá a estado <strong>pendiente</strong> y la cita asociada será <strong>cancelada</strong>, liberando el horario.
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize:13, marginBottom:12 }}>
+                    <div><strong>Paciente:</strong> {modalAnularPago.factura?.paciente ? `${modalAnularPago.factura.paciente.nombres} ${modalAnularPago.factura.paciente.apellidos}` : '—'}</div>
+                    <div><strong>Monto:</strong> S/ {Number(modalAnularPago.monto).toFixed(2)}</div>
+                    <div><strong>Método:</strong> {modalAnularPago.metodo}</div>
+                    {modalAnularPago.codigo_referencia && <div><strong>Ref:</strong> {modalAnularPago.codigo_referencia}</div>}
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Motivo de anulación *</label>
+                    <textarea
+                      className="form-control"
+                      rows={3}
+                      placeholder="Ej: Reembolso confirmado por el banco, contracargo reportado..."
+                      value={motivoAnularPago}
+                      onChange={e => setMotivoAnularPago(e.target.value)}
+                      style={{ resize:'vertical' }}
+                    />
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button className="btn btn-ghost" onClick={() => setModalAnularPago(null)}>Cancelar</button>
+                  <button className="btn btn-danger" onClick={handleAnularPago} disabled={anulandoPago || !motivoAnularPago.trim()}
+                    style={{ display:'flex', alignItems:'center', gap:6 }}>
+                    {anulandoPago ? 'Anulando...' : <><Ban size={14}/> Confirmar anulación</>}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       ) : (
         <form onSubmit={guardarConfig} className="card">

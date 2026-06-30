@@ -38,7 +38,7 @@ export default function CitaDetalleDrawer({ cita, onClose, onUpdate, puedoElimin
   const [modalReprog, setModalReprog] = useState(false)
   const [formReprog,  setFormReprog]  = useState({
     programada_para: '', modalidad: 'presencial',
-    plataforma_virtual: 'zoom', enlace_reunion: '',
+    plataforma_virtual: 'meet', enlace_reunion: '',
   })
   const [fechaReprog,        setFechaReprog]        = useState('')
   const [slotsReprog,        setSlotsReprog]        = useState([])
@@ -52,7 +52,7 @@ export default function CitaDetalleDrawer({ cita, onClose, onUpdate, puedoElimin
 
   // ── Modal enlace virtual ───────────────────────────────────
   const [modalEnlace, setModalEnlace] = useState(false)
-  const [formEnlace,  setFormEnlace]  = useState({ plataforma: 'zoom', enlace: '' })
+  const [formEnlace,  setFormEnlace]  = useState({ plataforma: 'meet', enlace: '' })
 
   useEffect(() => {
     if (cita) {
@@ -297,7 +297,7 @@ export default function CitaDetalleDrawer({ cita, onClose, onUpdate, puedoElimin
                 onClick={() => {
                   setFechaReprog('')
                   setSlotsReprog([])
-                  setFormReprog({ programada_para: '', modalidad: cita.modalidad || 'presencial', plataforma_virtual: 'zoom', enlace_reunion: '' })
+                  setFormReprog({ programada_para: '', modalidad: cita.modalidad || 'presencial', plataforma_virtual: 'meet', enlace_reunion: '' })
                   setModalReprog(true)
                 }}
                 disabled={guardando}
@@ -515,7 +515,6 @@ export default function CitaDetalleDrawer({ cita, onClose, onUpdate, puedoElimin
                     <label className="form-label">Plataforma</label>
                     <select className="form-control" value={formReprog.plataforma_virtual}
                       onChange={e => setFormReprog(f => ({ ...f, plataforma_virtual: e.target.value }))}>
-                      <option value="zoom">Zoom</option>
                       <option value="meet">Google Meet</option>
                       <option value="whatsapp">WhatsApp</option>
                       <option value="otro">Otro</option>
@@ -624,7 +623,6 @@ export default function CitaDetalleDrawer({ cita, onClose, onUpdate, puedoElimin
                   value={formEnlace.plataforma}
                   onChange={e => setFormEnlace(f => ({ ...f, plataforma: e.target.value, enlace: '' }))}
                 >
-                  <option value="zoom">Zoom</option>
                   <option value="meet">Google Meet</option>
                   <option value="teams">Microsoft Teams</option>
                   <option value="whatsapp">WhatsApp (número)</option>
@@ -638,7 +636,7 @@ export default function CitaDetalleDrawer({ cita, onClose, onUpdate, puedoElimin
                 </label>
                 <input
                   className="form-control"
-                  placeholder={formEnlace.plataforma === 'whatsapp' ? '+51 999 999 999' : 'https://zoom.us/j/...'}
+                  placeholder={formEnlace.plataforma === 'whatsapp' ? '+51 999 999 999' : 'https://meet.google.com/...'}
                   value={formEnlace.enlace}
                   onChange={e => setFormEnlace(f => ({ ...f, enlace: e.target.value }))}
                   autoFocus

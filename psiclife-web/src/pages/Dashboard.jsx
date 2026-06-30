@@ -98,6 +98,17 @@ function ModalYape({ facturaId, total, config, onClose, onSuccess }) {
     if (codigo.trim().length < 8)     { toast.error('Ingresa un número de operación válido (mínimo 8 dígitos)'); return }
     if (!archivo)                     { toast.error('Sube la captura de tu Yape'); return }
     setEnviando(true)
+
+    try {
+      const { data } = await citasApi.verificarCodigo(codigo.trim())
+      if (data.datos?.usado) {
+        toast.error('Este número de operación ya está registrado en el sistema')
+        setEnviando(false)
+        return
+      }
+    } catch (err) {
+      console.error('Error verificando código:', err)
+    }
     try {
       const form = new FormData()
       form.append('monto', String(total))
@@ -457,6 +468,28 @@ function DashboardPaciente() {
     cargarSlots()
   }, [formCita.psicologo_id, formCita.fecha, modalAgendar])
 
+  const [verificandoCodigo, setVerificandoCodigo] = useState(false)
+
+  const avanzarPaso = async () => {
+    if (pasoAgendar === 3 && (formPago.metodo === 'yape' || formPago.metodo === 'transferencia')) {
+      if (!formPago.archivo || formPago.codigo.trim().length < 8) return
+
+      setVerificandoCodigo(true)
+      try {
+        const { data } = await citasApi.verificarCodigo(formPago.codigo.trim())
+        if (data.datos?.usado) {
+          toast.error('Este número de operación ya está registrado en el sistema')
+          setVerificandoCodigo(false)
+          return
+        }
+      } catch (err) {
+        console.error('Error verificando código:', err)
+      }
+      setVerificandoCodigo(false)
+    }
+    setPasoAgendar(p => p + 1)
+  }
+
   const confirmarCita = async () => {
     if (!formCita.psicologo_id || !formCita.fecha || !formCita.hora) {
       return toast.error('Completa todos los campos requeridos')
@@ -611,7 +644,7 @@ function DashboardPaciente() {
   const paciente     = datos?.paciente
   const nombre       = paciente?.nombres?.split(' ')[0] ?? usuario?.correo?.split('@')[0] ?? 'Paciente'
 
-  const proximasCitas = citas.filter(c => new Date(c.programada_para) >= new Date() && c.estado !== 'cancelada')
+  const proximasCitas = citas.filter(c => new Date(c.programada_para) >= new Date() && c.estado !== 'cancelada' && c.estado !== 'reprogramada')
     .sort((a, b) => new Date(a.programada_para) - new Date(b.programada_para))
   const proximaCita   = proximasCitas[0]
 
@@ -648,7 +681,7 @@ function DashboardPaciente() {
           {/* Métricas rápidas */}
           <div style={{ display:'flex', gap:12, flexShrink:0 }}>
             {[
-              { num: citas.filter(c => c.estado !== 'cancelada').length, label:'Sesiones', icon:'🗓️', color:'hsl(262,65%,65%)' },
+              { num: citas.filter(c => c.estado !== 'cancelada' && c.estado !== 'reprogramada').length, label:'Sesiones', icon:'📅', color:'hsl(262,65%,65%)' },
               { num: evaluaciones.length, label:'Evaluaciones', icon:'📋', color:'hsl(38,85%,60%)' },
               { num: actividades.length, label:'Actividades', icon:'✅', color:'hsl(145,60%,55%)' },
             ].map(({ num, label, icon, color }) => (
@@ -754,6 +787,16 @@ function DashboardPaciente() {
                     </a>
                   )
                 })()}
+                {proximaCita.modalidad === 'virtual' && !proximaCita.enlace_reunion && (
+                  <div style={{
+                    width:'100%', padding:'10px 14px', borderRadius:12, marginBottom: 8,
+                    background:'var(--warning-bg, #fff8e1)', border:'1px solid var(--warning, #f59e0b)',
+                    color:'var(--warning-text, #92400e)', fontSize:12.5, fontWeight:500,
+                    display:'flex', alignItems:'center', gap:8,
+                  }}>
+                    ⏳ Tu psicólogo aún no ha asignado el enlace de reunión. Se te notificará cuando esté disponible.
+                  </div>
+                )}
 
                 {esPendientePago && fProx?.id && (
                   <button onClick={() => setYape({ facturaId: fProx.id, total: fProx.total })}
@@ -791,12 +834,13 @@ function DashboardPaciente() {
             </div>
           </div>
           <div style={{ padding:'10px 14px', display:'flex', flexDirection:'column', gap:8, maxHeight:340, overflowY:'auto' }}>
-            {citas.length === 0 && (
+            {citas.filter(c => c.estado !== 'reprogramada').length === 0 && (
               <div style={{ padding:'32px 16px', textAlign:'center', color:'var(--text-muted)', fontSize:13.5 }}>
                 No tienes citas programadas
               </div>
             )}
             {citas
+              .filter(c => c.estado !== 'reprogramada')
               .sort((a,b) => new Date(b.programada_para) - new Date(a.programada_para))
               .map(c => {
                 const factura = getFactura(c)
@@ -831,6 +875,11 @@ function DashboardPaciente() {
                         </a>
                       )
                     })()}
+                    {c.modalidad === 'virtual' && !c.enlace_reunion && (
+                      <span style={{ padding:'4px 10px', borderRadius:16, background:'var(--warning-bg, #fff8e1)', border:'1px solid var(--warning, #f59e0b)', color:'var(--warning-text, #92400e)', fontSize:10.5, fontWeight:600, whiteSpace:'nowrap', flexShrink:0 }}>
+                        ⏳ Falta enlace
+                      </span>
+                    )}
                     {esPendPago && factura?.id && (
                       <button onClick={() => setYape({ facturaId: factura.id, total: factura.total })}
                         style={{ padding:'5px 12px', borderRadius:18, background:'linear-gradient(135deg,#7c3aed,#2563eb)', color:'white', border:'none', fontSize:11.5, fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:4, whiteSpace:'nowrap', flexShrink:0 }}>
@@ -962,7 +1011,7 @@ function DashboardPaciente() {
       <div className="card-body">
         {citas.length === 0 ? <div style={{ color:'var(--text-muted)' }}>No hay citas.</div> : (
           <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-            {citas.map(c => (
+            {citas.filter(c => c.estado !== 'reprogramada').map(c => (
               <div key={c.id} style={{ padding:14, background:'var(--surface-2)', border:'1px solid var(--border)', borderRadius:12, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                 <div>
                   <div style={{ fontWeight:600 }}>{c.psicologo?.nombres} {c.psicologo?.apellidos}</div>
@@ -1570,14 +1619,15 @@ function DashboardPaciente() {
                     <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Especifica la razón de la consulta</div>
                   )}
                   <button className="btn btn-primary"
-                    onClick={() => setPasoAgendar(p => p + 1)}
+                    onClick={avanzarPaso}
                     disabled={
                       (pasoAgendar === 1 && !formCita.psicologo_id) ||
                       (pasoAgendar === 1 && formCita.servicio === 'Otro' && !formCita.otro_servicio.trim()) ||
                       (pasoAgendar === 2 && !formCita.hora) ||
-                      (pasoAgendar === 3 && (formPago.metodo === 'yape' || formPago.metodo === 'transferencia') && (!formPago.archivo || formPago.codigo.trim().length < 8))
+                      (pasoAgendar === 3 && (formPago.metodo === 'yape' || formPago.metodo === 'transferencia') && (!formPago.archivo || formPago.codigo.trim().length < 8)) ||
+                      verificandoCodigo
                     }>
-                    Continuar
+                    {verificandoCodigo ? 'Verificando...' : 'Continuar'}
                   </button>
                 </div>
               ) : (
@@ -1957,6 +2007,11 @@ function DashboardStaff() {
                               </a>
                             )
                           })()}
+                          {c.modalidad === 'virtual' && !c.enlace_reunion && (
+                            <span style={{ padding:'3px 8px', borderRadius:14, background:'var(--warning-bg, #fff8e1)', border:'1px solid var(--warning, #f59e0b)', color:'var(--warning-text, #92400e)', fontSize:10, fontWeight:600 }}>
+                              ⏳ Por asignar
+                            </span>
+                          )}
                         </div>
                       </div>
                     )

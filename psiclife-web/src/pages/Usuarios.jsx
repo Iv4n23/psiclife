@@ -258,7 +258,7 @@ export default function Usuarios() {
           </div>
         </div>
 
-        {cargando ? <Spinner /> : usuariosFiltrados.length === 0 ? (
+        {cargando && usuariosFiltrados.length === 0 ? <Spinner /> : usuariosFiltrados.length === 0 ? (
           <EmptyState titulo="Sin usuarios" descripcion="Crea el primer usuario con el botón de arriba." />
         ) : (
           <div className="table-wrap">

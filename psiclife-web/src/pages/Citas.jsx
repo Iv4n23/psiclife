@@ -31,7 +31,7 @@ const FORM_VACIO = {
   paciente_id: '', psicologo_id: '',
   fecha: '', hora: '', duracion_minutos: 60,
   servicio: 'Consulta Psicológica', otro_servicio: '',
-  modalidad: 'presencial', plataforma_virtual: 'zoom', enlace_reunion: '',
+  modalidad: 'presencial', plataforma_virtual: 'meet', enlace_reunion: '',
   agendado_por: 'recepcionista',
   metodo_pago: 'efectivo'
 }
@@ -119,14 +119,14 @@ export default function Citas() {
   const [asistencia,      setAsistencia]      = useState({ asistio: true, hora_llegada: '', minutos_tardanza: 0 })
   const [modalEliminar,   setModalEliminar]   = useState(null)
   const [modalReprogramar, setModalReprogramar] = useState(null)
-  const [formReprogramar, setFormReprogramar] = useState({ programada_para: '', modalidad: 'presencial', plataforma_virtual: 'zoom', enlace_reunion: '' })
+  const [formReprogramar, setFormReprogramar] = useState({ programada_para: '', modalidad: 'presencial', plataforma_virtual: 'meet', enlace_reunion: '', motivo_reprogramacion: '' })
   const [slotsReprog, setSlotsReprog] = useState([])
   const [fechaReprog, setFechaReprog] = useState('')
   const [cargandoSlotsReprog, setCargandoSlotsReprog] = useState(false)
   const [detalleCita,     setDetalleCita]     = useState(null)
   
   const [modalEnlace,     setModalEnlace]     = useState(null)
-  const [formEnlace,      setFormEnlace]      = useState({ plataforma: 'zoom', enlace: '' })
+  const [formEnlace,      setFormEnlace]      = useState({ plataforma: 'meet', enlace: '' })
 
   const { puedo, usuario } = useAuth()
   const puedoEliminarCitas = puedo('citas.eliminar')
@@ -148,9 +148,9 @@ export default function Citas() {
     }
   }
 
-  const validarEnlaceReunion = (plataforma, enlace) => {
+  const validarEnlaceReunion = (plataforma, enlace, opcional = false) => {
     const valor = String(enlace || '').trim()
-    if (!valor) return 'El enlace o número es obligatorio'
+    if (!valor) return opcional ? '' : 'El enlace o número es obligatorio'
     if (plataforma === 'whatsapp') {
       if (!esTelefonoWhatsappValido(valor)) return 'Ingresa un número de WhatsApp válido'
       return ''
@@ -394,7 +394,7 @@ export default function Citas() {
       if (fechaCita > maxFecha) e.fecha = 'No puedes reservar con más de 1 mes de anticipación'
     }
     if (form.modalidad === 'virtual') {
-      const enlaceError = validarEnlaceReunion(form.plataforma_virtual, form.enlace_reunion)
+      const enlaceError = validarEnlaceReunion(form.plataforma_virtual, form.enlace_reunion, true)
       if (enlaceError) e.enlace_reunion = enlaceError
     }
     setErrores(e)
@@ -464,13 +464,14 @@ export default function Citas() {
     ev.preventDefault()
     if (!fechaReprog) { toast.error('Selecciona una fecha'); return }
     if (!formReprogramar.programada_para) { toast.error('Selecciona una hora disponible'); return }
+    if (!formReprogramar.motivo_reprogramacion.trim()) { toast.error('Ingresa el motivo de la reprogramación'); return }
     const fechaR = new Date(formReprogramar.programada_para)
     const ahora = new Date()
     const maxFecha = new Date(); maxFecha.setMonth(maxFecha.getMonth() + 1)
     if (fechaR <= ahora) { toast.error('No puedes reprogramar a una fecha/hora pasada'); return }
     if (fechaR > maxFecha) { toast.error('No puedes reprogramar con más de 1 mes de anticipación'); return }
     if (formReprogramar.modalidad === 'virtual') {
-      const error = validarEnlaceReunion(formReprogramar.plataforma_virtual, formReprogramar.enlace_reunion)
+      const error = validarEnlaceReunion(formReprogramar.plataforma_virtual, formReprogramar.enlace_reunion, true)
       if (error) {
         toast.error(error)
         return
@@ -495,7 +496,7 @@ export default function Citas() {
 
   const guardarEnlace = async (e) => {
     e.preventDefault()
-    const error = validarEnlaceReunion(formEnlace.plataforma, formEnlace.enlace)
+    const error = validarEnlaceReunion(formEnlace.plataforma, formEnlace.enlace, false)
     if (error) return toast.error(error)
     setGuardando(true)
     try {
@@ -663,7 +664,6 @@ export default function Citas() {
                   <div className="form-group">
                     <label className="form-label">Plataforma</label>
                     <select className="form-control" value={form.plataforma_virtual} onChange={set('plataforma_virtual')}>
-                      <option value="zoom">Zoom</option>
                       <option value="meet">Google Meet</option>
                       <option value="whatsapp">WhatsApp</option>
                       <option value="otro">Otro</option>
@@ -841,11 +841,17 @@ export default function Citas() {
                   <option value="virtual">Virtual</option>
                 </select>
               </div>
+              <div className="form-group" style={{ marginBottom: 14 }}>
+                <label className="form-label">Motivo de reprogramación <span className="required">*</span></label>
+                <textarea className="form-control" rows={2}
+                  value={formReprogramar.motivo_reprogramacion}
+                  onChange={e => setFormReprogramar(f => ({ ...f, motivo_reprogramacion: e.target.value }))}
+                  placeholder="Ej: Paciente solicitó cambio de horario, conflicto de agenda..." />
+              </div>
               {formReprogramar.modalidad === 'virtual' && (
                 <div className="form-group" style={{ marginBottom: 14 }}>
                   <label className="form-label">Plataforma</label>
                   <select className="form-control" value={formReprogramar.plataforma_virtual} onChange={e => setFormReprogramar(f => ({ ...f, plataforma_virtual: e.target.value }))} style={{ marginBottom: 8 }}>
-                    <option value="zoom">Zoom</option>
                     <option value="meet">Google Meet</option>
                     <option value="whatsapp">WhatsApp</option>
                     <option value="otro">Otro</option>
@@ -958,7 +964,7 @@ export default function Citas() {
               <div className="form-group" style={{ marginBottom: 14 }}>
                 <label className="form-label">Plataforma</label>
                 <select className="form-control" value={formEnlace.plataforma} onChange={e => setFormEnlace({...formEnlace, plataforma: e.target.value})}>
-                  <option value="zoom">Zoom</option>
+
                   <option value="meet">Google Meet</option>
                   <option value="teams">Microsoft Teams</option>
                   <option value="whatsapp">Videollamada WhatsApp</option>
@@ -967,7 +973,7 @@ export default function Citas() {
               </div>
               <div className="form-group" style={{ marginBottom: 20 }}>
                 <label className="form-label">Enlace o Número <span className="required">*</span></label>
-                <input className="form-control" required placeholder="https://zoom.us/j/..."
+                <input className="form-control" required placeholder="https://meet.google.com/..."
                   value={formEnlace.enlace} onChange={e => setFormEnlace({...formEnlace, enlace: e.target.value})} />
               </div>
               <div className="modal-actions">

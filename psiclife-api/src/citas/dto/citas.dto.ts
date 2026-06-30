@@ -31,8 +31,7 @@ export class CrearCitaDto {
 
 
   @ApiPropertyOptional()
-  @ValidateIf(o => o.modalidad === 'virtual')
-  @IsNotEmpty({ message: 'El enlace de reunión es obligatorio si la modalidad es virtual' })
+  @IsOptional()
   @IsString()
   enlace_reunion?: string
 
@@ -68,6 +67,23 @@ export class ActualizarNotasDto {
   notas_sesion: string
 }
 
+export class ReprogramarCitaDto {
+  @ApiProperty()
+  @IsDateString()
+  programada_para: string
+
+  @ApiPropertyOptional({ enum: citas_modalidad })
+  @IsOptional() @IsString()
+  modalidad?: citas_modalidad
+
+  @ApiPropertyOptional()
+  @IsOptional() @IsString()
+  enlace_reunion?: string
+
+  @ApiPropertyOptional({ description: 'Motivo por el cual se reprograma la cita' })
+  @IsOptional() @IsString()
+  motivo_reprogramacion?: string
+}
 
 
 export class RegistrarAsistenciaDto {

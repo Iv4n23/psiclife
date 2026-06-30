@@ -67,3 +67,9 @@ export class RegistrarPagoYapeDto {
   @IsOptional() @IsEnum(pagos_metodo)
   metodo_pago?: pagos_metodo
 }
+
+export class AnularPagoDto {
+  @ApiProperty({ example: 'Reembolso bancario reportado por el paciente' })
+  @IsString()
+  motivo: string
+}

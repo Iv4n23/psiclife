@@ -245,8 +245,8 @@ export default function Psicologos() {
         <button className="btn btn-primary" onClick={abrirNuevo}><Plus size={15} /> Nuevo psicólogo</button>
       </div>
 
-      <div className="card">
-        {cargando ? <Spinner /> : psicologos.length === 0
+      <div className="card" style={{ opacity: cargando ? 0.6 : 1, transition: 'opacity 0.2s', pointerEvents: cargando ? 'none' : 'auto' }}>
+        {cargando && psicologos.length === 0 ? <Spinner /> : psicologos.length === 0
           ? <EmptyState titulo="Sin psicólogos" descripcion="Registra el primer psicólogo." />
           : (
             <div className="table-wrap">

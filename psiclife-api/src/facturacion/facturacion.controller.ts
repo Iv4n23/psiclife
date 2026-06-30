@@ -12,7 +12,7 @@ import { extname }         from 'path'
 import { v4 as uuid }      from 'uuid'
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiParam, ApiQuery, ApiConsumes } from '@nestjs/swagger'
 import { FacturacionService } from './facturacion.service'
-import { CrearFacturaDto, RegistrarPagoDto, AnularFacturaDto, RegistrarPagoYapeDto } from './dto/facturacion.dto'
+import { CrearFacturaDto, RegistrarPagoDto, AnularFacturaDto, RegistrarPagoYapeDto, AnularPagoDto } from './dto/facturacion.dto'
 import { JwtAuthGuard }  from 'src/auth/guards/jwt-auth.guard'
 import { PermisosGuard } from 'src/auth/guards/permisos.guard'
 import { Permisos }      from 'src/common/decorators/permisos.decorator'
@@ -212,5 +212,30 @@ export class FacturacionController {
     const psicologoId = await this.psicologoOwner.resolverPsicologoId(usuarioId, rolNombre)
     const datos = await this.facturacionService.rechazarPago(pagoId, usuarioId, psicologoId ?? undefined)
     return { mensaje: 'Pago rechazado y eliminado correctamente', datos }
+  }
+
+  @Get('pagos/confirmados')
+  @Permisos('facturacion.ver')
+  @ApiOperation({ summary: 'Listar todos los pagos confirmados (no anulados)' })
+  async pagosConfirmados(
+    @UsuarioActual('sub') usuarioId?: string,
+    @UsuarioActual('rolNombre') rolNombre?: string,
+  ) {
+    const psicologoId = await this.psicologoOwner.resolverPsicologoId(usuarioId, rolNombre)
+    const datos = await this.facturacionService.listarPagosConfirmados(psicologoId ?? undefined)
+    return { mensaje: 'Pagos confirmados obtenidos', datos }
+  }
+
+  @Patch('pagos/:pagoId/anular')
+  @Permisos('facturacion.editar')
+  @ApiOperation({ summary: 'Anular un pago confirmado (reembolso bancario)' })
+  @ApiParam({ name: 'pagoId', format: 'uuid' })
+  async anularPago(
+    @Param('pagoId', ParseUUIDPipe) pagoId: string,
+    @Body() dto: AnularPagoDto,
+    @UsuarioActual('sub') usuarioId: string,
+  ) {
+    const datos = await this.facturacionService.anularPago(pagoId, dto.motivo, usuarioId)
+    return { mensaje: 'Pago anulado correctamente. La cita ha sido cancelada.', datos }
   }
 }

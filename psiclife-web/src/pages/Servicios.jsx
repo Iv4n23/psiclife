@@ -291,8 +291,8 @@ export default function Servicios() {
         <div><div className="section-title">Servicios</div><div className="section-subtitle">{servicios.length} servicio(s)</div></div>
         <button className="btn btn-primary" onClick={irANuevo}><Plus size={15} /> Nuevo servicio</button>
       </div>
-      <div className="card">
-        {cargando ? <Spinner /> : servicios.length === 0 ? <EmptyState titulo="Sin servicios" /> : (
+      <div className="card" style={{ opacity: cargando ? 0.6 : 1, transition: 'opacity 0.2s', pointerEvents: cargando ? 'none' : 'auto' }}>
+        {cargando && servicios.length === 0 ? <Spinner /> : servicios.length === 0 ? <EmptyState titulo="Sin servicios" /> : (
           <div className="table-wrap">
             <table>
               <thead><tr><th>Foto</th><th>Nombre</th><th>Categoría</th><th>Precio</th><th>Estado</th><th>Acciones</th></tr></thead>

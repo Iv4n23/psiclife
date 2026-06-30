@@ -593,8 +593,8 @@ export default function Pacientes() {
         {busqueda && <button type="button" className="btn btn-ghost" onClick={() => { setBusqueda(''); cargar('') }}><X size={13} /></button>}
       </form>
 
-      <div className="card">
-        {cargando ? <Spinner /> : pacientes.length === 0
+      <div className="card" style={{ opacity: cargando ? 0.6 : 1, transition: 'opacity 0.2s', pointerEvents: cargando ? 'none' : 'auto' }}>
+        {cargando && pacientes.length === 0 ? <Spinner /> : pacientes.length === 0
           ? <EmptyState titulo="Sin pacientes" descripcion="Registra el primer paciente con el botón de arriba." />
           : (
             <div className="table-wrap">

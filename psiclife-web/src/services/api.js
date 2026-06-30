@@ -195,6 +195,7 @@ export const citasApi = {
   actualizarNotas:     (id, d)     => api.patch(`/citas/${id}/notas`, d),
   reprogramar:         (id, d)     => api.post(`/citas/${id}/reprogramar`, d),
   asistencia:          (id, d)     => api.post(`/citas/${id}/asistencia`, d),
+  verificarCodigo:     (codigo)    => api.post('/citas/verificar-codigo', { codigo_referencia: codigo }),
   eliminar:            (id)        => api.delete(`/citas/${id}`),
 }
 
@@ -255,6 +256,8 @@ export const facturacionApi = {
   subirComprobanteYape: (id, form) => api.post(`/facturacion/${id}/yape-comprobante`, form),
   confirmarPago:        (pagoId)  => api.patch(`/facturacion/pagos/${pagoId}/confirmar`),
   rechazarPago:         (pagoId)  => api.patch(`/facturacion/pagos/${pagoId}/rechazar`),
+  pagosConfirmados:     ()        => api.get('/facturacion/pagos/confirmados'),
+  anularPago:           (pagoId, d) => api.patch(`/facturacion/pagos/${pagoId}/anular`, d),
 }
 
 export const dashboardApi = {

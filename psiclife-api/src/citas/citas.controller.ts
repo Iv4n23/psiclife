@@ -13,7 +13,7 @@ import { v4 as uuid } from 'uuid'
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger'
 import { CitasService } from './citas.service'
 import {
-  CrearCitaDto, ActualizarCitaDto,
+  CrearCitaDto, ActualizarCitaDto, ReprogramarCitaDto,
   RegistrarAsistenciaDto, SolicitarCitaPublicaDto, ActualizarNotasDto
 } from './dto/citas.dto'
 import { JwtAuthGuard }  from 'src/auth/guards/jwt-auth.guard'
@@ -125,7 +125,7 @@ export class CitasController {
   @ApiParam({ name: 'id', format: 'uuid' })
   async reprogramar(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: CrearCitaDto,
+    @Body() dto: ReprogramarCitaDto,
   ) {
     const datos = await this.citasService.reprogramar(id, dto)
     return { mensaje: 'Cita reprogramada correctamente', datos }
@@ -175,7 +175,16 @@ export class CitasController {
   ) {
     const rutaPublica = comprobante ? `/uploads/${comprobante.filename}` : undefined
     const datos = await this.citasService.solicitarCitaPublica(dto, rutaPublica)
-    return { mensaje: 'Cita solicitada correctamente', datos }
+  }
+
+  @Public()
+  @Post('verificar-codigo')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verificar si un código de referencia ya está en uso' })
+  async verificarCodigo(@Body() dto: { codigo_referencia: string }) {
+    if (!dto.codigo_referencia) return { mensaje: 'Ok', datos: { usado: false } }
+    const usado = await this.citasService.verificarCodigo(dto.codigo_referencia)
+    return { mensaje: 'Verificación completada', datos: { usado } }
   }
 }
 

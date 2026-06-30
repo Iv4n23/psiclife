@@ -9,7 +9,7 @@ import {
 } from '@prisma/client'
 
 import {
-  CrearCitaDto, ActualizarCitaDto,
+  CrearCitaDto, ActualizarCitaDto, ReprogramarCitaDto,
   RegistrarAsistenciaDto, SolicitarCitaPublicaDto,
 } from './dto/citas.dto'
 
@@ -352,7 +352,7 @@ export class CitasService {
 
 
   // ── Reprogramar ────────────────────────────────────────────
-  async reprogramar(id: string, dto: CrearCitaDto) {
+  async reprogramar(id: string, dto: ReprogramarCitaDto & { duracion_minutos?: number, agendado_por?: any }) {
     const original = await this.buscarPorId(id)
 
     if (['completada', 'cancelada'].includes(original.estado))
@@ -377,7 +377,10 @@ export class CitasService {
     // Marcar original como reprogramada
     await this.prisma.citas.update({
       where: { id },
-      data:  { estado: 'reprogramada' as citas_estado },
+      data:  {
+        estado: 'reprogramada' as citas_estado,
+        motivo_cancelacion: dto.motivo_reprogramacion ?? null,
+      },
     })
 
     // Crear nueva cita vinculada
@@ -399,6 +402,12 @@ export class CitasService {
         paciente:  { select: { nombres: true, apellidos: true, correo_personal: true } },
         psicologo: { select: { nombres: true, apellidos: true } },
       },
+    })
+
+    // Trasladar las facturas de la cita original a la nueva cita reprogramada
+    await this.prisma.facturas.updateMany({
+      where: { cita_id: id },
+      data: { cita_id: nueva.id }
     })
 
     // Notificar por correo
@@ -542,7 +551,7 @@ export class CitasService {
 
     // 4. Crear la cita (esto también crea la factura automáticamente)
     const enlace = dto.modalidad === 'virtual' && dto.enlace_reunion
-      ? `${dto.plataforma_virtual ?? 'zoom'}::${dto.enlace_reunion}`
+      ? `${dto.plataforma_virtual ?? 'meet'}::${dto.enlace_reunion}`
       : undefined
 
     const citaCreada = await this.crear({
@@ -592,6 +601,14 @@ export class CitasService {
     }
 
     return citaCreada
+  }
+
+  async verificarCodigo(codigo: string): Promise<boolean> {
+    if (!codigo || codigo.trim() === '') return false;
+    const existente = await this.prisma.pagos.findFirst({
+      where: { codigo_referencia: codigo.trim() }
+    });
+    return !!existente;
   }
 }
 

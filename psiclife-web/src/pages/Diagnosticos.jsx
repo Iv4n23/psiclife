@@ -360,8 +360,8 @@ export default function Diagnosticos() {
             </div>
           </div>
 
-      <div className="card">
-        {cargando ? <Spinner /> : diagnosticosFiltrados.length === 0
+      <div className="card" style={{ opacity: cargando ? 0.6 : 1, transition: 'opacity 0.2s', pointerEvents: cargando ? 'none' : 'auto' }}>
+        {cargando && diagnosticosFiltrados.length === 0 ? <Spinner /> : diagnosticosFiltrados.length === 0
           ? <EmptyState titulo="Sin diagnósticos" descripcion="No se encontraron diagnósticos registrados." />
           : (
             <div className="table-wrap">

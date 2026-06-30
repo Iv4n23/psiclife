@@ -492,6 +492,8 @@ model pagos {
   codigo_referencia String?      @db.VarChar(100)
   url_comprobante   String?      @db.Text
   confirmado        Boolean      @default(true)
+  anulado           Boolean      @default(false)
+  motivo_anulacion  String?      @db.Text
   registrado_por    String       @db.Char(36)
   pagado_en         DateTime     @default(now()) @db.DateTime(0)
   factura           facturas     @relation(fields: [factura_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_pagos_factura")

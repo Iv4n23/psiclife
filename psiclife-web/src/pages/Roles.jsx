@@ -272,8 +272,8 @@ export default function Roles() {
         </button>
       </div>
 
-      <div className="card">
-        {cargando ? <Spinner /> : roles.length === 0 ? (
+      <div className="card" style={{ opacity: cargando ? 0.6 : 1, transition: 'opacity 0.2s', pointerEvents: cargando ? 'none' : 'auto' }}>
+        {cargando && roles.length === 0 ? <Spinner /> : roles.length === 0 ? (
           <EmptyState titulo="Sin roles" descripcion="Crea el primer rol del sistema." />
         ) : (
           <div className="table-wrap">

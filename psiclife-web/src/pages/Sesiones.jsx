@@ -205,7 +205,7 @@ export default function Sesiones() {
 
           {/* Lista */}
           <div style={{ flex: 1, overflowY: 'auto', padding: 10 }}>
-            {cargando ? <Spinner /> : citasFiltradas.length === 0 ? (
+            {cargando && citasFiltradas.length === 0 ? <Spinner /> : citasFiltradas.length === 0 ? (
               <EmptyState titulo="Sin sesiones" descripcion="No hay sesiones que coincidan" />
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

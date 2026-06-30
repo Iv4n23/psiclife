@@ -469,4 +469,79 @@ export class FacturacionService {
 
     return { pagoId, estado_factura: nuevoEstado }
   }
+
+  // ── Listar pagos confirmados (para vista de administración) ──
+  async listarPagosConfirmados(psicologoId?: string) {
+    return this.prisma.pagos.findMany({
+      where: {
+        confirmado: true,
+        anulado: false,
+        ...(psicologoId ? { factura: { psicologo_id: psicologoId } } : {}),
+      },
+      include: {
+        factura: {
+          include: {
+            paciente:  { select: { nombres: true, apellidos: true } },
+            psicologo: { select: { nombres: true, apellidos: true } },
+          },
+        },
+      },
+      orderBy: { pagado_en: 'desc' },
+    })
+  }
+
+  // ── Anular un pago confirmado (solo admin — reembolso bancario) ──
+  async anularPago(pagoId: string, motivo: string, usuarioId: string) {
+    const pago = await this.prisma.pagos.findUnique({
+      where: { id: pagoId },
+      include: { factura: { include: { pagos: true } } },
+    })
+    if (!pago) throw new NotFoundException('Pago no encontrado')
+    if (pago.anulado) throw new BadRequestException('Este pago ya fue anulado')
+    if (!pago.confirmado) throw new BadRequestException('No se puede anular un pago que no ha sido confirmado')
+
+    // Marcar pago como anulado
+    await this.prisma.pagos.update({
+      where: { id: pagoId },
+      data: { anulado: true, motivo_anulacion: motivo },
+    })
+
+    // Recalcular el estado de la factura (sin contar pagos anulados ni no confirmados)
+    const pagosValidos = pago.factura.pagos.filter(p => p.id !== pagoId && p.confirmado && !p.anulado)
+    const totalPagado = pagosValidos.reduce((acc, p) => acc + Number(p.monto), 0)
+    const totalFactura = Number(pago.factura.total)
+    const nuevoEstadoFactura = (totalPagado <= 0 ? 'pendiente' : totalPagado >= totalFactura - 0.01 ? 'pagada' : 'parcial') as facturas_estado
+
+    await this.prisma.facturas.update({
+      where: { id: pago.factura_id },
+      data: { estado: nuevoEstadoFactura },
+    })
+
+    // Anular la cita asociada y liberar el horario
+    if (pago.factura.cita_id) {
+      const cita = await this.prisma.citas.findUnique({ where: { id: pago.factura.cita_id } })
+      if (cita && !['cancelada', 'completada'].includes(cita.estado)) {
+        await this.prisma.citas.update({
+          where: { id: cita.id },
+          data: {
+            estado: 'cancelada' as any,
+            motivo_cancelacion: `Pago anulado: ${motivo}`,
+          },
+        })
+      }
+    }
+
+    // Auditoría
+    await this.prisma.auditoria.create({
+      data: {
+        usuario_id:  usuarioId,
+        accion:      'pago.anulado',
+        modulo:      'facturacion',
+        entidad_id:  pago.factura_id,
+        datos_nuevos: { pago_id: pagoId, motivo, estado_factura: nuevoEstadoFactura },
+      },
+    })
+
+    return { pagoId, estado_factura: nuevoEstadoFactura }
+  }
 }

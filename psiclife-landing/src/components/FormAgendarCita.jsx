@@ -283,8 +283,24 @@ export default function FormAgendarCita({ psicologos = [], pagosConfig = {} }) {
 
   const costo = datos.psicologo && datos.psicologo.precio_sesion ? Number(datos.psicologo.precio_sesion) : null
 
-  const avanzar = () => {
+  const avanzar = async () => {
     if (!validarPaso()) return
+
+    if (paso === 3 && (datos.metodo_pago === 'yape' || datos.metodo_pago === 'transferencia')) {
+      setEnviando(true)
+      try {
+        const { data } = await landingApi.verificarCodigoReferencia(datos.codigo_referencia)
+        if (data.datos?.usado) {
+          setErrores(e => ({ ...e, codigo_referencia: 'Este número de operación ya está registrado' }))
+          setEnviando(false)
+          return
+        }
+      } catch (err) {
+        console.error('Error al verificar código', err)
+      }
+      setEnviando(false)
+    }
+
     setPaso(p => p + 1)
   }
 
@@ -651,8 +667,8 @@ export default function FormAgendarCita({ psicologos = [], pagosConfig = {} }) {
           </button>
         )}
         {paso < PASOS.length - 1 ? (
-          <button className={`${styles.btnNext} btn-p`} onClick={avanzar}>
-            Continuar <ChevronRight size={16} />
+          <button className={`${styles.btnNext} btn-p`} onClick={avanzar} disabled={enviando}>
+            {enviando ? 'Verificando...' : <>Continuar <ChevronRight size={16} /></>}
           </button>
         ) : (
           <button className={`${styles.btnNext} btn-p`} onClick={confirmar} disabled={enviando}>

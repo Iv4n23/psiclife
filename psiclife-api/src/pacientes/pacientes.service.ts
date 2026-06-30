@@ -91,10 +91,57 @@ export class PacientesService {
   }
 
   async eliminar(id: string) {
-    const paciente = await this.buscarPorId(id)
+    const paciente = await this.prisma.pacientes.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            citas: true,
+            dx_diagnosticos: true,
+            eva_aplicaciones: true,
+            act_asignaciones: true,
+            facturas: true,
+            resenas: true,
+          },
+        },
+      },
+    })
+    if (!paciente) throw new NotFoundException(`Paciente ${id} no encontrado`)
 
     if (paciente._count.citas > 0)
       throw new ConflictException(`No se puede eliminar: tiene ${paciente._count.citas} cita(s) registrada(s)`)
+
+    // Eliminar registros dependientes que no tienen cascade en la BD
+    // Orden: respuestas de evaluaciones → evaluaciones, asignaciones, diagnósticos, pagos → facturas, reseñas
+    if (paciente._count.eva_aplicaciones > 0) {
+      // Primero eliminar respuestas de las aplicaciones del paciente
+      await this.prisma.eva_respuestas.deleteMany({
+        where: { aplicacion: { paciente_id: id } },
+      })
+      await this.prisma.eva_aplicaciones.deleteMany({ where: { paciente_id: id } })
+    }
+
+    if (paciente._count.act_asignaciones > 0) {
+      await this.prisma.act_respuestas.deleteMany({
+        where: { asignacion: { paciente_id: id } },
+      })
+      await this.prisma.act_asignaciones.deleteMany({ where: { paciente_id: id } })
+    }
+
+    if (paciente._count.dx_diagnosticos > 0) {
+      await this.prisma.dx_diagnosticos.deleteMany({ where: { paciente_id: id } })
+    }
+
+    if (paciente._count.facturas > 0) {
+      await this.prisma.pagos.deleteMany({
+        where: { factura: { paciente_id: id } },
+      })
+      await this.prisma.facturas.deleteMany({ where: { paciente_id: id } })
+    }
+
+    if (paciente._count.resenas > 0) {
+      await this.prisma.resenas.deleteMany({ where: { paciente_id: id } })
+    }
 
     await this.prisma.pacientes.delete({ where: { id } })
     return { mensaje: 'Paciente eliminado correctamente' }

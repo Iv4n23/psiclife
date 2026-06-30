@@ -114,8 +114,8 @@ export default function Categorias() {
         <div><div className="section-title">Categorías</div><div className="section-subtitle">{items.length} categoría(s)</div></div>
         <button className="btn btn-primary" onClick={irANuevo}><Plus size={15} /> Nueva categoría</button>
       </div>
-      <div className="card">
-        {cargando ? <Spinner /> : items.length === 0 ? <EmptyState titulo="Sin categorías" /> : (
+      <div className="card" style={{ opacity: cargando ? 0.6 : 1, transition: 'opacity 0.2s', pointerEvents: cargando ? 'none' : 'auto' }}>
+        {cargando && items.length === 0 ? <Spinner /> : items.length === 0 ? <EmptyState titulo="Sin categorías" /> : (
           <div className="table-wrap">
             <table>
               <thead><tr><th>Nombre</th><th>Descripción</th><th>Estado</th><th>Acciones</th></tr></thead>
