@@ -178,7 +178,7 @@ export class DisponibilidadService {
         where: {
           psicologo_id:    psicologoId,
           programada_para: { gte: inicio, lte: fin },
-          estado:          { in: ['pendiente', 'confirmada'] },
+          estado:          { in: ['pendiente', 'confirmada', 'completada'] },
         },
         select: { programada_para: true, duracion_minutos: true },
       }),

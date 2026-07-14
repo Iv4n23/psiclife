@@ -90,11 +90,51 @@ export default function Actividades() {
     } catch {}
   }
 
+  const getMinFechaAsignacion = () => {
+    const hoy = new Date()
+    hoy.setHours(0, 0, 0, 0)
+    return hoy.toISOString().slice(0, 10)
+  }
+
+  const getMaxFechaAsignacion = () => {
+    const max = new Date()
+    max.setHours(0, 0, 0, 0)
+    max.setMonth(max.getMonth() + 1)
+    return max.toISOString().slice(0, 10)
+  }
+
+  const getMinFechaLimite = () => formAsig.fecha_asignacion || ''
+
+  const getMaxFechaLimite = () => {
+    if (!formAsig.fecha_asignacion) return ''
+    const base = new Date(`${formAsig.fecha_asignacion}T00:00:00`)
+    const max = new Date(base)
+    max.setMonth(max.getMonth() + 1)
+    return max.toISOString().slice(0, 10)
+  }
+
   const validarAsig = () => {
     const e = {}
     if (!formAsig.paciente_id)  e.paciente_id  = 'Requerido'
     if (!formAsig.psicologo_id) e.psicologo_id = 'Requerido'
     if (!formAsig.actividad_id) e.actividad_id = 'Requerido'
+
+    if (formAsig.fecha_limite) {
+      const fechaAsignacion = formAsig.fecha_asignacion ? new Date(`${formAsig.fecha_asignacion}T00:00:00`) : null
+      const fechaLimite = formAsig.fecha_limite ? new Date(`${formAsig.fecha_limite}T00:00:00`) : null
+      if (!fechaAsignacion || !fechaLimite) {
+        e.fecha_limite = 'Fecha inválida'
+      } else {
+        const maxFecha = new Date(fechaAsignacion)
+        maxFecha.setMonth(maxFecha.getMonth() + 1)
+        if (fechaLimite < fechaAsignacion) {
+          e.fecha_limite = 'La fecha límite no puede ser anterior a la fecha de asignación'
+        } else if (fechaLimite > maxFecha) {
+          e.fecha_limite = 'La fecha límite no puede superar un mes desde la fecha de asignación'
+        }
+      }
+    }
+
     setErrores(e)
     return Object.keys(e).length === 0
   }
@@ -341,11 +381,12 @@ export default function Actividades() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Fecha asignación</label>
-                  <input type="date" className="form-control" value={formAsig.fecha_asignacion} onChange={setA('fecha_asignacion')} />
+                  <input type="date" className="form-control" value={formAsig.fecha_asignacion} onChange={setA('fecha_asignacion')} min={getMinFechaAsignacion()} max={getMaxFechaAsignacion()} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Fecha límite</label>
-                  <input type="date" className="form-control" value={formAsig.fecha_limite} onChange={setA('fecha_limite')} />
+                  <input type="date" className="form-control" value={formAsig.fecha_limite} onChange={setA('fecha_limite')} min={getMinFechaLimite()} max={getMaxFechaLimite()} />
+                  <small style={{ color: 'var(--text-muted)', marginTop: 4, display: 'block' }}>Máximo un mes desde la fecha de asignación.</small>
                 </div>
                 <div className="form-group" style={{ gridColumn:'1/-1' }}>
                   <label className="form-label">Instrucciones adicionales</label>

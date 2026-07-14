@@ -51,6 +51,10 @@ export class RolesService {
   async actualizar(id: string, dto: ActualizarRolDto) {
     const rol = await this.buscarPorId(id)
 
+    if (rol.nombre === 'Administrador' && dto.permisos) {
+      throw new BadRequestException('No se pueden modificar los permisos del rol Administrador')
+    }
+
     if (dto.nombre && dto.nombre !== rol.nombre) {
       const dup = await this.prisma.roles.findFirst({
         where: { nombre: dto.nombre, NOT: { id } },
@@ -73,7 +77,10 @@ export class RolesService {
     id: string,
     permisos: Record<string, { ver: boolean; crear: boolean; editar: boolean; eliminar: boolean }>,
   ) {
-    await this.buscarPorId(id)
+    const rol = await this.buscarPorId(id)
+    if (rol.nombre === 'Administrador') {
+      throw new BadRequestException('No se pueden modificar los permisos del rol Administrador')
+    }
     return this.prisma.roles.update({
       where: { id }, data: { permisos },
     })

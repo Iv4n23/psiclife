@@ -30,10 +30,13 @@ export class CategoriasService {
   }
 
   async actualizar(id: string, dto: ActualizarCategoriaDto) {
-    await this.buscarPorId(id)
+    const cat = await this.buscarPorId(id)
     if (dto.nombre) {
       const dup = await this.prisma.categorias.findFirst({ where: { nombre: dto.nombre, NOT: { id } } })
       if (dup) throw new ConflictException('Ya existe una categoría con ese nombre')
+    }
+    if (dto.esta_activa === false && cat._count.servicios > 0) {
+      throw new ConflictException(`No se puede desactivar: tiene ${cat._count.servicios} servicio(s) asociado(s)`)
     }
     return this.prisma.categorias.update({ where: { id }, data: dto })
   }

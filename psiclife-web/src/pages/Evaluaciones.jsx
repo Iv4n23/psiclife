@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { evaluacionesApi, pacientesApi, psicologosApi } from '../services/api'
 import { Confirm, EmptyState, Spinner } from '../components/ui/index.jsx'
 import toast from 'react-hot-toast'
-import { Plus, X, Save, Eye, CheckCircle, Trash2, Ban, Edit2, Search } from 'lucide-react'
+import { Plus, X, Save, Eye, CheckCircle, Trash2, Ban, Edit2, Search, AlertTriangle } from 'lucide-react'
 import { cleanPayload } from '../utils/payload'
 
 const ESTADO_BADGE = {
@@ -361,7 +361,7 @@ export default function Evaluaciones() {
               <span className="card-title" style={{ color: 'var(--celeste-dark)' }}>Completar evaluación</span>
               {progreso < 100 && (
                 <span style={{ fontSize: 11, background: 'var(--warning-bg)', color: 'var(--warning)', padding: '2px 8px', borderRadius: 20, fontWeight: 600, border: '1px solid var(--warning)' }}>
-                  ⚠ {progreso}% respondido
+                  <AlertTriangle size={12} style={{display:'inline', marginBottom:-2, marginRight:4}} /> {progreso}% respondido
                 </span>
               )}
             </div>

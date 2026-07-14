@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { pacientesApi } from '../services/api'
 import { Confirm, EmptyState, Spinner } from '../components/ui/index.jsx'
 import toast from 'react-hot-toast'
-import { Plus, Search, Trash2, Edit2, Eye, X, Save, UserCheck, UserX, KeyRound, Send } from 'lucide-react'
+import { Plus, Search, Trash2, Edit2, Eye, X, Save, UserCheck, UserX, KeyRound, Send, Check } from 'lucide-react'
 import { cleanPayload } from '../utils/payload'
 
 const FORM_VACIO = {
@@ -359,7 +359,7 @@ export default function Pacientes() {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               color: 'white', fontWeight: 700, fontSize: 15, flexShrink: 0,
             }}>
-              ✓
+              <Check size={20} />
             </div>
             <div>
               <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>

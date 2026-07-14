@@ -58,9 +58,11 @@ export class RegistrarPagoYapeDto {
   @IsNumber() @Min(0) @Type(() => Number)
   monto: number
 
-  @ApiProperty({ example: '12345678' })
-  @IsString() @MaxLength(16)
-  @Matches(/^[0-9\-]+$/, { message: 'El número de operación debe contener solo números y guiones' })
+  @ApiPropertyOptional({ example: '12345678' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(16)
+  @Matches(/^[0-9\-]*$/, { message: 'El número de operación debe contener solo números y guiones' })
   codigo_referencia?: string
 
   @ApiPropertyOptional({ enum: pagos_metodo, example: 'yape' })

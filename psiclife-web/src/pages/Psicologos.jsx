@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { psicologosApi, usuariosApi } from '../services/api'
 import { Confirm, EmptyState, Spinner } from '../components/ui/index.jsx'
 import toast from 'react-hot-toast'
-import { Plus, Edit2, X, Save, ImagePlus, ToggleLeft, ToggleRight, Trash2 } from 'lucide-react'
+import { Plus, Edit2, X, Save, ImagePlus, ToggleLeft, ToggleRight, Trash2, User, Copy } from 'lucide-react'
 import { getImageUrl } from '../utils/image'
 import { cleanPayload } from '../utils/payload'
 
@@ -211,13 +211,13 @@ export default function Psicologos() {
               <div style={{ width: 80, height: 80, borderRadius: '50%', border: '1.5px solid var(--border)', overflow: 'hidden', background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 {fotoPreview
                   ? <img src={getImageUrl(fotoPreview)} alt="foto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  : <span style={{ fontSize: 28 }}>👤</span>}
+                  : <User size={28} color="var(--text-muted)" />}
               </div>
               <div>
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => inputFoto.current.click()}>
                   <ImagePlus size={13} /> {fotoPreview ? 'Cambiar foto' : 'Subir foto'}
                 </button>
-                <p className="form-hint" style={{ marginTop: 6 }}>JPG o PNG · máx. 3MB</p>
+                <p className="form-hint" style={{ marginTop: 6 }}>JPG o PNG · máx. 2MB</p>
                 <input ref={inputFoto} type="file" accept="image/*" style={{ display: 'none' }} onChange={onFoto} />
               </div>
             </div>
@@ -257,14 +257,14 @@ export default function Psicologos() {
                     <tr key={p.id}>
                       <td>
                         <div style={{ width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          {p.foto_url ? <img src={getImageUrl(p.foto_url)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '👤'}
+                          {p.foto_url ? <img src={getImageUrl(p.foto_url)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <User size={18} color="var(--text-muted)" />}
                         </div>
                       </td>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <code style={{ fontSize: 10, color: 'var(--text-muted)' }}>{p.id.slice(0,8)}...</code>
                           <button className="btn btn-ghost btn-sm" style={{ padding: 2, height: 'auto' }}
-                            onClick={() => { navigator.clipboard.writeText(p.id); toast.success('ID copiado') }}>📋</button>
+                            onClick={() => { navigator.clipboard.writeText(p.id); toast.success('ID copiado') }}><Copy size={12} /></button>
                         </div>
                       </td>
                       <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{p.usuario?.correo || '—'}</td>

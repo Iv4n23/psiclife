@@ -75,6 +75,18 @@ export class FacturacionController {
     return { mensaje: 'Pagos pendientes obtenidos', datos }
   }
 
+  @Get('pagos/confirmados')
+  @Permisos('facturacion.ver')
+  @ApiOperation({ summary: 'Listar pagos confirmados' })
+  async pagosConfirmados(
+    @UsuarioActual('sub') usuarioId?: string,
+    @UsuarioActual('rolNombre') rolNombre?: string,
+  ) {
+    const psicologoId = await this.psicologoOwner.resolverPsicologoId(usuarioId, rolNombre)
+    const datos = await this.facturacionService.listarPagosConfirmados(psicologoId ?? undefined)
+    return { mensaje: 'Pagos confirmados obtenidos', datos }
+  }
+
   @Get('cita/:citaId')
   @Permisos('facturacion.ver')
   @ApiOperation({ summary: 'Obtener factura por cita' })
@@ -186,9 +198,26 @@ export class FacturacionController {
     return { mensaje: 'Comprobante Yape registrado. En espera de confirmación.', datos }
   }
 
+  @Post(':id/efectivo-paciente')
+  @ApiOperation({ summary: 'Registrar intención de pago en efectivo (paciente)' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  async registrarEfectivoPaciente(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: { monto: number },
+    @UsuarioActual('sub') usuarioId: string,
+  ) {
+    const datos = await this.facturacionService.registrarPagoYapePaciente(
+      id, 
+      { monto: dto.monto, metodo_pago: 'efectivo', codigo_referencia: '' }, 
+      null, 
+      usuarioId
+    )
+    return { mensaje: 'Intención de pago en efectivo registrada. En espera de confirmación.', datos }
+  }
+
   @Patch('pagos/:pagoId/confirmar')
   @Permisos('facturacion.editar')
-  @ApiOperation({ summary: 'Confirmar un pago Yape/Transferencia' })
+  @ApiOperation({ summary: 'Confirmar un pago pendiente' })
   @ApiParam({ name: 'pagoId', format: 'uuid' })
   async confirmarPago(
     @Param('pagoId', ParseUUIDPipe) pagoId: string,
@@ -202,28 +231,17 @@ export class FacturacionController {
 
   @Patch('pagos/:pagoId/rechazar')
   @Permisos('facturacion.editar')
-  @ApiOperation({ summary: 'Rechazar/eliminar un pago pendiente de confirmacion' })
+  @ApiOperation({ summary: 'Rechazar un pago pendiente' })
   @ApiParam({ name: 'pagoId', format: 'uuid' })
   async rechazarPago(
     @Param('pagoId', ParseUUIDPipe) pagoId: string,
+    @Body() dto: AnularPagoDto,
     @UsuarioActual('sub') usuarioId: string,
     @UsuarioActual('rolNombre') rolNombre?: string,
   ) {
     const psicologoId = await this.psicologoOwner.resolverPsicologoId(usuarioId, rolNombre)
-    const datos = await this.facturacionService.rechazarPago(pagoId, usuarioId, psicologoId ?? undefined)
-    return { mensaje: 'Pago rechazado y eliminado correctamente', datos }
-  }
-
-  @Get('pagos/confirmados')
-  @Permisos('facturacion.ver')
-  @ApiOperation({ summary: 'Listar todos los pagos confirmados (no anulados)' })
-  async pagosConfirmados(
-    @UsuarioActual('sub') usuarioId?: string,
-    @UsuarioActual('rolNombre') rolNombre?: string,
-  ) {
-    const psicologoId = await this.psicologoOwner.resolverPsicologoId(usuarioId, rolNombre)
-    const datos = await this.facturacionService.listarPagosConfirmados(psicologoId ?? undefined)
-    return { mensaje: 'Pagos confirmados obtenidos', datos }
+    const datos = await this.facturacionService.rechazarPago(pagoId, dto.motivo, usuarioId, psicologoId ?? undefined)
+    return { mensaje: 'Pago rechazado correctamente', datos }
   }
 
   @Patch('pagos/:pagoId/anular')
@@ -234,8 +252,10 @@ export class FacturacionController {
     @Param('pagoId', ParseUUIDPipe) pagoId: string,
     @Body() dto: AnularPagoDto,
     @UsuarioActual('sub') usuarioId: string,
+    @UsuarioActual('rolNombre') rolNombre?: string,
   ) {
-    const datos = await this.facturacionService.anularPago(pagoId, dto.motivo, usuarioId)
-    return { mensaje: 'Pago anulado correctamente. La cita ha sido cancelada.', datos }
+    const psicologoId = await this.psicologoOwner.resolverPsicologoId(usuarioId, rolNombre)
+    const datos = await this.facturacionService.anularPago(pagoId, { motivo: dto.motivo }, usuarioId, psicologoId ?? undefined)
+    return { mensaje: 'Pago anulado correctamente', datos }
   }
 }

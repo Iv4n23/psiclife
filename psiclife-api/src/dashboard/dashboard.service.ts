@@ -9,7 +9,7 @@ export class DashboardService {
     private readonly psicologoOwner: PsicologoOwnerHelper,
   ) {}
 
-  async getStats(usuarioId?: string, rolNombre?: string) {
+  async getStats(usuarioId?: string, rolNombre?: string, periodo?: string) {
     let psicologoId = null;
     let pacientesAccesibles = undefined;
 
@@ -18,35 +18,90 @@ export class DashboardService {
       pacientesAccesibles = await this.psicologoOwner.pacientesAccesibles(usuarioId, rolNombre);
     }
 
-    const [usuarios, roles, servicios, categorias, citasHoy, pacientes] = await Promise.all([
-      this.prisma.usuarios.count({ where: { esta_activo: true } }),
-      this.prisma.roles.count({ where: { esta_activo: true } }),
-      this.prisma.servicios.count({ where: { esta_activo: true } }),
-      this.prisma.categorias.count({ where: { esta_activa: true } }),
+    // Calcular rango de fechas según el periodo
+    const now = new Date();
+    let inicio: Date;
+    let fin: Date;
+
+    switch (periodo) {
+      case 'dia':
+        inicio = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        fin    = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+        break;
+      case 'semana': {
+        const day = now.getDay();
+        const diff = day === 0 ? -6 : 1 - day; // lunes como inicio
+        inicio = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diff, 0, 0, 0, 0);
+        fin    = new Date(inicio.getFullYear(), inicio.getMonth(), inicio.getDate() + 6, 23, 59, 59, 999);
+        break;
+      }
+      case 'anio':
+        inicio = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+        fin    = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+        break;
+      case 'mes':
+      default:
+        inicio = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+        fin    = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        break;
+    }
+
+    const dateFilter = { gte: inicio, lt: fin };
+    const filtroPsicologo = psicologoId ? { psicologo_id: psicologoId } : {};
+
+    const [pacientes, citasHoy, citasCompletadas, sesionesPendientes, ingresos] = await Promise.all([
+      // Pacientes atendidos en el periodo (con citas en el rango)
+      this.prisma.citas.groupBy({
+        by: ['paciente_id'],
+        where: {
+          programada_para: dateFilter,
+          estado: { notIn: ['cancelada'] },
+          ...(psicologoId ? { psicologo_id: psicologoId } : {}),
+        },
+      }).then(g => g.length),
+      // Citas programadas en el periodo
       this.prisma.citas.count({
         where: {
-          programada_para: {
+          programada_para: dateFilter || {
             gte: new Date(new Date().setHours(0, 0, 0, 0)),
             lt: new Date(new Date().setHours(23, 59, 59, 999)),
           },
           ...(psicologoId ? { psicologo_id: psicologoId } : {}),
         },
       }),
-      this.prisma.pacientes.count({ 
-        where: { 
-          estado_paciente: 'activo',
-          ...(pacientesAccesibles ? { id: { in: pacientesAccesibles } } : {}),
-        } 
+      // Citas completadas en el periodo
+      this.prisma.citas.count({
+        where: {
+          programada_para: dateFilter,
+          estado: 'completada',
+          ...(psicologoId ? { psicologo_id: psicologoId } : {}),
+        },
+      }),
+      // Sesiones pendientes/confirmadas
+      this.prisma.citas.count({
+        where: {
+          programada_para: dateFilter,
+          estado: { in: ['confirmada', 'pendiente'] },
+          ...(psicologoId ? { psicologo_id: psicologoId } : {}),
+        },
+      }),
+      // Ingresos
+      this.prisma.facturas.aggregate({
+        _sum: { total: true },
+        where: {
+          estado: 'pagada',
+          emitida_en: dateFilter,
+          ...(psicologoId ? { psicologo_id: psicologoId } : {}),
+        },
       }),
     ]);
 
     return {
-      usuarios,
-      roles,
-      servicios,
-      categorias,
-      citasHoy,
       pacientes,
+      citasHoy,
+      citasCompletadas,
+      sesionesPendientes,
+      ingresos: Number(ingresos._sum.total ?? 0),
     };
   }
 

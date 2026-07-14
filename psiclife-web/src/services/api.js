@@ -254,14 +254,15 @@ export const facturacionApi = {
   anular:               (id, d)   => api.patch(`/facturacion/${id}/anular`, d),
   eliminar:             (id)      => api.delete(`/facturacion/${id}`),
   subirComprobanteYape: (id, form) => api.post(`/facturacion/${id}/yape-comprobante`, form),
+  registrarEfectivoPaciente: (id, data)  => api.post(`/facturacion/${id}/efectivo-paciente`, data),
   confirmarPago:        (pagoId)  => api.patch(`/facturacion/pagos/${pagoId}/confirmar`),
-  rechazarPago:         (pagoId)  => api.patch(`/facturacion/pagos/${pagoId}/rechazar`),
+  rechazarPago:         (pagoId, data) => api.patch(`/facturacion/pagos/${pagoId}/rechazar`, data),
   pagosConfirmados:     ()        => api.get('/facturacion/pagos/confirmados'),
   anularPago:           (pagoId, d) => api.patch(`/facturacion/pagos/${pagoId}/anular`, d),
 }
 
 export const dashboardApi = {
-  stats:    () => api.get('/dashboard/stats'),
+  stats:    (params) => api.get('/dashboard/stats', { params }),
   paciente: () => api.get('/dashboard/paciente'),
 }
 

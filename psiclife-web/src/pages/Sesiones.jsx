@@ -143,7 +143,7 @@ export default function Sesiones() {
     ...(historial.citas || []).map(c => ({
       id: `c-${c.id}`, fecha: c.programada_para, tipo: 'cita',
       titulo: `Sesión ${c.numero_sesion || ''}`.trim(),
-      sub: `${c.modalidad} · ${c.estado}`,
+      sub: `${c.modalidad} · ${c.estado}${c.cita_original_id ? ' (Reprog.)' : ''}`,
       color: 'var(--celeste)',
     })),
     ...(historial.dx_diagnosticos || []).map(dx => ({
@@ -229,9 +229,14 @@ export default function Sesiones() {
                           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
                             {c.paciente?.nombres} {c.paciente?.apellidos}
                           </span>
-                          <span className={`badge ${ESTADO_BADGE[c.estado] || 'badge-muted'}`} style={{ fontSize: 10, flexShrink: 0 }}>
-                            {c.estado}
-                          </span>
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <span className={`badge ${ESTADO_BADGE[c.estado] || 'badge-muted'}`} style={{ fontSize: 10, flexShrink: 0 }}>
+                              {c.estado}
+                            </span>
+                            {c.cita_original_id && (
+                              <span className="badge badge-info" style={{ fontSize: 10, flexShrink: 0 }}>Reprog.</span>
+                            )}
+                          </div>
                         </div>
                         <div style={{ fontSize: 11.5, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
                           <Calendar size={11} />
@@ -277,6 +282,9 @@ export default function Sesiones() {
                   <span className={`badge ${ESTADO_BADGE[citaActiva.estado] || 'badge-muted'}`}>
                     {citaActiva.estado}
                   </span>
+                  {citaActiva.cita_original_id && (
+                    <span className="badge badge-info">Reprogramada</span>
+                  )}
                 </div>
                 <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                   <span>{new Date(citaActiva.programada_para).toLocaleString('es-PE')}</span>

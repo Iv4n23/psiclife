@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { Link }     from 'react-router-dom'
 import { authApi }  from '../services/api'
-import { ArrowLeft, Send } from 'lucide-react'
+import { ArrowLeft, Send, Mail } from 'lucide-react'
 
 export default function RecuperarContrasena() {
   const [correo,    setCorreo]    = useState('')
@@ -29,7 +29,7 @@ export default function RecuperarContrasena() {
 
           {enviado ? (
             <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 48, marginBottom: 20 }}>📬</div>
+              <div style={{ fontSize: 48, marginBottom: 20, display:'flex', justifyContent:'center' }}><Mail size={48} color="var(--celeste)" /></div>
               <div className="login-heading">Revisa tu correo</div>
               <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: 28 }}>
                 Si <strong>{correo}</strong> está registrado en PsicLife, recibirás un enlace para restablecer tu contraseña en los próximos minutos.

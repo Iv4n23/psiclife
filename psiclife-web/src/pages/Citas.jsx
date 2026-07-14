@@ -8,7 +8,7 @@ import CitaDetalleDrawer from '../components/citas/CitaDetalleDrawer'
 import toast from 'react-hot-toast'
 import {
   Plus, X, Save, Calendar, CheckCircle, XCircle,
-  ChevronLeft, ChevronRight, Clock, User, Stethoscope, Trash2,
+  ChevronLeft, ChevronRight, Clock, User, Stethoscope, Trash2, AlertTriangle
 } from 'lucide-react'
 import { cleanPayload } from '../utils/payload'
 import { useAuth } from '../context/AuthContext'
@@ -276,8 +276,7 @@ export default function Citas() {
   const cargar = async () => {
     setCargando(true)
     try {
-      const mesStr = String(mesActual + 1).padStart(2, '0')
-      const paramsListar = { mes: `${añoActual}-${mesStr}` }
+      const paramsListar = {}
       if (esPsicologo && usuario?.psicologoId) {
         paramsListar.psicologoId = usuario.psicologoId
       }
@@ -894,7 +893,7 @@ export default function Citas() {
               color: 'var(--danger)',
               marginBottom: 20,
             }}>
-              ⚠️ Esta acción es <strong>irreversible</strong>. Se eliminarán también la factura y registros de asistencia asociados.
+              <AlertTriangle size={14} style={{ marginRight: 6, flexShrink: 0 }} /> Esta acción es <strong>irreversible</strong>. Se eliminarán también la factura y registros de asistencia asociados.
             </div>
             <div className="modal-actions">
               <button className="btn btn-ghost" onClick={() => setModalEliminar(null)}>Cancelar</button>
@@ -926,7 +925,7 @@ export default function Citas() {
                     onChange={e => setAsistencia(a => ({ ...a, asistio: e.target.checked }))} />
                   <span className="toggle-slider" />
                 </label>
-                <span style={{ fontSize: 13 }}>{asistencia.asistio ? '✅ Asistió' : '❌ No asistió'}</span>
+                <span style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 4 }}>{asistencia.asistio ? <><CheckCircle size={14} color="var(--success)"/> Asistió</> : <><XCircle size={14} color="var(--danger)"/> No asistió</>}</span>
               </div>
             </div>
             {asistencia.asistio && (

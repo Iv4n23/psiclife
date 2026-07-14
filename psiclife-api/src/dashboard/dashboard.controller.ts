@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, UseGuards, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { DashboardService } from './dashboard.service';
@@ -16,8 +16,9 @@ export class DashboardController {
   async getStats(
     @UsuarioActual('sub') usuarioId: string,
     @UsuarioActual('rolNombre') rolNombre: string,
+    @Query('periodo') periodo?: string,
   ) {
-    const stats = await this.dashboardService.getStats(usuarioId, rolNombre);
+    const stats = await this.dashboardService.getStats(usuarioId, rolNombre, periodo);
     return { ok: true, datos: stats };
   }
 

@@ -4,12 +4,13 @@ import {
   Calendar, Clock, CheckCircle, AlertTriangle, BookOpen,
   Activity, Smartphone, X, Upload, Send, TrendingUp,
   Heart, Star, ChevronRight, Users, Shield, Package, Tag,
-  UserCheck, CreditCard, Banknote,
+  UserCheck, CreditCard, Banknote, Target, CheckCircle2, Check,
+  Paperclip, Hash, Search as SearchIcon, FileText, Download
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { dashboardApi, facturacionApi, citasApi, psicologosApi, actividadesApi, evaluacionesApi, disponibilidadApi, configuracionApi, resenasApi } from '../services/api'
-import { Spinner, CalendarioSemanal } from '../components/ui/index.jsx'
+import { Spinner, CalendarioSemanal, CalendarioMensual } from '../components/ui/index.jsx'
 import toast from 'react-hot-toast'
 
 const API_BASE = import.meta.env.VITE_API_URL?.replace('/api/v1', '') ?? 'http://localhost:3000'
@@ -158,7 +159,7 @@ function ModalYape({ facturaId, total, config, onClose, onSuccess }) {
               <img src={`${API_BASE}${config.qr_yape}`} alt="QR Yape" style={{ width:'100%', height:'100%', objectFit:'contain' }} />
             </div>
           ) : (
-            <div style={{ width:60, height:60, borderRadius:12, background:'linear-gradient(135deg,#7c3aed,#9333ea)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:26, flexShrink:0 }}>📱</div>
+            <div style={{ width:60, height:60, borderRadius:12, background:'linear-gradient(135deg,#7c3aed,#9333ea)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:26, flexShrink:0 }}><Smartphone size={26} color="white" /></div>
           )}
           <div>
             <div style={{ color:'rgba(255,255,255,0.45)', fontSize:10, textTransform:'uppercase', letterSpacing:1, marginBottom:3 }}>Yapea al número</div>
@@ -215,7 +216,7 @@ function ModalYape({ facturaId, total, config, onClose, onSuccess }) {
               }}
             />
             {codigo.length > 0 && codigo.length < 8 && (
-              <div style={{ fontSize:11, color:'hsl(0,70%,65%)', marginTop:4 }}>⚠ Mínimo 8 dígitos</div>
+              <div style={{ fontSize:11, color:'hsl(0,70%,65%)', marginTop:4, display:'flex', alignItems:'center', gap:4 }}><AlertTriangle size={12} /> Mínimo 8 dígitos</div>
             )}
           </div>
         </div>
@@ -242,6 +243,7 @@ function ModalYape({ facturaId, total, config, onClose, onSuccess }) {
                 <Upload size={28} color="rgba(255,255,255,0.28)" style={{ marginBottom:8 }} />
                 <div style={{ color:'rgba(255,255,255,0.55)', fontSize:13, fontWeight:500 }}>Arrastra tu captura aquí</div>
                 <div style={{ color:'rgba(255,255,255,0.28)', fontSize:12, marginTop:3 }}>o haz clic para seleccionar</div>
+                <div style={{ color:'rgba(255,255,255,0.32)', fontSize:11, marginTop:6 }}>JPG, PNG o WebP — máx. 4MB</div>
               </>}
         </div>
 
@@ -520,22 +522,27 @@ function DashboardPaciente() {
       })
       const citaId = citaRes.datos?.id ?? citaRes.id
 
-      // 2. Si hay comprobante, obtener la factura y subirlo
-      if (citaId && (formPago.metodo === 'yape' || formPago.metodo === 'transferencia') && formPago.archivo) {
+      // 2. Si hay comprobante o es efectivo, registrar intención de pago
+      if (citaId && formPago.metodo) {
         try {
           const { data: facRes } = await facturacionApi.porCita(citaId)
           const facturaId = facRes.datos?.id ?? facRes.id
           if (facturaId) {
-            const fd = new FormData()
-            fd.append('monto', '0')  // el staff confirmará el monto exacto
-            fd.append('codigo_referencia', formPago.codigo)
-            fd.append('metodo_pago', formPago.metodo)
-            fd.append('archivo', formPago.archivo)
-            await facturacionApi.subirComprobanteYape(facturaId, fd)
+            const totalFactura = Number(facRes.datos?.total ?? facRes.total ?? 0)
+            if ((formPago.metodo === 'yape' || formPago.metodo === 'transferencia') && formPago.archivo) {
+              const fd = new FormData()
+              fd.append('monto', totalFactura.toString())
+              fd.append('codigo_referencia', formPago.codigo)
+              fd.append('metodo_pago', formPago.metodo)
+              fd.append('archivo', formPago.archivo)
+              await facturacionApi.subirComprobanteYape(facturaId, fd)
+            } else if (formPago.metodo === 'efectivo') {
+              await facturacionApi.registrarEfectivoPaciente(facturaId, { monto: totalFactura })
+            }
           }
         } catch {
-          // No bloquear si falla la subida del comprobante
-          toast.error('Cita agendada, pero hubo un problema al subir el comprobante. Contáctanos.')
+          // No bloquear si falla el registro del pago
+          toast.error('Cita agendada, pero hubo un problema al registrar el pago. Contáctanos.')
         }
       }
 
@@ -670,7 +677,7 @@ function DashboardPaciente() {
               ✦ Portal del Paciente
             </div>
             <h1 style={{ margin:0, fontSize:30, fontWeight:900, color:'white', lineHeight:1.2, marginBottom:10 }}>
-              Hola, {nombre} 👋
+              Hola, {nombre}
             </h1>
             <p style={{ margin:0, color:'rgba(255,255,255,0.5)', fontSize:14.5, lineHeight:1.65, maxWidth:520 }}>
               Bienvenido a tu espacio personal de bienestar en PsicLife.
@@ -681,9 +688,9 @@ function DashboardPaciente() {
           {/* Métricas rápidas */}
           <div style={{ display:'flex', gap:12, flexShrink:0 }}>
             {[
-              { num: citas.filter(c => c.estado !== 'cancelada' && c.estado !== 'reprogramada').length, label:'Sesiones', icon:'📅', color:'hsl(262,65%,65%)' },
-              { num: evaluaciones.length, label:'Evaluaciones', icon:'📋', color:'hsl(38,85%,60%)' },
-              { num: actividades.length, label:'Actividades', icon:'✅', color:'hsl(145,60%,55%)' },
+              { num: citas.filter(c => c.estado !== 'cancelada' && c.estado !== 'reprogramada').length, label:'Sesiones', icon:<Calendar size={20} />, color:'hsl(262,65%,65%)' },
+              { num: evaluaciones.length, label:'Evaluaciones', icon:<BookOpen size={20} />, color:'hsl(38,85%,60%)' },
+              { num: actividades.length, label:'Actividades', icon:<CheckCircle size={20} />, color:'hsl(145,60%,55%)' },
             ].map(({ num, label, icon, color }) => (
               <div key={label} style={{
                 padding:'14px 18px', borderRadius:14, textAlign:'center', minWidth:90,
@@ -739,7 +746,7 @@ function DashboardPaciente() {
               <div style={{ height:4, background:`linear-gradient(90deg, ${col.dot}, ${col.border})` }} />
               <div style={{ padding:'20px 22px' }}>
                 <div style={{ fontSize:11, fontWeight:700, color:col.text, textTransform:'uppercase', letterSpacing:1, opacity:0.7, marginBottom:12 }}>
-                  🎯 Próxima Cita
+                  <Target size={16} style={{ marginRight: 6 }} /> Próxima Cita
                 </div>
                 <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14 }}>
                   <div style={{ width:44, height:44, borderRadius:12, background:`${col.dot}20`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
@@ -790,11 +797,11 @@ function DashboardPaciente() {
                 {proximaCita.modalidad === 'virtual' && !proximaCita.enlace_reunion && (
                   <div style={{
                     width:'100%', padding:'10px 14px', borderRadius:12, marginBottom: 8,
-                    background:'var(--warning-bg, #fff8e1)', border:'1px solid var(--warning, #f59e0b)',
-                    color:'var(--warning-text, #92400e)', fontSize:12.5, fontWeight:500,
+                    background:'rgba(58,174,216,0.1)', border:'1px solid rgba(58,174,216,0.35)',
+                    color:'var(--celeste)', fontSize:12.5, fontWeight:500,
                     display:'flex', alignItems:'center', gap:8,
                   }}>
-                    ⏳ Tu psicólogo aún no ha asignado el enlace de reunión. Se te notificará cuando esté disponible.
+                    <AlertTriangle size={16} style={{ flexShrink: 0 }} /> Tu psicólogo aún no ha asignado el enlace de reunión. Se te notificará cuando esté disponible.
                   </div>
                 )}
 
@@ -811,8 +818,8 @@ function DashboardPaciente() {
                   </button>
                 )}
                 {tienePagoEnEspera && (
-                  <div style={{ width:'100%', padding:'10px 14px', borderRadius:12, background:'rgba(250,204,21,0.1)', border:'1px solid rgba(250,204,21,0.35)', color:'hsl(38,85%,45%)', fontSize:13, fontWeight:600, display:'flex', alignItems:'center', gap:7, textAlign:'center', justifyContent:'center' }}>
-                    ⏳ Comprobante enviado, en espera de aprobación
+                  <div style={{ width:'100%', padding:'10px 14px', borderRadius:12, background:'rgba(58,174,216,0.1)', border:'1px solid rgba(58,174,216,0.35)', color:'var(--celeste)', fontSize:13, fontWeight:600, display:'flex', alignItems:'center', gap:7, textAlign:'center', justifyContent:'center' }}>
+                    <Clock size={16} /> Comprobante enviado, en espera de aprobación
                   </div>
                 )}
                 
@@ -876,8 +883,8 @@ function DashboardPaciente() {
                       )
                     })()}
                     {c.modalidad === 'virtual' && !c.enlace_reunion && (
-                      <span style={{ padding:'4px 10px', borderRadius:16, background:'var(--warning-bg, #fff8e1)', border:'1px solid var(--warning, #f59e0b)', color:'var(--warning-text, #92400e)', fontSize:10.5, fontWeight:600, whiteSpace:'nowrap', flexShrink:0 }}>
-                        ⏳ Falta enlace
+                      <span style={{ padding:'4px 10px', borderRadius:16, background:'rgba(58,174,216,0.1)', border:'1px solid rgba(58,174,216,0.35)', color:'var(--celeste)', fontSize:10.5, fontWeight:600, whiteSpace:'nowrap', flexShrink:0, display:'flex', alignItems:'center', gap:4 }}>
+                        <AlertTriangle size={11} /> Falta enlace
                       </span>
                     )}
                     {esPendPago && factura?.id && (
@@ -1024,6 +1031,7 @@ function DashboardPaciente() {
                     </button>
                   )}
                   <span className={`badge ${c.estado==='cancelada'?'badge-danger':c.estado==='confirmada'?'badge-success':c.estado==='completada'?'badge-primary':'badge-warning'}`}>{c.estado}</span>
+                  {c.cita_original_id && <span className="badge badge-info">Reprogramada</span>}
                 </div>
               </div>
             ))}
@@ -1035,8 +1043,8 @@ function DashboardPaciente() {
   )}
 
   {tab === 'pagos' && (
-    <div className="card">
-      <div className="card-header"><span className="card-title">Mis Pagos y Facturas</span></div>
+    <div className="card" style={{ marginTop: 20 }}>
+      <div className="card-header"><span className="card-title">Mis Pagos y Recibos</span></div>
       <div className="card-body">
         {citas.filter(c => getFactura(c)).length === 0 ? <div style={{ color:'var(--text-muted)' }}>No hay pagos registrados.</div> : (
           <table className="table" style={{ width: '100%' }}>
@@ -1046,6 +1054,7 @@ function DashboardPaciente() {
                 <th style={{ padding: 12 }}>Concepto</th>
                 <th style={{ padding: 12 }}>Estado</th>
                 <th style={{ padding: 12 }}>Total</th>
+                <th style={{ padding: 12 }}>Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -1057,6 +1066,11 @@ function DashboardPaciente() {
                     <td style={{ padding: 12 }}>Sesión Psicológica</td>
                     <td style={{ padding: 12 }}><span className={`badge ${fac.estado==='pagada'?'badge-success':'badge-warning'}`}>{fac.estado}</span></td>
                     <td style={{ padding: 12 }}>S/ {Number(fac.total).toFixed(2)}</td>
+                    <td style={{ padding: 12 }}>
+                      {fac.estado === 'pagada' ? (
+                        <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Pagado</span>
+                      ) : '-'}
+                    </td>
                   </tr>
                 )
               })}
@@ -1120,7 +1134,7 @@ function DashboardPaciente() {
                         <textarea className="form-control" rows="3" placeholder="Escribe tu respuesta aquí (opcional si adjuntas archivo)..." value={contenidoRespuesta} onChange={e => setContenidoRespuesta(e.target.value)} />
                         
                         <div>
-                          <label style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>Adjuntar archivo (opcional)</label>
+                          <label style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>Adjuntar archivo (opcional, máx. 10MB)</label>
                           <input type="file" className="form-control" onChange={e => setArchivoRespuesta(e.target.files[0])} style={{ fontSize: 13 }} />
                         </div>
 
@@ -1286,8 +1300,8 @@ function DashboardPaciente() {
                 return (
                   <span style={{ fontSize: 12, color: faltan > 0 ? 'var(--warning)' : 'var(--success)', fontWeight: 600 }}>
                     {faltan > 0
-                      ? `⚠ ${faltan} pregunta${faltan > 1 ? 's' : ''} sin responder`
-                      : '✓ Todas las preguntas respondidas'}
+                      ? <><AlertTriangle size={13} style={{display:'inline', marginBottom:-2, marginRight:4}} /> {faltan} pregunta{faltan > 1 ? 's' : ''} sin responder</>
+                      : <><CheckCircle2 size={13} style={{display:'inline', marginBottom:-2, marginRight:4}} /> Todas las preguntas respondidas</>}
                   </span>
                 )
               })()}
@@ -1484,7 +1498,7 @@ function DashboardPaciente() {
                         {/* 1. Comprobante PRIMERO */}
                         <div className="form-group" style={{ marginBottom: 0 }}>
                           <label className="form-label">
-                            📎 Adjuntar comprobante de pago <span style={{ color: 'var(--danger)' }}>*</span>
+                            <Paperclip size={13} style={{display:'inline', marginBottom:-2, marginRight:4}} /> Adjuntar comprobante de pago <span style={{ color: 'var(--danger)' }}>*</span>
                           </label>
                           <div
                             onClick={() => pagoInputRef.current?.click()}
@@ -1505,11 +1519,11 @@ function DashboardPaciente() {
                                 e.target.value = '' // reset para permitir re-selección
                                 if (!f) return
                                 if (!f.type.startsWith('image/')) {
-                                  toast.error('❌ Solo se aceptan imágenes (JPG, PNG, WEBP)')
+                                  toast.error('Solo se aceptan imágenes (JPG, PNG, WEBP)')
                                   return
                                 }
                                 if (f.size > 5 * 1024 * 1024) {
-                                  toast.error('❌ La imagen no debe superar 5 MB')
+                                  toast.error('La imagen no debe superar 5 MB')
                                   return
                                 }
                                 setFormPago(p => ({ ...p, archivo: f, preview: URL.createObjectURL(f) }))
@@ -1523,7 +1537,7 @@ function DashboardPaciente() {
                                   style={{ maxHeight: 110, maxWidth: '100%', borderRadius: 8, objectFit: 'contain' }}
                                 />
                                 <div style={{ fontSize: 11, color: 'var(--success)', marginTop: 5, fontWeight: 600 }}>
-                                  ✓ {formPago.archivo?.name} — Haz clic para cambiar
+                                  <Check size={16} /> {formPago.archivo?.name} — Haz clic para cambiar
                                 </div>
                               </div>
                             ) : (
@@ -1539,7 +1553,7 @@ function DashboardPaciente() {
                         {/* 2. Código de operación DEBAJO */}
                         <div className="form-group" style={{ marginBottom: 0 }}>
                           <label className="form-label">
-                            🔢 Número de operación / código de transacción <span style={{ color: 'var(--danger)' }}>*</span>
+                            <Hash size={13} style={{display:'inline', marginBottom:-2, marginRight:4}} /> Número de operación / código de transacción <span style={{ color: 'var(--danger)' }}>*</span>
                           </label>
                           <input
                             className="form-control"
@@ -1559,7 +1573,7 @@ function DashboardPaciente() {
                           />
                           {formPago.codigo.trim().length > 0 && formPago.codigo.trim().length < 8 && (
                             <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 4 }}>
-                              ⚠ Ingresa al menos 8 caracteres
+                              <AlertTriangle size={12} style={{display:'inline', marginBottom:-2, marginRight:4}} /> Ingresa al menos 8 caracteres
                             </div>
                           )}
                         </div>
@@ -1611,8 +1625,8 @@ function DashboardPaciente() {
                   )}
                   {pasoAgendar === 3 && (formPago.metodo === 'yape' || formPago.metodo === 'transferencia') && (
                     <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right' }}>
-                      {!formPago.archivo && '📎 Falta adjuntar el comprobante'}
-                      {formPago.archivo && formPago.codigo.trim().length < 8 && '🔢 Falta el número de operación (mín. 8 caracteres)'}
+                      {!formPago.archivo && 'Falta adjuntar el comprobante'}
+                      {formPago.archivo && formPago.codigo.trim().length < 8 && 'Falta el número de operación (mín. 8 caracteres)'}
                     </div>
                   )}
                   {pasoAgendar === 1 && formCita.servicio === 'Otro' && !formCita.otro_servicio.trim() && (
@@ -1729,6 +1743,7 @@ function DashboardStaff() {
   const { usuario } = useAuth()
   const [stats,    setStats]    = useState(null)
   const [cargando, setCargando] = useState(true)
+  const [periodoStats, setPeriodoStats] = useState('mes')
   
   // Estados para el Calendario
   const [psicologos, setPsicologos] = useState([])
@@ -1742,11 +1757,12 @@ function DashboardStaff() {
 
   // Cargar estadísticas generales
   useEffect(() => {
-    dashboardApi.stats()
+    setCargando(true)
+    dashboardApi.stats({ periodo: periodoStats })
       .then(res => setStats(res.data.datos))
       .catch(err => console.error('Error cargando stats:', err))
       .finally(() => setCargando(false))
-  }, [])
+  }, [periodoStats])
 
   // Cargar lista de psicólogos (para selector de Admin/Staff)
   useEffect(() => {
@@ -1809,8 +1825,14 @@ function DashboardStaff() {
 
   const irAHoy = () => setSemanaFecha(new Date())
 
+  const navMes = (delta) => {
+    const nueva = new Date(semanaFecha)
+    nueva.setMonth(nueva.getMonth() + delta)
+    setSemanaFecha(nueva)
+  }
+
   // Convertir citas a eventos del calendarios
-  const eventosSemanales = citasSemana.map(c => {
+  const eventosSemanales = citasSemana.filter(c => c.estado !== 'cancelada').map(c => {
     const col = colorPago(getFactura(c))
     const inicio = new Date(c.programada_para)
     const fin = new Date(inicio)
@@ -1834,13 +1856,14 @@ function DashboardStaff() {
     return d.toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long' })
   }
 
+  const etiquetaPeriodo = { dia: 'hoy', semana: 'esta semana', mes: 'este mes', anio: 'este año' }[periodoStats] || 'este mes'
+
   const cards = [
-    { label:'Pacientes activos',  num: stats?.pacientes ?? 0, icon:Users,     color:'hsl(210,72%,52%)',  bg:'rgba(33, 150, 243, 0.08)' },
-    { label:'Usuarios activos',   num: stats?.usuarios ?? 0,  icon:UserCheck, color:'hsl(145,62%,42%)',  bg:'rgba(76, 175, 80, 0.08)' },
-    { label:'Roles definidos',    num: stats?.roles ?? 0,     icon:Shield,    color:'hsl(262,68%,58%)',  bg:'rgba(156, 39, 176, 0.08)' },
-    { label:'Servicios',          num: stats?.servicios ?? 0, icon:Package,   color:'hsl(38,88%,50%)',   bg:'rgba(255, 152, 0, 0.08)' },
-    { label:'Categorías',         num: stats?.categorias ?? 0,icon:Tag,       color:'hsl(316,65%,52%)',  bg:'rgba(233, 30, 99, 0.08)' },
-    { label:'Citas para hoy',     num: stats?.citasHoy ?? 0,  icon:Calendar,  color:'hsl(354,72%,52%)',  bg:'rgba(244, 67, 54, 0.08)' },
+    { label:`Citas programadas`,           num: stats?.citasHoy ?? 0,            icon:Calendar,    color:'hsl(210,72%,52%)',  bg:'rgba(33, 150, 243, 0.08)' },
+    { label:`Citas completadas`,           num: stats?.citasCompletadas ?? 0,    icon:CheckCircle, color:'hsl(145,62%,42%)',  bg:'rgba(76, 175, 80, 0.08)' },
+    { label:`Sesiones pendientes`,         num: stats?.sesionesPendientes ?? 0,  icon:Clock,       color:'hsl(38,88%,50%)',   bg:'rgba(255, 152, 0, 0.08)' },
+    { label:`Pacientes atendidos (${etiquetaPeriodo})`,  num: stats?.pacientes ?? 0,         icon:Users,       color:'hsl(316,65%,52%)',  bg:'rgba(233, 30, 99, 0.08)' },
+    { label:`Ingresos (${etiquetaPeriodo})`, num: `S/ ${(stats?.ingresos ?? 0).toLocaleString('es-PE', { minimumFractionDigits: 2 })}`, icon:Banknote, color:'hsl(145,62%,42%)',  bg:'rgba(76, 175, 80, 0.08)', esTexto: true },
   ]
 
   if (cargando) return <Spinner />
@@ -1848,22 +1871,37 @@ function DashboardStaff() {
   return (
     <div className="page-enter" style={{ display:'flex', flexDirection:'column', gap:24 }}>
       {/* Encabezado */}
-      <div className="section-header">
+      <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
         <div>
           <div className="section-title">Bienvenido, {usuario?.correo?.split('@')[0]}</div>
           <div className="section-subtitle">Resumen general y agenda de PsicLife</div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 600 }}>Periodo:</span>
+          <select 
+            className="form-control" 
+            value={periodoStats} 
+            onChange={e => setPeriodoStats(e.target.value)}
+            style={{ width: 140, padding: '6px 12px', fontSize: 13 }}
+          >
+            <option value="dia">Día</option>
+            <option value="semana">Semana</option>
+            <option value="mes">Mes</option>
+            <option value="anio">Año</option>
+            <option value="">Histórico</option>
+          </select>
         </div>
       </div>
 
       {/* Grid de métricas */}
       <div className="stats-grid">
-        {cards.map(({ label, num, icon: Icon, color, bg }) => (
+        {cards.map(({ label, num, icon: Icon, color, bg, esTexto }) => (
           <div className="stat-card" key={label} style={{ background:'var(--card)', border:'1px solid var(--border)' }}>
             <div className="stat-icon" style={{ background: bg }}>
               <Icon size={20} color={color} />
             </div>
             <div>
-              <div className="stat-num" style={{ color }}>{num}</div>
+              <div className="stat-num" style={{ color, fontSize: esTexto ? 18 : undefined }}>{num}</div>
               <div className="stat-label" style={{ color:'var(--text-secondary)' }}>{label}</div>
             </div>
           </div>
@@ -1953,71 +1991,14 @@ function DashboardStaff() {
             />
           </div>
         ) : (
-          // Vista mensual: lista de citas del día seleccionado
-          <div style={{ background: 'var(--surface)', border: '1.5px solid var(--border)', borderTop: 'none', borderRadius: '0 0 15px 15px', padding: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-              <input
-                type="date"
-                className="form-control"
-                value={fecha}
-                onChange={e => setFecha(e.target.value)}
-                style={{ maxWidth: 180 }}
-              />
-              <button className="btn btn-ghost btn-sm" onClick={() => setFecha(new Date().toISOString().slice(0, 10))}>
-                Hoy
-              </button>
-              <span style={{ fontSize: 13, color: 'var(--text-muted)', textTransform: 'capitalize' }}>
-                {formatFechaTimeline(fecha)}
-              </span>
-            </div>
-            {citasSemana.filter(c => new Date(c.programada_para).toISOString().slice(0, 10) === fecha).length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-muted)', fontSize: 13 }}>Sin citas para este día</div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {citasSemana
-                  .filter(c => new Date(c.programada_para).toISOString().slice(0, 10) === fecha)
-                  .sort((a, b) => new Date(a.programada_para) - new Date(b.programada_para))
-                  .map(c => {
-                    const col = colorPago(getFactura(c))
-                    return (
-                      <div key={c.id} style={{
-                        padding: '14px 18px', borderRadius: 12,
-                        background: col.bg, border: `1.5px solid ${col.border}`,
-                        display: 'flex', alignItems: 'center', gap: 14
-                      }}>
-                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: col.dot, flexShrink: 0, boxShadow: `0 0 6px ${col.dot}` }} />
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 600, fontSize: 14, color: col.text }}>
-                            {new Date(c.programada_para).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })} — {c.paciente?.nombres} {c.paciente?.apellidos}
-                          </div>
-                          <div style={{ fontSize: 12, color: col.text, opacity: 0.75, marginTop: 2 }}>
-                            {c.modalidad} • {c.duracion_minutos ?? 60} min • Sesión #{c.numero_sesion}
-                          </div>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 20, background: `${col.dot}18`, color: col.text, fontWeight: 600, border: `1px solid ${col.border}` }}>
-                            {col.label}
-                          </span>
-                          {c.modalidad === 'virtual' && c.enlace_reunion && (() => {
-                            const enlace = c.enlace_reunion.includes('::') ? c.enlace_reunion.split('::')[1] : c.enlace_reunion;
-                            return (
-                              <a href={enlace.startsWith('http') ? enlace : `https://${enlace}`} target="_blank" rel="noreferrer"
-                                style={{ padding: '4px 10px', borderRadius: 16, background: 'linear-gradient(135deg, var(--info), var(--celeste-dark))', color: 'white', border: 'none', fontSize: 11, fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                <Smartphone size={11} /> Unirse
-                              </a>
-                            )
-                          })()}
-                          {c.modalidad === 'virtual' && !c.enlace_reunion && (
-                            <span style={{ padding:'3px 8px', borderRadius:14, background:'var(--warning-bg, #fff8e1)', border:'1px solid var(--warning, #f59e0b)', color:'var(--warning-text, #92400e)', fontSize:10, fontWeight:600 }}>
-                              ⏳ Por asignar
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })}
-              </div>
-            )}
+          <div style={{ border: '1.5px solid var(--border)', borderTop: 'none', borderRadius: '0 0 15px 15px', overflow: 'hidden' }}>
+            <CalendarioMensual
+              mesActual={semanaFecha}
+              eventos={eventosSemanales}
+              onMesAnterior={() => navMes(-1)}
+              onMesSiguiente={() => navMes(1)}
+              onHoy={irAHoy}
+            />
           </div>
         )}
       </div>

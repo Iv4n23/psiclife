@@ -117,7 +117,7 @@ export class CitasService {
     const citasDia = await this.prisma.citas.findMany({
       where: {
         psicologo_id: psicologoId,
-        estado: { in: ['pendiente', 'confirmada'] },
+        estado: { in: ['pendiente', 'confirmada', 'completada'] },
         id: excluirCitaId ? { not: excluirCitaId } : undefined,
         programada_para: {
           gte: inicioDia,
@@ -179,7 +179,7 @@ export class CitasService {
       const citasSemana = await this.prisma.citas.count({
         where: {
           paciente_id: dto.paciente_id,
-          estado: { in: ['pendiente', 'confirmada'] },
+          estado: { in: ['pendiente', 'confirmada', 'completada'] },
           programada_para: { gte: startOfWeek, lte: endOfWeek },
         }
       })
@@ -357,6 +357,9 @@ export class CitasService {
 
     if (['completada', 'cancelada'].includes(original.estado))
       throw new BadRequestException('No se puede reprogramar una cita completada o cancelada')
+      
+    if (original.cita_original_id !== null)
+      throw new BadRequestException('Solo se permite reprogramar una cita una sola vez.')
 
     const programada = new Date(dto.programada_para)
     const duracion = dto.duracion_minutos ?? original.duracion_minutos
@@ -372,42 +375,23 @@ export class CitasService {
       throw new BadRequestException('No se puede reservar una cita con más de 1 mes de anticipación a futuro.')
     }
 
-    await this.validarSolapamiento(original.psicologo_id, programada, duracion)
+    await this.validarSolapamiento(original.psicologo_id, programada, duracion, id)
 
-    // Marcar original como reprogramada
-    await this.prisma.citas.update({
+    // Actualizar la misma cita en lugar de crear una nueva
+    const nueva = await this.prisma.citas.update({
       where: { id },
       data:  {
-        estado: 'reprogramada' as citas_estado,
-        motivo_cancelacion: dto.motivo_reprogramacion ?? null,
-      },
-    })
-
-    // Crear nueva cita vinculada
-    const nueva = await this.prisma.citas.create({
-      data: {
-        paciente_id:      original.paciente_id,
-        psicologo_id:     original.psicologo_id,
         programada_para:  programada,
         duracion_minutos: duracion,
         modalidad:        dto.modalidad        ?? original.modalidad,
-        enlace_reunion:   dto.enlace_reunion   ?? null,
-        agendado_por:     dto.agendado_por     ?? original.agendado_por ?? 'psicologo' as citas_agendado_por,
-        numero_sesion:    original.numero_sesion,
-        cita_original_id: id,
-        estado:           'confirmada' as citas_estado,
+        enlace_reunion:   dto.enlace_reunion   ?? original.enlace_reunion,
+        agendado_por:     dto.agendado_por     ?? original.agendado_por,
+        cita_original_id: id, // Usamos esto como flag de que fue reprogramada
       },
-
       include: {
         paciente:  { select: { nombres: true, apellidos: true, correo_personal: true } },
         psicologo: { select: { nombres: true, apellidos: true } },
       },
-    })
-
-    // Trasladar las facturas de la cita original a la nueva cita reprogramada
-    await this.prisma.facturas.updateMany({
-      where: { cita_id: id },
-      data: { cita_id: nueva.id }
     })
 
     // Notificar por correo
@@ -422,7 +406,6 @@ export class CitasService {
       }).catch(() => {})
     }
 
-
     return nueva
   }
 
@@ -430,8 +413,8 @@ export class CitasService {
   async registrarAsistencia(citaId: string, dto: RegistrarAsistenciaDto, usuarioId: string) {
     const cita = await this.buscarPorId(citaId)
 
-    if (cita.estado !== 'confirmada')
-      throw new BadRequestException('Solo se puede registrar asistencia en citas confirmadas')
+    if (!['confirmada', 'pendiente'].includes(cita.estado))
+      throw new BadRequestException('Solo se puede registrar asistencia en citas pendientes o confirmadas')
 
     // Actualizar estado de la cita
     await this.prisma.citas.update({

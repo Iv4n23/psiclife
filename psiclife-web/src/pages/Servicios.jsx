@@ -207,7 +207,7 @@ export default function Servicios() {
                   <input ref={inputFotoPpal} type="file" accept="image/jpeg,image/png,image/webp" onChange={onFotoPpal} />
                   <ImagePlus size={28} style={{ margin:'0 auto 10px', color:'var(--text-muted)' }} />
                   <p style={{ fontSize: 13.5, color:'var(--text-muted)' }}>Haz clic para subir la foto principal</p>
-                  <p style={{ fontSize: 12, color:'var(--text-muted)', marginTop: 4 }}>JPG, PNG o WebP — máx. 5MB</p>
+                  <p style={{ fontSize: 12, color:'var(--text-muted)', marginTop: 4 }}>JPG, PNG o WebP — máx. 2MB</p>
                 </div>
               )}
             </div>

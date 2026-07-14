@@ -120,8 +120,15 @@ export class ActividadesService {
 
     if (dto.fecha_limite) {
       const fechaLimite = new Date(dto.fecha_limite)
+      const maxFecha = new Date(fecha_sesion)
+      maxFecha.setMonth(maxFecha.getMonth() + 1)
+
       if (fechaLimite < fecha_sesion) {
         throw new BadRequestException('La fecha límite de entrega no puede ser anterior a la fecha de la sesión asignada.')
+      }
+
+      if (fechaLimite > maxFecha) {
+        throw new BadRequestException('La fecha límite de entrega no puede superar un mes desde la fecha de asignación.')
       }
     }
 
@@ -169,8 +176,15 @@ export class ActividadesService {
     if (dto.fecha_asignacion) updateData.fecha_asignacion = new Date(dto.fecha_asignacion)
     if (dto.fecha_limite) {
       updateData.fecha_limite = new Date(dto.fecha_limite)
+      const maxFecha = new Date(asignacion.fecha_asignacion)
+      maxFecha.setMonth(maxFecha.getMonth() + 1)
+
       if (updateData.fecha_limite < asignacion.fecha_asignacion) {
         throw new BadRequestException('La fecha límite no puede ser anterior a la fecha de asignación.')
+      }
+
+      if (updateData.fecha_limite > maxFecha) {
+        throw new BadRequestException('La fecha límite no puede superar un mes desde la fecha de asignación.')
       }
     }
     

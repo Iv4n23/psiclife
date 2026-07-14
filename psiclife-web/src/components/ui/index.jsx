@@ -66,3 +66,4 @@ export function Spinner() {
 }
 
 export { CalendarioSemanal } from './CalendarioSemanal.jsx'
+export { CalendarioMensual } from './CalendarioMensual.jsx'

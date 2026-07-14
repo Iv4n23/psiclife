@@ -77,8 +77,11 @@ export class FacturacionService {
     return this.prisma.pagos.findMany({
       where: {
         confirmado: false,
-        url_comprobante: { not: null },
-        ...(psicologoId ? { factura: { psicologo_id: psicologoId } } : {}),
+        anulado: false,
+        factura: {
+          estado: { not: 'anulada' },
+          ...(psicologoId ? { psicologo_id: psicologoId } : {}),
+        },
       },
       include: {
         factura: {
@@ -90,6 +93,30 @@ export class FacturacionService {
         },
       },
       orderBy: { pagado_en: 'asc' },
+    })
+  }
+
+  // ── Listar pagos confirmados ──────────────────────────────
+  async listarPagosConfirmados(psicologoId?: string) {
+    return this.prisma.pagos.findMany({
+      where: {
+        // Show payments that are either confirmed-active OR were confirmed and then annulled
+        OR: [
+          { confirmado: true, anulado: false },
+          { confirmado: true, anulado: true },
+        ],
+        ...(psicologoId ? { factura: { psicologo_id: psicologoId } } : {}),
+      },
+      include: {
+        factura: {
+          include: {
+            paciente:  { select: { nombres: true, apellidos: true } },
+            psicologo: { select: { nombres: true, apellidos: true } },
+            cita:      { select: { programada_para: true, modalidad: true } },
+          },
+        },
+      },
+      orderBy: { pagado_en: 'desc' },
     })
   }
 
@@ -162,47 +189,53 @@ export class FacturacionService {
     if (dto.monto > restante + 0.01)
       throw new BadRequestException(`El monto excede el saldo pendiente de S/ ${restante.toFixed(2)}`)
 
+    // Los pagos en efectivo se confirman al instante. Los métodos digitales van a confirmación pendiente.
+    const esEfectivo = (dto.metodo as string) === 'efectivo'
+    const esDigital = ['yape', 'transferencia'].includes(dto.metodo as string)
+
     const pago = await this.prisma.pagos.create({
       data: {
         factura_id:       facturaId,
         monto:            dto.monto,
         metodo:           dto.metodo as pagos_metodo,
         codigo_referencia: dto.codigo_referencia ?? null,
-
+        confirmado:       !esDigital, // Digital requiere confirmación; efectivo se confirma al instante
         registrado_por:   usuarioId,
       },
     })
 
-    // Determinar nuevo estado de la factura
-    const totalPagado = pagado + dto.monto
-    const nuevoEstado = (totalPagado >= Number(factura.total) - 0.01 ? 'pagada' : 'parcial') as facturas_estado
+    // Solo actualizar el estado de la factura si el pago se confirma al instante
+    let nuevoEstado = factura.estado as string
+    if (!esDigital) {
+      const totalPagado = pagado + dto.monto
+      nuevoEstado = (totalPagado >= Number(factura.total) - 0.01 ? 'pagada' : 'parcial')
 
+      await this.prisma.facturas.update({
+        where: { id: facturaId },
+        data:  { estado: nuevoEstado as facturas_estado },
+      })
 
-    await this.prisma.facturas.update({
-      where: { id: facturaId },
-      data:  { estado: nuevoEstado },
-    })
-
-    // Enviar comprobante por correo si queda completamente pagada
-    if (nuevoEstado === 'pagada' && factura.paciente.correo_personal) {
-      this.correos.enviarConPlantilla('factura_emitida', factura.paciente.correo_personal, {
-        nombres:             `${factura.paciente.nombres} ${factura.paciente.apellidos}`,
-        numero_factura:      factura.numero_factura,
-        descripcion_servicio: factura.descripcion_servicio,
-        metodo_pago:         dto.metodo,
-        total:               factura.total.toString(),
-        fecha_pago:          new Date().toLocaleDateString('es-PE'),
-        anio:                String(new Date().getFullYear()),
-      }).catch(() => {})
+      // Enviar comprobante por correo si queda completamente pagada
+      if (nuevoEstado === 'pagada' && factura.paciente.correo_personal) {
+        this.correos.enviarConPlantilla('factura_emitida', factura.paciente.correo_personal, {
+          nombres:             `${factura.paciente.nombres} ${factura.paciente.apellidos}`,
+          numero_factura:      factura.numero_factura,
+          descripcion_servicio: factura.descripcion_servicio,
+          metodo_pago:         dto.metodo,
+          total:               factura.total.toString(),
+          fecha_pago:          new Date().toLocaleDateString('es-PE'),
+          anio:                String(new Date().getFullYear()),
+        }).catch(() => {})
+      }
     }
 
     await this.prisma.auditoria.create({
       data: {
         usuario_id:  usuarioId,
-        accion:      'pago.registrado',
+        accion:      esDigital ? 'pago.digital.pendiente' : 'pago.registrado',
         modulo:      'facturacion',
         entidad_id:  facturaId,
-        datos_nuevos: { metodo: dto.metodo, monto: dto.monto, estado: nuevoEstado },
+        datos_nuevos: { metodo: dto.metodo, monto: dto.monto, estado: nuevoEstado, confirmado: !esDigital },
       },
     })
 
@@ -223,6 +256,25 @@ export class FacturacionService {
       where: { id },
       data:  { estado: 'anulada' as facturas_estado },
     })
+
+    // Anular los pagos pendientes asociados para que se descarten
+    await this.prisma.pagos.updateMany({
+      where: { factura_id: id, confirmado: false, anulado: false },
+      data: { anulado: true, motivo_anulacion: `Factura anulada: ${dto.motivo}` }
+    })
+
+    if (factura.cita_id) {
+      const cita = await this.prisma.citas.findUnique({ where: { id: factura.cita_id } })
+      if (cita && !['cancelada', 'completada'].includes(cita.estado)) {
+        await this.prisma.citas.update({
+          where: { id: cita.id },
+          data: {
+            estado: 'cancelada' as any,
+            motivo_cancelacion: `Factura anulada: ${dto.motivo}`,
+          },
+        })
+      }
+    }
 
 
     await this.prisma.auditoria.create({
@@ -275,13 +327,13 @@ export class FacturacionService {
       this.prisma.facturas.count({ where: wherePagadas }),
       this.prisma.pagos.aggregate({
         _sum: { monto: true },
-        where: { factura: where, confirmado: true },
+        where: { factura: where, confirmado: true, anulado: false },
       }),
       this.prisma.pagos.groupBy({
         by:      ['metodo'],
         _sum:    { monto: true },
         _count:  { metodo: true },
-        where:   { factura: where, confirmado: true },
+        where:   { factura: where, confirmado: true, anulado: false },
         orderBy: { _sum: { monto: 'desc' } },
       }),
     ])
@@ -315,7 +367,7 @@ export class FacturacionService {
       data: {
         factura_id:       facturaId,
         monto:            dto.monto,
-        metodo:           dto.metodo_pago || 'yape',
+        metodo:           (dto.metodo_pago as any) ?? 'yape',
         codigo_referencia: dto.codigo_referencia,
         url_comprobante:  urlComprobante,
         confirmado:       false,
@@ -329,7 +381,7 @@ export class FacturacionService {
         accion:      'pago.comprobante.registrado',
         modulo:      'facturacion',
         entidad_id:  facturaId,
-        datos_nuevos: { pago_id: pago.id, monto: dto.monto, metodo: dto.metodo_pago || 'yape' },
+        datos_nuevos: { pago_id: pago.id, monto: dto.monto, metodo: (dto.metodo_pago as any) ?? 'yape' },
       },
     })
 
@@ -424,7 +476,7 @@ export class FacturacionService {
     return { pagoId, estado_factura: nuevoEstado }
   }
 
-  async rechazarPago(pagoId: string, usuarioId: string, psicologoId?: string) {
+  async rechazarPago(pagoId: string, motivo: string, usuarioId: string, psicologoId?: string) {
     const pago = await this.prisma.pagos.findUnique({
       where: { id: pagoId },
       include: { factura: { include: { pagos: true } } },
@@ -433,8 +485,11 @@ export class FacturacionService {
     if (pago.confirmado) throw new BadRequestException('No se puede rechazar un pago ya confirmado')
     this.verificarPropiedadFactura(pago.factura, psicologoId)
 
-    // Eliminar el registro del pago pendiente
-    await this.prisma.pagos.delete({ where: { id: pagoId } })
+    // Anular el pago pendiente indicando el motivo
+    await this.prisma.pagos.update({ 
+      where: { id: pagoId },
+      data: { confirmado: false, anulado: true, motivo_anulacion: motivo }
+    })
 
     // Recalcular el estado de la factura con los pagos restantes confirmados
     const pagosRestantes = pago.factura.pagos.filter(p => p.id !== pagoId && p.confirmado)
@@ -463,85 +518,51 @@ export class FacturacionService {
         accion:      'pago.rechazado',
         modulo:      'facturacion',
         entidad_id:  pago.factura_id,
-        datos_nuevos: { pago_id: pagoId },
+        datos_nuevos: { pago_id: pagoId, motivo: motivo, estado_factura: nuevoEstado },
       },
     })
 
     return { pagoId, estado_factura: nuevoEstado }
   }
 
-  // ── Listar pagos confirmados (para vista de administración) ──
-  async listarPagosConfirmados(psicologoId?: string) {
-    return this.prisma.pagos.findMany({
-      where: {
-        confirmado: true,
-        anulado: false,
-        ...(psicologoId ? { factura: { psicologo_id: psicologoId } } : {}),
-      },
-      include: {
-        factura: {
-          include: {
-            paciente:  { select: { nombres: true, apellidos: true } },
-            psicologo: { select: { nombres: true, apellidos: true } },
-          },
-        },
-      },
-      orderBy: { pagado_en: 'desc' },
-    })
-  }
-
-  // ── Anular un pago confirmado (solo admin — reembolso bancario) ──
-  async anularPago(pagoId: string, motivo: string, usuarioId: string) {
+  // ── Anular un pago confirmado ─────────────────────────────
+  async anularPago(pagoId: string, dto: { motivo: string }, usuarioId: string, psicologoId?: string) {
     const pago = await this.prisma.pagos.findUnique({
       where: { id: pagoId },
       include: { factura: { include: { pagos: true } } },
     })
     if (!pago) throw new NotFoundException('Pago no encontrado')
-    if (pago.anulado) throw new BadRequestException('Este pago ya fue anulado')
+    if (pago.anulado)     throw new BadRequestException('Este pago ya fue anulado')
     if (!pago.confirmado) throw new BadRequestException('No se puede anular un pago que no ha sido confirmado')
+    this.verificarPropiedadFactura(pago.factura, psicologoId)
 
-    // Marcar pago como anulado
+    const motivo = dto.motivo
+
     await this.prisma.pagos.update({
       where: { id: pagoId },
       data: { anulado: true, motivo_anulacion: motivo },
     })
 
-    // Recalcular el estado de la factura (sin contar pagos anulados ni no confirmados)
-    const pagosValidos = pago.factura.pagos.filter(p => p.id !== pagoId && p.confirmado && !p.anulado)
-    const totalPagado = pagosValidos.reduce((acc, p) => acc + Number(p.monto), 0)
-    const totalFactura = Number(pago.factura.total)
-    const nuevoEstadoFactura = (totalPagado <= 0 ? 'pendiente' : totalPagado >= totalFactura - 0.01 ? 'pagada' : 'parcial') as facturas_estado
-
-    await this.prisma.facturas.update({
-      where: { id: pago.factura_id },
-      data: { estado: nuevoEstadoFactura },
-    })
-
-    // Anular la cita asociada y liberar el horario
     if (pago.factura.cita_id) {
       const cita = await this.prisma.citas.findUnique({ where: { id: pago.factura.cita_id } })
       if (cita && !['cancelada', 'completada'].includes(cita.estado)) {
         await this.prisma.citas.update({
           where: { id: cita.id },
-          data: {
-            estado: 'cancelada' as any,
-            motivo_cancelacion: `Pago anulado: ${motivo}`,
-          },
+          data:  { estado: 'cancelada' as any, motivo_cancelacion: `Pago anulado: ${motivo}` },
         })
       }
     }
 
-    // Auditoría
     await this.prisma.auditoria.create({
       data: {
         usuario_id:  usuarioId,
         accion:      'pago.anulado',
         modulo:      'facturacion',
         entidad_id:  pago.factura_id,
-        datos_nuevos: { pago_id: pagoId, motivo, estado_factura: nuevoEstadoFactura },
+        datos_nuevos: { pago_id: pagoId, motivo, estado_factura: pago.factura.estado },
       },
     })
 
-    return { pagoId, estado_factura: nuevoEstadoFactura }
+    return { pagoId, estado_factura: pago.factura.estado }
   }
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { X, Save, CheckCircle, Trash2, RefreshCw, UserCheck, Link, ExternalLink, CreditCard } from 'lucide-react'
+import { X, Save, CheckCircle, Trash2, RefreshCw, UserCheck, Link, ExternalLink, CreditCard, XCircle, Video, AlertTriangle } from 'lucide-react'
 import { citasApi, disponibilidadApi, facturacionApi } from '../../services/api'
 import toast from 'react-hot-toast'
 
@@ -208,7 +208,7 @@ export default function CitaDetalleDrawer({ cita, onClose, onUpdate, puedoElimin
 
   const esSoloLectura    = cita.estado === 'completada' || cita.estado === 'cancelada'
   const puedeReprogramar = ['pendiente', 'confirmada'].includes(cita.estado)
-  const puedeAsistencia  = cita.estado === 'confirmada'
+  const puedeAsistencia  = ['pendiente', 'confirmada'].includes(cita.estado)
   const esVirtual        = cita.modalidad === 'virtual'
 
   // Parsear enlace actual si existe
@@ -232,6 +232,7 @@ export default function CitaDetalleDrawer({ cita, onClose, onUpdate, puedoElimin
               <h2 style={{ fontSize: 18, margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: 10 }}>
                 Sesión Clínica
                 <span className={`badge ${ESTADO_BADGE[cita.estado] || 'badge-muted'}`}>{cita.estado}</span>
+                {cita.cita_original_id && <span className="badge badge-info">Reprogramada</span>}
               </h2>
               <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 2 }}>
                 {new Date(cita.programada_para).toLocaleString('es-PE')}
@@ -250,7 +251,7 @@ export default function CitaDetalleDrawer({ cita, onClose, onUpdate, puedoElimin
                   {enlaceActual ? (
                     <>
                       <span style={{ color: 'var(--success)', fontWeight: 600 }}>
-                        📹 {enlaceActual.plataforma}
+                        <Video size={14} style={{marginRight:4}} /> {enlaceActual.plataforma}
                       </span>
                       {enlaceActual.plataforma.toLowerCase() !== 'whatsapp' && (
                         <a href={enlaceActual.url.startsWith('http') ? enlaceActual.url : `https://${enlaceActual.url}`}
@@ -264,8 +265,8 @@ export default function CitaDetalleDrawer({ cita, onClose, onUpdate, puedoElimin
                       )}
                     </>
                   ) : (
-                    <span style={{ color: 'var(--warning)', fontWeight: 600 }}>
-                      ⚠ Sesión virtual sin enlace asignado
+                    <span style={{ color: 'var(--warning)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <AlertTriangle size={13} /> Sesión virtual sin enlace asignado
                     </span>
                   )}
                 </div>
@@ -373,7 +374,7 @@ export default function CitaDetalleDrawer({ cita, onClose, onUpdate, puedoElimin
               {/* ── Pagos pendientes de aprobación ── */}
               {(() => {
                 const factura = Array.isArray(cita.facturas) ? cita.facturas[0] : cita.facturas
-                const pagosPendientes = factura?.pagos?.filter(p => !p.confirmado && p.url_comprobante) ?? []
+                const pagosPendientes = factura?.pagos?.filter(p => !p.confirmado && !p.anulado) ?? []
                 if (!factura || pagosPendientes.length === 0) return null
                 const API_BASE = import.meta.env.VITE_API_URL?.replace('/api/v1', '') ?? 'http://localhost:3000'
                 return (
@@ -383,15 +384,15 @@ export default function CitaDetalleDrawer({ cita, onClose, onUpdate, puedoElimin
                     </div>
                     {pagosPendientes.map(p => (
                       <div key={p.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                        {p.url_comprobante && (
+                        {(p.metodo === 'yape' || p.metodo === 'transferencia') && p.url_comprobante && (
                           <img src={`${API_BASE}${p.url_comprobante}`} alt="Comprobante"
                             style={{ width: 70, height: 70, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)', cursor: 'zoom-in', flexShrink: 0 }}
                             onClick={() => window.open(`${API_BASE}${p.url_comprobante}`, '_blank')}
                           />
                         )}
                         <div style={{ flex: 1, fontSize: 12.5 }}>
-                          <div><b>Método:</b> {p.metodo} · <b>Monto:</b> S/ {Number(p.monto).toFixed(2)}</div>
-                          {p.codigo_referencia && <div><b>N° operación:</b> <code>{p.codigo_referencia}</code></div>}
+                          <div><b>Método:</b> {p.metodo === 'efectivo' ? '💵 Efectivo' : p.metodo === 'yape' ? '📱 Yape' : p.metodo === 'transferencia' ? '🏦 Transferencia' : p.metodo} · <b>Monto:</b> S/ {Number(p.monto).toFixed(2)}</div>
+                          {p.metodo !== 'efectivo' && p.codigo_referencia && <div><b>N° operación:</b> <code>{p.codigo_referencia}</code></div>}
                           <div style={{ color: 'var(--text-muted)', marginTop: 2 }}>
                             {new Date(p.pagado_en).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })}
                           </div>
@@ -566,7 +567,7 @@ export default function CitaDetalleDrawer({ cita, onClose, onUpdate, puedoElimin
                   <span className="toggle-slider" />
                 </label>
                 <span style={{ fontSize: 13, fontWeight: 600 }}>
-                  {formAsist.asistio ? '✅ Asistió' : '❌ No asistió'}
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>{formAsist.asistio ? <><CheckCircle size={14} color="var(--success)"/> Asistió</> : <><XCircle size={14} color="var(--danger)"/> No asistió</>}</span>
                 </span>
               </div>
             </div>

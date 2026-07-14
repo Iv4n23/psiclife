@@ -4,7 +4,7 @@ import { Confirm, EmptyState, Spinner, CalendarioSemanal } from '../components/u
 import toast from 'react-hot-toast'
 import {
   Plus, Trash2, Edit2, Clock, CalendarOff, X, Save,
-  ChevronLeft, ChevronRight, Check, AlertTriangle,
+  ChevronLeft, ChevronRight, Check, AlertTriangle, FileText,
 } from 'lucide-react'
 import { cleanPayload } from '../utils/payload'
 import { useAuth } from '../context/AuthContext'
@@ -626,7 +626,7 @@ export default function Disponibilidad() {
                             <Trash2 size={12} />
                           </button>
                         </div>
-                        {b.motivo && <div style={{ fontSize:12, color:'hsl(354,50%,45%)', paddingLeft:21 }}>📝 {b.motivo}</div>}
+                        {b.motivo && <div style={{ fontSize:12, color:'hsl(354,50%,45%)', paddingLeft:21, display:'flex', alignItems:'center', gap:4 }}><FileText size={12} /> {b.motivo}</div>}
                       </div>
                     ))
                   )}

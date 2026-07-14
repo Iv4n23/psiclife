@@ -48,8 +48,15 @@ export default function PanelTimeline({ citas, onCitaClick }) {
               <div style={{ textAlign: 'right', borderRight: '2px solid var(--border)', paddingRight: 20 }}>
                 <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{fechaStr}</div>
                 <div style={{ color: 'var(--celeste)', fontSize: 13, fontWeight: 500 }}>{horaStr}</div>
-                <div className={`badge ${ESTADO_BADGE[cita.estado] || 'badge-muted'}`} style={{ marginTop: 6, display: 'inline-block' }}>
-                  {cita.estado}
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  <div className={`badge ${ESTADO_BADGE[cita.estado] || 'badge-muted'}`} style={{ marginTop: 6, display: 'inline-block' }}>
+                    {cita.estado}
+                  </div>
+                  {cita.cita_original_id && (
+                    <div className="badge badge-info" style={{ marginTop: 6, display: 'inline-block' }}>
+                      Reprogramada
+                    </div>
+                  )}
                 </div>
                 {cita.modalidad === 'virtual' && (
                   <div style={{ fontSize: 11, color: 'var(--info)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 3, justifyContent: 'flex-end' }}>
@@ -75,8 +82,8 @@ export default function PanelTimeline({ citas, onCitaClick }) {
                 {esVirtualSinEnlace && (
                   <div style={{
                     display: 'flex', alignItems: 'center', gap: 6,
-                    fontSize: 12, color: 'var(--warning)', fontWeight: 600,
-                    background: 'var(--warning-bg)', borderRadius: 6,
+                    fontSize: 12, color: 'var(--celeste)', fontWeight: 600,
+                    background: 'rgba(58,174,216,0.1)', border: '1px solid rgba(58,174,216,0.35)', borderRadius: 6,
                     padding: '4px 8px', marginTop: 2,
                   }}>
                     <AlertTriangle size={12} />

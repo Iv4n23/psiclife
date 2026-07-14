@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { webMedicaApi, resenasApi } from '../services/api'
 import { Spinner } from '../components/ui/index.jsx'
 import toast from 'react-hot-toast'
-import { Save, ImagePlus, X, Globe, Star, Trash2, Eye } from 'lucide-react'
+import { Save, ImagePlus, X, Globe, Star, Trash2, Eye, CheckCircle2, Clock } from 'lucide-react'
 import { getImageUrl } from '../utils/image'
 import { cleanPayload } from '../utils/payload'
 
@@ -501,6 +501,9 @@ export default function WebMedica() {
                     <X size={13} /> Quitar
                   </button>
                 )}
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
+                  JPG, PNG, WebP o SVG — máx. 2MB
+                </p>
                 <input ref={inputDir} type="file" accept="image/png, image/jpeg, image/webp, image/svg+xml" style={{ display: 'none' }} onChange={onDir} />
               </div>
             </div>
@@ -592,6 +595,9 @@ export default function WebMedica() {
             <div className="card-body">
               <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
                 Añade, edita y reordena las especialidades que se mostrarán en la landing. Adjunta imágenes desde tu equipo; se guardarán inline para su visualización.
+              </p>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+                Formatos permitidos: JPG, PNG, WebP o SVG — máx. 5MB.
               </p>
 
               <div style={{ display: 'flex', gap: 12, marginBottom: 12, alignItems: 'center' }}>
@@ -754,7 +760,7 @@ export default function WebMedica() {
                   </div>
                   <div style={{ marginTop: 14 }}>
                     <span className={`badge ${resenaDetalle.aprobada ? 'badge-success' : 'badge-warning'}`}>
-                      {resenaDetalle.aprobada ? '✓ Aprobada (visible en landing)' : '⏳ Pendiente de aprobación'}
+                      {resenaDetalle.aprobada ? <><CheckCircle2 size={13} style={{display:'inline', marginBottom:-2, marginRight:4}}/> Aprobada (visible en landing)</> : <><Clock size={13} style={{display:'inline', marginBottom:-2, marginRight:4}}/> Pendiente de aprobación</>}
                     </span>
                   </div>
                 </div>

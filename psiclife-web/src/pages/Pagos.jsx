@@ -55,6 +55,33 @@ export default function Pagos() {
   // ── Estados para Verificación de Pagos ────────────────────
   const [pagosPend,       setPagosPend]       = useState([])
   const [cargandoPend,    setCargandoPend]    = useState(false)
+  const [modalRechazarPago, setModalRechazarPago] = useState(null)  // id del pago a rechazar
+  const [motivoRechazo,   setMotivoRechazo]   = useState('')
+  const [modalAnularFactura, setModalAnularFactura] = useState(false)
+
+  // ── Filtros tabla facturas ─────────────────────────────────
+  const [filtroMetodo,  setFiltroMetodo]  = useState('')
+  const [filtroEstado,  setFiltroEstado]  = useState('')
+  const [filtroFechaD,  setFiltroFechaD]  = useState('')
+  const [filtroFechaH,  setFiltroFechaH]  = useState('')
+  const [filtroBusq,    setFiltroBusq]    = useState('')
+
+  const confirmarRechazoPago = async () => {
+    if (!motivoRechazo.trim() || motivoRechazo.trim().length < 10) {
+      toast.error('El motivo debe tener al menos 10 caracteres'); return
+    }
+    setGuardando(true)
+    try {
+      await facturacionApi.rechazarPago(modalRechazarPago, { motivo: motivoRechazo })
+      toast.success('Pago rechazado correctamente')
+      setModalRechazarPago(null)
+      setMotivoRechazo('')
+      await cargarPagosPend()
+      await cargar()
+    } catch (err) {
+      toast.error(err.response?.data?.mensaje ?? 'Error al rechazar pago')
+    } finally { setGuardando(false) }
+  }
 
   // ── Estados para Pagos Confirmados (admin) ────────────────
   const [pagosConf,       setPagosConf]       = useState([])
@@ -133,6 +160,7 @@ export default function Pagos() {
       toast.success('Pago anulado correctamente. La cita asociada ha sido cancelada.')
       setModalAnularPago(null)
       setMotivoAnularPago('')
+      await cargarPagosPend()
       await cargarPagosConf()
       await cargar()
     } catch {} finally { setAnulandoPago(false) }
@@ -141,11 +169,19 @@ export default function Pagos() {
   const verDetalle = async (id) => {
     try {
       const { data } = await facturacionApi.obtener(id)
-      setDetalle(data.datos)
-      setFormPago({ metodo: 'efectivo', monto: '', codigo_referencia: '' })
+      const factura = data.datos
+      const pagado = (factura?.pagos ?? []).filter(p => p.confirmado && !p.anulado).reduce((acc, p) => acc + Number(p.monto), 0) ?? 0
+      const restante = Math.max(0, Number(factura?.total ?? 0) - pagado)
+      const metodoPredeterminado = (factura?.pagos ?? []).some(p => (p.metodo === 'yape' || p.metodo === 'transferencia') && !p.confirmado && !p.anulado) ? 'yape' : 'efectivo'
+
+      setDetalle(factura)
+      setFormPago({ metodo: metodoPredeterminado, monto: restante.toFixed(2), codigo_referencia: '' })
       setMotivoAnular('')
       setVista('detalle')
-    } catch {}
+    } catch (err) {
+      const msg = err.response?.data?.mensaje ?? 'Error al cargar la factura'
+      toast.error(msg)
+    }
   }
 
   const abrirModalFactura = async (id) => {
@@ -190,19 +226,6 @@ export default function Pagos() {
       e.codigo_referencia = 'Ingresa al menos 8 dígitos en el código de operación'
     if ((formPago.metodo === 'yape' || formPago.metodo === 'transferencia') && formPago.codigo_referencia && !/^[0-9-]+$/.test(formPago.codigo_referencia))
       e.codigo_referencia = 'El código de operación solo puede contener números y guiones'
-
-    if (!e.codigo_referencia && (formPago.metodo === 'yape' || formPago.metodo === 'transferencia')) {
-      setGuardando(true)
-      try {
-        const { data } = await citasApi.verificarCodigo(formPago.codigo_referencia)
-        if (data.datos?.usado) {
-          e.codigo_referencia = 'Este número de operación ya está registrado en el sistema'
-        }
-      } catch (err) {
-        console.error('Error al verificar código', err)
-      }
-      setGuardando(false)
-    }
 
     setErrPago(e)
     if (Object.keys(e).length > 0) return
@@ -316,9 +339,9 @@ export default function Pagos() {
 
   // ── Detalle ────────────────────────────────────────────────
   if (vista === 'detalle' && detalle) {
-    const pagado    = detalle.pagos?.reduce((acc, p) => acc + Number(p.monto), 0) ?? 0
-    const restante  = Number(detalle.total) - pagado
-    const puedePagar = ['pendiente','parcial'].includes(detalle.estado)
+    const pagado     = detalle.pagos?.filter(p => p.confirmado && !p.anulado).reduce((acc, p) => acc + Number(p.monto), 0) ?? 0
+    const restante   = Number(detalle.total) - pagado
+    const puedePagar  = ['pendiente','parcial'].includes(detalle.estado)
     const puedeAnular = ['pendiente','parcial'].includes(detalle.estado)
 
     return (
@@ -331,228 +354,117 @@ export default function Pagos() {
               <span className={`badge ${ESTADO_BADGE[detalle.estado]}`} style={{ marginLeft: 8 }}>{detalle.estado}</span>
             </div>
           </div>
-          <button className="btn btn-ghost" onClick={() => setVista('lista')}><X size={14}/> Cerrar</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {puedeAnular && (
+              <button className="btn btn-ghost" onClick={() => setModalAnularFactura(true)} style={{ color: 'var(--danger)' }}>
+                <Trash2 size={14}/> Anular
+              </button>
+            )}
+            <button className="btn btn-ghost" onClick={() => setVista('lista')}><X size={14}/> Cerrar</button>
+          </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+
+          {/* ── Detalle de pago ── */}
           <div className="card">
-            <div className="card-header"><span className="card-title">Detalle de factura</span></div>
-            <div className="card-body" style={{ fontSize: 13.5, lineHeight: 2 }}>
-              <div><b>Servicio:</b> {detalle.descripcion_servicio}</div>
-              <div><b>Psicólogo:</b> {detalle.psicologo?.nombres} {detalle.psicologo?.apellidos}</div>
-              <div style={{ fontWeight: 600, fontSize: 15 }}><b>Total:</b> S/ {Number(detalle.total).toFixed(2)}</div>
-              <div><b>Pagado:</b> S/ {pagado.toFixed(2)}</div>
-              {restante > 0 && <div style={{ color: 'var(--info)' }}><b>Saldo pendiente:</b> S/ {restante.toFixed(2)}</div>}
+            <div className="card-header"><span className="card-title">Detalle de pago</span></div>
+            <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 14, fontSize: 13.5 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Servicio</span>
+                <span style={{ fontWeight: 600 }}>{detalle.descripcion_servicio}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Psicólogo</span>
+                <span style={{ fontWeight: 600 }}>{detalle.psicologo?.nombres} {detalle.psicologo?.apellidos}</span>
+              </div>
+              <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Total</span>
+                <span style={{ fontWeight: 800, fontSize: 16 }}>S/ {Number(detalle.total).toFixed(2)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Pagado</span>
+                <span style={{ fontWeight: 700, color: 'var(--success)' }}>S/ {pagado.toFixed(2)}</span>
+              </div>
+              {restante > 0 && (
+                <div style={{ background: 'var(--info-bg)', border: '1px solid var(--celeste-soft)', borderRadius: 10, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: 'var(--celeste-dark)', fontWeight: 600 }}>Saldo pendiente</span>
+                  <span style={{ color: 'var(--celeste-dark)', fontWeight: 800, fontSize: 16 }}>S/ {restante.toFixed(2)}</span>
+                </div>
+              )}
+              {detalle.estado === 'pagada' && (
+                <div style={{ background: 'var(--success-bg)', border: '1px solid var(--success)', borderRadius: 10, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <CheckCircle size={16} color="var(--success)" />
+                  <span style={{ color: 'var(--success)', fontWeight: 700 }}>Factura completamente pagada</span>
+                </div>
+              )}
+
+              {!detalle.pagos?.length && (
+                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, color: 'var(--text-muted)', fontSize: 13 }}>
+                  Sin registros de pagos para esta factura.
+                </div>
+              )}
             </div>
           </div>
 
-        {/* Registro de pago */}
-          {puedePagar && (
+          {/* ── Registrar pago ── */}
+          {puedePagar ? (
             <div className="card">
               <div className="card-header"><span className="card-title">Registrar pago</span></div>
               <div className="card-body">
-                <div className="form-grid" style={{ gap: 14 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                   <div className="form-group">
                     <label className="form-label">Método de pago</label>
-                    <select className="form-control" value={formPago.metodo}
-                      onChange={e => setFormPago(p => ({ ...p, metodo: e.target.value, codigo_referencia: '' }))}>
+                    <select className="form-control" value={formPago.metodo || 'efectivo'} disabled>
                       {['efectivo','yape','transferencia','tarjeta']
                         .filter(m => config[`pago_${m}_activo`] === 'true')
-                        .map(m => <option key={m}>{m}</option>)}
+                        .map(m => <option key={m} value={m} style={{ textTransform: 'capitalize' }}>{m.charAt(0).toUpperCase() + m.slice(1)}</option>)}
                     </select>
                   </div>
                   <div className="form-group">
                     <label className="form-label">Monto (S/) <span className="required">*</span></label>
-                    <input type="number" className={`form-control ${errPago.monto?'error':''}`}
-                      value={formPago.monto} min={0.01} step="0.01"
-                      onChange={e => { setFormPago(p => ({ ...p, monto: e.target.value })); setErrPago({}) }}
+                    <input type="number" className={`form-control ${errPago.monto ? 'error' : ''}`}
+                      value={formPago.monto || restante.toFixed(2)} min={0.01} step="0.01" disabled
                       placeholder={`Máx. S/ ${restante.toFixed(2)}`} />
                     {errPago.monto && <span className="form-error">{errPago.monto}</span>}
                   </div>
-                  <div className="form-group">
-                    <label className="form-label">
-                      Código / referencia
-                      {(formPago.metodo === 'yape' || formPago.metodo === 'transferencia') && (
-                        <span style={{ color: 'var(--danger)', marginLeft: 4 }}>*</span>
-                      )}
-                    </label>
-                    <input
-                      className={`form-control ${errPago.codigo_referencia ? 'error' : ''}`}
-                      inputMode="numeric"
-                      pattern="\d*"
-                      value={formPago.codigo_referencia}
-                      maxLength={16}
-                      onChange={e => {
-                        const val = e.target.value.replace(/[^\d-]/g, '').slice(0, 16)
-                        setFormPago(p => ({ ...p, codigo_referencia: val }))
-                        setErrPago(er => ({ ...er, codigo_referencia: '' }))
-                      }}
-                      placeholder="N° operación (mín. 8 caracteres)" />
-                    {errPago.codigo_referencia && <span className="form-error">{errPago.codigo_referencia}</span>}
+                  <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '12px 14px', background: 'var(--surface-2)', color: 'var(--text-secondary)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <CheckCircle size={15} color="var(--success)" />
+                    <span>La aprobación y el rechazo de pagos se gestionan desde la pestaña de facturas y reportes.</span>
                   </div>
-                </div>
-                <div className="form-footer" style={{ marginTop: 14 }}>
-                  <button className="btn btn-primary" onClick={registrarPago} disabled={guardando}>
-                    <DollarSign size={14}/> {guardando ? 'Registrando...' : 'Registrar pago'}
-                  </button>
                 </div>
               </div>
             </div>
-          )}
-
-          {puedeAnular && (
-            <div className="card" style={{ borderColor: 'var(--danger-bg)' }}>
-              <div className="card-header"><span className="card-title" style={{ color: 'var(--danger)' }}>Anular factura</span></div>
-              <div className="card-body">
-                <div className="form-group" style={{ marginBottom: 14 }}>
-                  <label className="form-label">Motivo de anulación <span className="required">*</span></label>
-                  <textarea className="form-control" rows={3} value={motivoAnular}
-                    onChange={e => setMotivoAnular(e.target.value)} placeholder="Escribe el motivo..." />
-                </div>
-                <button className="btn btn-danger" onClick={anularFactura} disabled={guardando}>
-                  {guardando ? 'Anulando...' : 'Anular factura'}
-                </button>
+          ) : (
+            <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ textAlign: 'center', padding: 32 }}>
+                <CheckCircle size={40} color="var(--success)" style={{ marginBottom: 12 }} />
+                <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)', marginBottom: 4 }}>Factura {detalle.estado}</div>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No se requieren acciones adicionales de pago.</div>
               </div>
             </div>
           )}
         </div>
 
-        {/* ── Pagos pendientes de confirmación (Yape + Transferencia) ── */}
-        {detalle.pagos?.some(p => (p.metodo === 'yape' || p.metodo === 'transferencia') && p.confirmado === false) && (
-          <div className="card" style={{
-            marginTop: 16,
-            border: '2px solid rgba(58,174,216,0.25)',
-            background: 'linear-gradient(135deg, rgba(232,246,252,0.95), rgba(217,239,249,0.95))',
-          }}>
-            <div className="card-header" style={{ background: 'rgba(58,174,216,0.12)', borderBottom: '1px solid rgba(58,174,216,0.2)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <AlertTriangle size={18} color="var(--info)" />
-                <span className="card-title" style={{ color: 'var(--info)' }}>Pagos pendientes de confirmación</span>
-                <span style={{ marginLeft: 'auto', fontSize: 12, background: 'var(--info)', color: '#fff', padding: '2px 10px', borderRadius: 20, fontWeight: 700 }}>
-                  {detalle.pagos.filter(p => (p.metodo === 'yape' || p.metodo === 'transferencia') && p.confirmado === false).length} pendiente(s)
-                </span>
+        {/* ── Modal Anular Factura ── */}
+        {modalAnularFactura && (
+          <div className="modal-overlay" onClick={() => setModalAnularFactura(false)}>
+            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 450 }}>
+              <div className="modal-title" style={{ color: 'var(--danger)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                Anular Factura
+                <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setModalAnularFactura(false)}><X size={18}/></button>
               </div>
-            </div>
-            <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {detalle.pagos.filter(p => (p.metodo === 'yape' || p.metodo === 'transferencia') && p.confirmado === false).map(p => (
-                <div key={p.id} style={{
-                  display: 'flex', gap: 18, alignItems: 'flex-start',
-                  padding: '16px 18px', borderRadius: 14,
-                  background: 'var(--surface)', border: '1.5px solid rgba(58,174,216,0.22)',
-                  boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
-                  flexWrap: 'wrap',
-                }}>
-                  {/* Comprobante */}
-                  <div style={{ flexShrink: 0 }}>
-                    {p.url_comprobante ? (
-                      <div
-                        onClick={() => setImagenExpandida(getImageUrl(p.url_comprobante))}
-                        title="Click para ampliar"
-                        style={{ cursor: 'zoom-in' }}
-                      >
-                        <img
-                          src={getImageUrl(p.url_comprobante)}
-                          alt="Comprobante"
-                          style={{
-                            width: 110, height: 110, objectFit: 'cover',
-                            borderRadius: 10, border: '2px solid rgba(58,174,216,0.4)',
-                            transition: 'transform 0.2s, box-shadow 0.2s',
-                          }}
-                          onMouseOver={e => { e.currentTarget.style.transform='scale(1.06)'; e.currentTarget.style.boxShadow='0 6px 20px rgba(0,0,0,0.18)' }}
-                          onMouseOut={e => { e.currentTarget.style.transform='scale(1)'; e.currentTarget.style.boxShadow='none' }}
-                        />
-                        <div style={{ fontSize: 11, color: 'var(--info)', textAlign: 'center', marginTop: 4, fontWeight: 600 }}>🔍 Ver completo</div>
-                      </div>
-                    ) : (
-                      <div style={{
-                        width: 110, height: 110, borderRadius: 10,
-                        background: 'var(--info-bg)', border: '2px dashed rgba(58,174,216,0.4)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 6,
-                      }}>
-                        <ImageOff size={24} color="var(--info)" />
-                        <span style={{ fontSize: 10, color: 'var(--info)' }}>Sin imagen</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Datos */}
-                  <div style={{ flex: 1, fontSize: 13, minWidth: 180 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                      <span style={{ fontWeight: 700, color: 'var(--info)', fontSize: 14 }}>Pago por {p.metodo}</span>
-                      <span style={{ fontSize: 11, padding: '2px 10px', borderRadius: 20, background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid rgba(58,174,216,0.35)', fontWeight: 600 }}>⏳ Pendiente</span>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px' }}>
-                      <div><span style={{ color: 'var(--text-muted)' }}>Monto:</span> <strong>S/ {Number(p.monto).toFixed(2)}</strong></div>
-                      <div><span style={{ color: 'var(--text-muted)' }}>Código op.:</span> <strong style={{ fontFamily: 'monospace' }}>{p.codigo_referencia || '—'}</strong></div>
-                      <div style={{ gridColumn: '1/-1' }}><span style={{ color: 'var(--text-muted)' }}>Enviado:</span> {new Date(p.pagado_en).toLocaleString('es-PE')}</div>
-                    </div>
-                  </div>
-
-                  {/* Acciones */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
-                    <button
-                      onClick={() => confirmarPagoYape(p.id)}
-                      disabled={guardando}
-                      style={{
-                        padding: '9px 16px', borderRadius: 10,
-                        background: 'linear-gradient(135deg, #10b981, #059669)',
-                        color: 'white', border: 'none', fontSize: 13, fontWeight: 700,
-                        cursor: guardando ? 'not-allowed' : 'pointer',
-                        display: 'flex', alignItems: 'center', gap: 6,
-                        opacity: guardando ? 0.7 : 1, transition: 'all 0.2s',
-                        boxShadow: '0 4px 14px rgba(16,185,129,0.3)',
-                      }}
-                    >
-                      <CheckCircle size={15} /> Aprobar
-                    </button>
-                    <button
-                      onClick={() => rechazarPago(p.id)}
-                      disabled={guardando}
-                      style={{
-                        padding: '9px 16px', borderRadius: 10,
-                        background: 'rgba(224,48,80,0.1)', color: 'var(--danger)',
-                        border: '1.5px solid rgba(224,48,80,0.3)', fontSize: 13, fontWeight: 700,
-                        cursor: guardando ? 'not-allowed' : 'pointer',
-                        display: 'flex', alignItems: 'center', gap: 6,
-                        opacity: guardando ? 0.7 : 1, transition: 'all 0.2s',
-                      }}
-                    >
-                      <X size={14} /> Rechazar
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ── Historial de todos los pagos ── */}
-        {detalle.pagos?.length > 0 && (
-          <div className="card" style={{ marginTop: 16 }}>
-            <div className="card-header"><span className="card-title">Historial de pagos</span></div>
-            <div className="table-wrap">
-              <table>
-                <thead><tr><th>Método</th><th>Monto</th><th>Referencia</th><th>Estado</th><th>Fecha</th></tr></thead>
-                <tbody>
-                  {detalle.pagos.map(p => (
-                    <tr key={p.id}>
-                      <td><span className="badge badge-info">{p.metodo}</span></td>
-                      <td style={{ fontWeight: 600 }}>S/ {Number(p.monto).toFixed(2)}</td>
-                      <td style={{ color: 'var(--text-muted)', fontSize: 12.5 }}>{p.codigo_referencia ?? '—'}</td>
-                      <td>
-                        {p.metodo === 'yape' ? (
-                          <span className={`badge ${p.confirmado ? 'badge-success' : 'badge-info'}`}>
-                            {p.confirmado ? '✓ Confirmado' : '⏳ Pendiente'}
-                          </span>
-                        ) : (
-                          <span className="badge badge-success">✓ Confirmado</span>
-                        )}
-                      </td>
-                      <td>{new Date(p.pagado_en).toLocaleString('es-PE')}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="form-group" style={{ margin: '16px 0' }}>
+                <label className="form-label">Motivo de anulación <span className="required">*</span></label>
+                <textarea className="form-control" rows={3} value={motivoAnular}
+                  onChange={e => setMotivoAnular(e.target.value)} placeholder="Escribe el motivo..." />
+              </div>
+              <div className="modal-actions">
+                <button className="btn btn-ghost" onClick={() => setModalAnularFactura(false)}>Cancelar</button>
+                <button className="btn btn-danger" onClick={anularFactura} disabled={guardando}>
+                  {guardando ? 'Anulando...' : 'Anular factura'}
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -664,45 +576,62 @@ export default function Pagos() {
             </button>
           </div>
 
-          {cargandoPend ? <Spinner /> : pagosPend.length > 0 && (
+          {cargandoPend ? <Spinner /> : (pagosPend.filter(p => !p.anulado).length > 0) ? (
             <div style={{ display:'flex', flexDirection:'column', gap:16, marginBottom: 32 }}>
-              {pagosPend.map(p => {
+              {pagosPend.filter(p => !p.anulado).map(p => {
                 const factura = p.factura
                 const paciente = factura?.paciente
                 const psicologo = factura?.psicologo
                 const citaFecha = factura?.cita?.programada_para
                 const imgUrl = p.url_comprobante ? `${API_BASE}${p.url_comprobante}` : null
+                const esEfectivo = p.metodo === 'efectivo' || p.metodo === 'tarjeta'
+                const colorBar = p.metodo === 'yape' ? 'linear-gradient(90deg,#7c3aed,#9333ea)'
+                  : p.metodo === 'transferencia' ? 'linear-gradient(90deg,#2563eb,#0ea5e9)'
+                  : 'linear-gradient(90deg,#16a34a,#15803d)'
+                const metodoBadgeBg = p.metodo === 'yape' ? 'rgba(124,58,237,0.1)'
+                  : p.metodo === 'transferencia' ? 'rgba(37,99,235,0.1)'
+                  : 'rgba(22,163,74,0.1)'
+                const metodoBadgeColor = p.metodo === 'yape' ? '#7c3aed'
+                  : p.metodo === 'transferencia' ? '#2563eb'
+                  : '#16a34a'
+                const metodoLabel = p.metodo === 'yape' ? '📱 Yape'
+                  : p.metodo === 'transferencia' ? '🏦 Transferencia'
+                  : p.metodo === 'tarjeta' ? '💳 Tarjeta'
+                  : '💵 Efectivo'
                 return (
                   <div key={p.id} style={{
                     background:'var(--card)', border:'1.5px solid var(--border)', borderRadius:16,
                     overflow:'hidden', boxShadow:'0 2px 12px rgba(0,0,0,0.05)',
                   }}>
                     {/* Color bar by method */}
-                    <div style={{ height:3, background: p.metodo === 'yape' ? 'linear-gradient(90deg,#7c3aed,#9333ea)' : 'linear-gradient(90deg,#2563eb,#0ea5e9)' }} />
+                    <div style={{ height:3, background: colorBar }} />
                     <div style={{ padding:'18px 20px', display:'flex', gap:20, flexWrap:'wrap', alignItems:'flex-start' }}>
 
                       {/* Voucher image */}
-                      <div style={{ flexShrink:0 }}>
-                        {imgUrl ? (
-                          <div style={{ cursor:'zoom-in', textAlign:'center' }} onClick={() => setImagenExpandida(imgUrl)}>
-                            <img src={imgUrl} alt="Voucher"
-                              style={{ width:140, height:140, objectFit:'cover', borderRadius:12,
-                                border:'2px solid var(--border)', transition:'transform 0.2s, box-shadow 0.2s',
-                                display:'block',
-                              }}
-                              onMouseOver={e => { e.currentTarget.style.transform='scale(1.05)'; e.currentTarget.style.boxShadow='0 8px 24px rgba(0,0,0,0.2)' }}
-                              onMouseOut={e => { e.currentTarget.style.transform='scale(1)'; e.currentTarget.style.boxShadow='none' }}
-                            />
-                            <div style={{ fontSize:11, color:'var(--info)', marginTop:5, fontWeight:600 }}>🔍 Ampliar</div>
-                          </div>
-                        ) : (
-                          <div style={{ width:140, height:140, borderRadius:12, background:'var(--surface-2)',
-                            border:'2px dashed var(--border)', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:6 }}>
-                            <ImageOff size={28} color="var(--text-muted)" />
-                            <span style={{ fontSize:11, color:'var(--text-muted)' }}>Sin imagen</span>
-                          </div>
-                        )}
-                      </div>
+                      {!esEfectivo && (
+                        <div style={{ flexShrink:0 }}>
+                          {imgUrl ? (
+                            <div style={{ cursor:'zoom-in', textAlign:'center' }} onClick={() => setImagenExpandida(imgUrl)}>
+                              <img src={imgUrl} alt="Voucher"
+                                style={{ width:140, height:140, objectFit:'cover', borderRadius:12,
+                                  border:'2px solid var(--border)', transition:'transform 0.2s, box-shadow 0.2s',
+                                  display:'block',
+                                }}
+                                onMouseOver={e => { e.currentTarget.style.transform='scale(1.05)'; e.currentTarget.style.boxShadow='0 8px 24px rgba(0,0,0,0.2)' }}
+                                onMouseOut={e => { e.currentTarget.style.transform='scale(1)'; e.currentTarget.style.boxShadow='none' }}
+                              />
+                              <div style={{ fontSize:11, color:'var(--info)', marginTop:5, fontWeight:600 }}>🔍 Ampliar</div>
+                            </div>
+                          ) : (
+                            <div style={{ width:140, height:140, borderRadius:12,
+                              background:'var(--surface-2)', border:'2px dashed var(--border)',
+                              display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:6 }}>
+                              <ImageOff size={28} color="var(--text-muted)" />
+                              <span style={{ fontSize:11, color:'var(--text-muted)' }}>Sin imagen</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {/* Info */}
                       <div style={{ flex:1, minWidth:200 }}>
@@ -712,12 +641,12 @@ export default function Pagos() {
                           </span>
                           <span style={{
                             fontSize:11, padding:'2px 10px', borderRadius:20, fontWeight:700,
-                            background: p.metodo === 'yape' ? 'rgba(124,58,237,0.1)' : 'rgba(37,99,235,0.1)',
-                            color: p.metodo === 'yape' ? '#7c3aed' : '#2563eb',
-                            border: `1px solid ${p.metodo === 'yape' ? 'rgba(124,58,237,0.3)' : 'rgba(37,99,235,0.3)'}`,
+                            background: metodoBadgeBg,
+                            color: metodoBadgeColor,
+                            border: `1px solid ${metodoBadgeColor}40`,
                             textTransform:'capitalize',
                           }}>
-                            {p.metodo === 'yape' ? '📱 Yape' : '🏦 Transferencia'}
+                            {metodoLabel}
                           </span>
                           <span style={{ fontSize:11, padding:'2px 10px', borderRadius:20, fontWeight:700,
                             background:'var(--info-bg)', color:'var(--info)', border:'1px solid var(--info)' }}>
@@ -731,7 +660,9 @@ export default function Pagos() {
                           <div><span style={{ color:'var(--text-muted)' }}>Cita:</span> {citaFecha ? new Date(citaFecha).toLocaleString('es-PE', { dateStyle:'medium', timeStyle:'short' }) : '—'}</div>
                           <div><span style={{ color:'var(--text-muted)' }}>Total factura:</span> <strong>S/ {Number(factura?.total ?? 0).toFixed(2)}</strong></div>
                           <div><span style={{ color:'var(--text-muted)' }}>Monto voucher:</span> <strong style={{ fontSize:15, color:'var(--success)' }}>S/ {Number(p.monto).toFixed(2)}</strong></div>
-                          <div><span style={{ color:'var(--text-muted)' }}>N° Operación:</span> <code style={{ background:'var(--surface-2)', padding:'2px 6px', borderRadius:4, fontSize:12 }}>{p.codigo_referencia || '—'}</code></div>
+                          {!esEfectivo && (
+                            <div><span style={{ color:'var(--text-muted)' }}>N° Operación:</span> <code style={{ background:'var(--surface-2)', padding:'2px 6px', borderRadius:4, fontSize:12 }}>{p.codigo_referencia || '—'}</code></div>
+                          )}
                           <div><span style={{ color:'var(--text-muted)' }}>Enviado:</span> {new Date(p.pagado_en).toLocaleString('es-PE', { dateStyle:'short', timeStyle:'short' })}</div>
                         </div>
                       </div>
@@ -780,6 +711,8 @@ export default function Pagos() {
                 )
               })}
             </div>
+          ) : (
+            <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No hay vouchers pendientes de verificación.</div>
           )}
           
           <hr style={{ border:'none', borderTop:'1px solid var(--border)', margin:'10px 0 24px' }} />
@@ -813,41 +746,109 @@ export default function Pagos() {
       )}
 
       <div className="card" style={{ opacity: cargando ? 0.6 : 1, transition: 'opacity 0.2s', pointerEvents: cargando ? 'none' : 'auto' }}>
-        {cargando && facturas.length === 0 ? <Spinner /> : facturas.length === 0
-          ? <EmptyState titulo="Sin facturas" descripcion="Crea la primera factura con el botón de arriba." />
-          : (
+        {/* ── Filtros ── */}
+        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div className="form-group" style={{ marginBottom: 0, minWidth: 160 }}>
+            <label className="form-label" style={{ fontSize: 11 }}>Buscar paciente</label>
+            <input className="form-control" style={{ fontSize: 13 }} placeholder="Nombre o apellido..."
+              value={filtroBusq} onChange={e => setFiltroBusq(e.target.value)} />
+          </div>
+          <div className="form-group" style={{ marginBottom: 0, minWidth: 130 }}>
+            <label className="form-label" style={{ fontSize: 11 }}>Estado</label>
+            <select className="form-control" style={{ fontSize: 13 }} value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}>
+              <option value="">Todos</option>
+              <option value="pendiente">Pendiente</option>
+              <option value="parcial">Parcial</option>
+              <option value="pagada">Pagada</option>
+              <option value="anulada">Anulada</option>
+            </select>
+          </div>
+          <div className="form-group" style={{ marginBottom: 0, minWidth: 130 }}>
+            <label className="form-label" style={{ fontSize: 11 }}>Método de pago</label>
+            <select className="form-control" style={{ fontSize: 13 }} value={filtroMetodo} onChange={e => setFiltroMetodo(e.target.value)}>
+              <option value="">Todos</option>
+              <option value="efectivo">Efectivo</option>
+              <option value="yape">Yape</option>
+              <option value="transferencia">Transferencia</option>
+              <option value="tarjeta">Tarjeta</option>
+            </select>
+          </div>
+          <div className="form-group" style={{ marginBottom: 0, minWidth: 130 }}>
+            <label className="form-label" style={{ fontSize: 11 }}>Desde</label>
+            <input type="date" className="form-control" style={{ fontSize: 13 }} value={filtroFechaD} onChange={e => setFiltroFechaD(e.target.value)} />
+          </div>
+          <div className="form-group" style={{ marginBottom: 0, minWidth: 130 }}>
+            <label className="form-label" style={{ fontSize: 11 }}>Hasta</label>
+            <input type="date" className="form-control" style={{ fontSize: 13 }} value={filtroFechaH} onChange={e => setFiltroFechaH(e.target.value)} />
+          </div>
+          {(filtroBusq || filtroEstado || filtroMetodo || filtroFechaD || filtroFechaH) && (
+            <button className="btn btn-ghost btn-sm" style={{ marginBottom: 1 }}
+              onClick={() => { setFiltroBusq(''); setFiltroEstado(''); setFiltroMetodo(''); setFiltroFechaD(''); setFiltroFechaH('') }}>
+              <X size={13}/> Limpiar
+            </button>
+          )}
+        </div>
+
+        {cargando && facturas.length === 0 ? <Spinner /> : (() => {
+          const facturasFiltradas = facturas.filter(f => {
+            if (filtroEstado && f.estado !== filtroEstado) return false
+            if (filtroMetodo) {
+              const metodos = f.pagos?.map(p => p.metodo) ?? []
+              if (!metodos.includes(filtroMetodo)) return false
+            }
+            if (filtroBusq) {
+              const txt = `${f.paciente?.nombres} ${f.paciente?.apellidos}`.toLowerCase()
+              if (!txt.includes(filtroBusq.toLowerCase())) return false
+            }
+            if (filtroFechaD && new Date(f.emitida_en) < new Date(filtroFechaD)) return false
+            if (filtroFechaH && new Date(f.emitida_en) > new Date(filtroFechaH + 'T23:59:59')) return false
+            return true
+          })
+          if (facturasFiltradas.length === 0) return (
+            <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)' }}>No hay facturas que coincidan con los filtros.</div>
+          )
+          return (
             <div className="table-wrap">
               <table>
-                <thead><tr><th>N° Factura</th><th>Paciente</th><th>Fecha</th><th>Total</th><th>Estado</th><th></th></tr></thead>
+                <thead><tr><th>N° Factura</th><th>Paciente</th><th>Fecha</th><th>Método</th><th>Total</th><th>Estado</th><th></th></tr></thead>
                 <tbody>
-                  {facturas.map(f => (
-                    <tr key={f.id}>
-                      <td style={{ fontFamily: 'monospace', fontWeight: 600, fontSize: 12.5 }}>{f.numero_factura}</td>
-                      <td style={{ fontWeight: 500 }}>{f.paciente?.apellidos}, {f.paciente?.nombres}</td>
-                      <td>{new Date(f.emitida_en).toLocaleDateString('es-PE')}</td>
-                      <td style={{ fontWeight: 600 }}>S/ {Number(f.total).toFixed(2)}</td>
-                      <td><span className={`badge ${ESTADO_BADGE[f.estado]}`}>{f.estado}</span></td>
-                      <td>
-                        <button className="btn btn-ghost btn-icon btn-sm" onClick={() => abrirModalFactura(f.id)} title="Ver detalle del pago">
-                          <Eye size={13}/>
-                        </button>
-                        {puedo('facturacion.editar') && ['pendiente','parcial'].includes(f.estado) && (
-                          <button className="btn btn-ghost btn-icon btn-sm" onClick={() => verDetalle(f.id)} title="Gestionar factura" style={{ fontSize: 13 }}>
-                            ⚙
+                  {facturasFiltradas.map(f => {
+                    const metodosUnicos = [...new Set(f.pagos?.map(p => p.metodo) ?? [])]
+                    return (
+                      <tr key={f.id}>
+                        <td style={{ fontFamily: 'monospace', fontWeight: 600, fontSize: 12.5 }}>{f.numero_factura}</td>
+                        <td style={{ fontWeight: 500 }}>{f.paciente?.apellidos}, {f.paciente?.nombres}</td>
+                        <td>{new Date(f.emitida_en).toLocaleDateString('es-PE')}</td>
+                        <td>
+                          {metodosUnicos.length > 0
+                            ? metodosUnicos.map(m => <span key={m} className="badge badge-muted" style={{ marginRight: 4, textTransform: 'capitalize' }}>{m}</span>)
+                            : <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>}
+                        </td>
+                        <td style={{ fontWeight: 600 }}>S/ {Number(f.total).toFixed(2)}</td>
+                        <td><span className={`badge ${ESTADO_BADGE[f.estado]}`}>{f.estado}</span></td>
+                        <td>
+                          <button className="btn btn-ghost btn-icon btn-sm" onClick={() => abrirModalFactura(f.id)} title="Ver detalle">
+                            <Eye size={13}/>
                           </button>
-                        )}
-                        {puedo('facturacion.eliminar') && (
-                          <button className="btn btn-ghost btn-icon btn-sm" onClick={() => eliminarFactura(f.id)} style={{ color: 'var(--danger)' }} title="Eliminar factura">
-                            <Trash2 size={13}/>
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                          {puedo('facturacion.editar') && ['pendiente','parcial'].includes(f.estado) && (
+                            <button className="btn btn-ghost btn-icon btn-sm" onClick={() => verDetalle(f.id)} title="Gestionar factura" style={{ fontSize: 13 }}>
+                              ⚙
+                            </button>
+                          )}
+                          {puedo('facturacion.eliminar') && (
+                            <button className="btn btn-ghost btn-icon btn-sm" onClick={() => eliminarFactura(f.id)} style={{ color: 'var(--danger)' }} title="Eliminar factura">
+                              <Trash2 size={13}/>
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
-          )}
+          )
+        })()}
       </div>
         </>
       ) : tab === 'pagos_confirmados' ? (
@@ -876,20 +877,36 @@ export default function Pagos() {
                         <th>Método</th>
                         <th>Monto</th>
                         <th>Referencia</th>
+                        <th>Estado</th>
                         <th></th>
                       </tr>
                     </thead>
                     <tbody>
                       {pagosConf.map(p => (
-                        <tr key={p.id}>
+                        <tr key={p.id} style={{ opacity: p.anulado ? 0.6 : 1 }}>
                           <td style={{ fontSize:12.5 }}>{new Date(p.pagado_en).toLocaleString('es-PE', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}</td>
                           <td>{p.factura?.paciente ? `${p.factura.paciente.nombres} ${p.factura.paciente.apellidos}` : '—'}</td>
                           <td style={{ fontFamily:'monospace', fontSize:12 }}>{p.factura?.numero_factura ?? '—'}</td>
                           <td><span className="badge badge-info">{p.metodo}</span></td>
-                          <td style={{ fontWeight:600 }}>S/ {Number(p.monto).toFixed(2)}</td>
+                          <td style={{ fontWeight:600, textDecoration: p.anulado ? 'line-through' : 'none' }}>S/ {Number(p.monto).toFixed(2)}</td>
                           <td style={{ fontSize:12, fontFamily:'monospace' }}>{p.codigo_referencia || '—'}</td>
                           <td>
-                            {!esPsicologo && (
+                            {p.anulado ? (
+                              <div>
+                                <span className="badge badge-danger">Anulado</span>
+                                {p.motivo_anulacion && (
+                                  <div style={{ fontSize:11, color:'var(--danger)', marginTop:4, maxWidth:200, lineHeight:1.3 }}
+                                    title={p.motivo_anulacion}>
+                                    {p.motivo_anulacion.length > 60 ? p.motivo_anulacion.slice(0, 60) + '…' : p.motivo_anulacion}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="badge badge-success">Confirmado</span>
+                            )}
+                          </td>
+                          <td>
+                            {!esPsicologo && !p.anulado && (
                               <button className="btn btn-danger btn-sm" onClick={() => { setModalAnularPago(p); setMotivoAnularPago('') }}
                                 style={{ display:'flex', alignItems:'center', gap:4, fontSize:11.5 }}>
                                 <Ban size={13}/> Anular
@@ -908,40 +925,34 @@ export default function Pagos() {
           {modalAnularPago && (
             <div className="modal-overlay" onClick={() => setModalAnularPago(null)}>
               <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth:480 }}>
-                <div className="modal-header">
-                  <span className="modal-title" style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <div className="modal-title" style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                  <span style={{ display:'flex', alignItems:'center', gap:8 }}>
                     <Ban size={18} style={{ color:'var(--danger)' }}/> Anular pago
                   </span>
-                  <button className="modal-close" onClick={() => setModalAnularPago(null)}><X size={18}/></button>
+                  <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setModalAnularPago(null)}><X size={18}/></button>
                 </div>
-                <div className="modal-body">
+                <div style={{ margin:'16px 0' }}>
                   <div style={{ padding:'14px 16px', borderRadius:12, background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.25)', marginBottom:18 }}>
                     <div style={{ fontWeight:600, color:'var(--danger)', fontSize:13, marginBottom:6 }}>⚠️ Acción irreversible</div>
                     <div style={{ fontSize:12.5, color:'var(--text-secondary)', lineHeight:1.6 }}>
-                      Al anular este pago, la factura volverá a estado <strong>pendiente</strong> y la cita asociada será <strong>cancelada</strong>, liberando el horario.
+                      Al anular este pago, el monto se restará de las ganancias del reporte. La factura mantendrá su estado, pero <strong>la cita asociada será cancelada</strong>, liberando el horario.
                     </div>
                   </div>
-
                   <div style={{ fontSize:13, marginBottom:12 }}>
                     <div><strong>Paciente:</strong> {modalAnularPago.factura?.paciente ? `${modalAnularPago.factura.paciente.nombres} ${modalAnularPago.factura.paciente.apellidos}` : '—'}</div>
                     <div><strong>Monto:</strong> S/ {Number(modalAnularPago.monto).toFixed(2)}</div>
                     <div><strong>Método:</strong> {modalAnularPago.metodo}</div>
                     {modalAnularPago.codigo_referencia && <div><strong>Ref:</strong> {modalAnularPago.codigo_referencia}</div>}
                   </div>
-
                   <div className="form-group">
-                    <label className="form-label">Motivo de anulación *</label>
-                    <textarea
-                      className="form-control"
-                      rows={3}
+                    <label className="form-label">Motivo de anulación <span className="required">*</span></label>
+                    <textarea className="form-control" rows={3}
                       placeholder="Ej: Reembolso confirmado por el banco, contracargo reportado..."
-                      value={motivoAnularPago}
-                      onChange={e => setMotivoAnularPago(e.target.value)}
-                      style={{ resize:'vertical' }}
-                    />
+                      value={motivoAnularPago} onChange={e => setMotivoAnularPago(e.target.value)}
+                      style={{ resize:'vertical' }} />
                   </div>
                 </div>
-                <div className="modal-footer">
+                <div className="modal-actions">
                   <button className="btn btn-ghost" onClick={() => setModalAnularPago(null)}>Cancelar</button>
                   <button className="btn btn-danger" onClick={handleAnularPago} disabled={anulandoPago || !motivoAnularPago.trim()}
                     style={{ display:'flex', alignItems:'center', gap:6 }}>
@@ -1105,7 +1116,7 @@ export default function Pagos() {
                           border: `1.5px solid ${esPend ? 'rgba(58,174,216,0.3)' : 'var(--border)'}`,
                         }}>
                           {/* Comprobante thumbnail */}
-                          {imgUrl && (
+                          {!((p.metodo === 'efectivo') || (p.metodo === 'tarjeta')) && imgUrl && (
                             <div onClick={() => setImagenExpandida(imgUrl)} style={{ cursor: 'zoom-in', flexShrink: 0 }}>
                               <img src={imgUrl} alt="comprobante"
                                 style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }} />
@@ -1115,14 +1126,14 @@ export default function Pagos() {
                           {/* Datos del pago */}
                           <div style={{ flex: 1, fontSize: 13 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-                              <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>S/ {Number(p.monto).toFixed(2)}</span>
+                              <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', textDecoration: p.anulado ? 'line-through' : 'none' }}>S/ {Number(p.monto).toFixed(2)}</span>
                               <span className="badge badge-info" style={{ textTransform: 'capitalize' }}>{p.metodo}</span>
-                              <span className={`badge ${esPend ? 'badge-info' : 'badge-success'}`}>
-                                {esPend ? '⏳ Pendiente confirmación' : '✓ Confirmado'}
+                              <span className={`badge ${p.anulado ? 'badge-danger' : esPend ? 'badge-info' : 'badge-success'}`}>
+                                {p.anulado ? '✗ Anulado' : esPend ? '⏳ Pendiente confirmación' : '✓ Confirmado'}
                               </span>
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 16px', color: 'var(--text-secondary)' }}>
-                              {p.codigo_referencia && (
+                              {((p.metodo !== 'efectivo') && (p.metodo !== 'tarjeta') && p.codigo_referencia) && (
                                 <div style={{ gridColumn: '1/-1' }}>
                                   <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>N° Operación:</span>{' '}
                                   <code style={{ background: 'var(--surface)', border: '1px solid var(--border)', padding: '2px 8px', borderRadius: 6, fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
@@ -1132,9 +1143,14 @@ export default function Pagos() {
                               )}
                               <div><span style={{ color: 'var(--text-muted)', fontSize: 11 }}>Fecha:</span> {new Date(p.pagado_en).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })}</div>
                             </div>
+                            {p.anulado && p.motivo_anulacion && (
+                              <div style={{ marginTop: 6, padding: '6px 10px', borderRadius: 8, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', fontSize: 12, color: 'var(--danger)' }}>
+                                <strong>Motivo de anulación:</strong> {p.motivo_anulacion}
+                              </div>
+                            )}
                           </div>
                           {/* Acciones aprobar/rechazar si está pendiente */}
-                          {esPend && puedo('facturacion.editar') && (
+                          {esPend && !p.anulado && puedo('facturacion.editar') && (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
                               <button disabled={guardando} onClick={async () => {
                                 await confirmarPagoYape(p.id)
